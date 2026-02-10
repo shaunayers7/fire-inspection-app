@@ -2,14 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Prevents user scaling and shifting on mobile devices -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fire Inspection App</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        
+        window.FirebaseSDK = { initializeApp, getFirestore, doc, setDoc, getDoc, collection, getDocs, query, updateDoc, deleteDoc, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken };
+    </script>
+
     <!-- PDF Generation Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
@@ -20,23 +28,22 @@
             font-family: 'Inter', sans-serif; 
             background-color: #F2F2F7; 
             -webkit-tap-highlight-color: transparent; 
-            /* Prevent bounce scrolling on some mobile browsers */
             overscroll-behavior-y: contain;
         }
-        .bg-dashed { background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%23D1D5DBFF' stroke-width='4' stroke-dasharray='8%2c 12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e"); }
-        
-        /* iOS/iPhone Specific: Inputs must be at least 16px to prevent automatic 
-           zoom-on-focus which causes the screen to move around. 
-        */
-        input, select, textarea { 
-            font-size: 16px !important; 
-        }
-        
+        input, select, textarea { font-size: 16px !important; }
         @media (min-width: 640px) {
             input, select, textarea { font-size: 14px !important; }
         }
-
         input:focus, select:focus, textarea:focus { outline: none; background-color: #F9FAFB; }
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
     </style>
 </head>
 <body>
@@ -45,11 +52,15 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
         
+        // --- CONSTANTS ---
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
+        const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
 
+        // --- TEMPLATES ---
         const getNewBuildingTemplate = (name = "New Building") => ({
-            id: `b-${Date.now()}`,
+            id: `b-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             name: name,
+            lastSynced: null,
             details: {
                 buildingName: name, address: "", city: "", panelLocation: "",
                 manufacturer: "", panelModel: "", serialNumber: "", softwareVersion: "",
@@ -72,18 +83,20 @@
             }
         });
 
-        // App-Level Modal Component
-        const Modal = ({ title, children, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel", isDanger = false }) => (
+        // --- UI COMPONENTS ---
+        const Modal = ({ title, children, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel", isDanger = false, hideButtons = false }) => (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel}></div>
                 <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200">
                     <div className="p-6">
                         <h3 className="text-lg font-black uppercase text-gray-800 mb-4">{title}</h3>
                         {children}
-                        <div className="flex gap-3 mt-6">
-                            <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs uppercase tracking-widest">{cancelText}</button>
-                            <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-xs uppercase tracking-widest`}>{confirmText}</button>
-                        </div>
+                        {!hideButtons && (
+                            <div className="flex gap-3 mt-6">
+                                <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs uppercase tracking-widest">{cancelText}</button>
+                                <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-xs uppercase tracking-widest`}>{confirmText}</button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -205,15 +218,92 @@
             const [expandedSections, setExpandedSections] = useState({});
             const [activeModal, setActiveModal] = useState(null);
             const [yearInputValue, setYearInputValue] = useState("");
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [user, setUser] = useState(null);
+            const [db, setDb] = useState(null);
             
             const [yearData, setYearData] = useState(() => {
-                const saved = localStorage.getItem('fire_inspection_v3_data');
+                const saved = localStorage.getItem('fire_inspection_v4_data');
                 return saved ? JSON.parse(saved) : { 2025: [] };
             });
 
+            // --- FIREBASE INIT ---
             useEffect(() => {
-                localStorage.setItem('fire_inspection_v3_data', JSON.stringify(yearData));
+                const initFirebase = async () => {
+                    const { initializeApp, getFirestore, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.FirebaseSDK;
+                    const config = JSON.parse(__firebase_config);
+                    const app = initializeApp(config);
+                    const auth = getAuth(app);
+                    const firestore = getFirestore(app);
+                    setDb(firestore);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    onAuthStateChanged(auth, (u) => {
+                        setUser(u);
+                    });
+                };
+                initFirebase();
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('fire_inspection_v4_data', JSON.stringify(yearData));
             }, [yearData]);
+
+            // --- SYNC LOGIC ---
+            const syncBuildingToCloud = async (building, year) => {
+                if (!db || !user) return;
+                try {
+                    const { doc, setDoc } = window.FirebaseSDK;
+                    const docPath = doc(db, 'artifacts', APP_ID, 'public', 'data', 'inspections', `${year}_${building.id}`);
+                    const syncPayload = { ...building, lastSynced: new Date().toISOString() };
+                    await setDoc(docPath, syncPayload);
+                    return syncPayload;
+                } catch (err) {
+                    console.error("Sync Error:", err);
+                    return null;
+                }
+            };
+
+            const pullBuildingsFromCloud = async (year) => {
+                if (!db || !user) return;
+                setIsSyncing(true);
+                try {
+                    const { collection, getDocs } = window.FirebaseSDK;
+                    const colRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'inspections');
+                    const snapshot = await getDocs(colRef);
+                    const cloudBuildings = [];
+                    snapshot.forEach(doc => {
+                        const [docYear, bId] = doc.id.split('_');
+                        if (docYear === year.toString()) {
+                            cloudBuildings.push(doc.data());
+                        }
+                    });
+
+                    setYearData(prev => {
+                        const localBuildings = prev[year] || [];
+                        const merged = [...localBuildings];
+                        
+                        cloudBuildings.forEach(cb => {
+                            const idx = merged.findIndex(lb => lb.id === cb.id);
+                            if (idx > -1) {
+                                merged[idx] = cb; 
+                            } else {
+                                merged.push(cb);
+                            }
+                        });
+                        return { ...prev, [year]: merged };
+                    });
+                } catch (err) {
+                    console.error("Pull Error:", err);
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -241,7 +331,6 @@
 
             const handleExport = () => {
                 if (!activeBuilding) return;
-
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 const statusInfo = getBuildingStatus(activeBuilding);
@@ -256,7 +345,6 @@
 
                 doc.setFontSize(14);
                 doc.text("1. BUILDING DETAILS", 14, 45);
-                
                 const detailsRows = Object.entries(activeBuilding.details).map(([key, value]) => [
                     key.replace(/([A-Z])/g, ' $1').toUpperCase(),
                     value || 'N/A'
@@ -290,11 +378,7 @@
                         body: rows,
                         theme: 'grid',
                         headStyles: { fillColor: [30, 41, 54] },
-                        columnStyles: {
-                            0: { cellWidth: 10 },
-                            1: { cellWidth: 20 },
-                            3: { cellWidth: 25 },
-                        }
+                        columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 20 }, 3: { cellWidth: 25 } }
                     });
                 });
 
@@ -304,9 +388,7 @@
 
                 const defs = [];
                 Object.keys(activeBuilding.data).forEach(key => {
-                    activeBuilding.data[key].forEach(i => {
-                        if (i.status === 'failed') defs.push(i);
-                    });
+                    activeBuilding.data[key].forEach(i => { if (i.status === 'failed') defs.push(i); });
                 });
                 if (activeBuilding.data.customDeficiencies) {
                     activeBuilding.data.customDeficiencies.forEach(i => defs.push(i));
@@ -314,12 +396,8 @@
 
                 if (defs.length > 0) {
                     const defRows = defs.map((item, i) => [
-                        i + 1,
-                        item.label,
-                        item.fixed ? `YES (${item.dateFixed})` : 'NO',
-                        item.note || 'No notes provided'
+                        i + 1, item.label, item.fixed ? `YES (${item.dateFixed})` : 'NO', item.note || 'No notes provided'
                     ]);
-
                     doc.autoTable({
                         startY: 25,
                         head: [['#', 'DEFICIENCY', 'FIXED?', 'DETAILS']],
@@ -350,9 +428,7 @@
                     [selectedYear]: prev[selectedYear].map(b => {
                         if (b.id === selectedBuildingId) {
                             const newDetails = { ...b.details, [key]: value };
-                            if (key === 'buildingName') {
-                                return { ...b, name: value, details: newDetails };
-                            }
+                            if (key === 'buildingName') return { ...b, name: value, details: newDetails };
                             return { ...b, details: newDetails };
                         }
                         return b;
@@ -386,7 +462,19 @@
                 });
             };
 
-            // Main Views
+            const handleSaveAndExit = async () => {
+                if (activeBuilding) {
+                    const syncedBuilding = await syncBuildingToCloud(activeBuilding, selectedYear);
+                    if (syncedBuilding) {
+                        setYearData(prev => ({
+                            ...prev,
+                            [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? syncedBuilding : b)
+                        }));
+                    }
+                }
+                setView('building-select');
+            };
+
             if (view === 'year-select') return (
                 <div className="p-4 space-y-4">
                     <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
@@ -399,19 +487,8 @@
                     <button onClick={triggerYearAddModal} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Year</button>
                     
                     {activeModal?.type === 'input' && (
-                        <Modal 
-                            title={activeModal.title} 
-                            onCancel={() => setActiveModal(null)}
-                            onConfirm={() => activeModal.onConfirm(yearInputValue)}
-                        >
-                            <input 
-                                type="number" 
-                                autoFocus
-                                value={yearInputValue} 
-                                onChange={(e) => setYearInputValue(e.target.value)}
-                                placeholder="e.g. 2026"
-                                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xl font-bold"
-                            />
+                        <Modal title={activeModal.title} onCancel={() => setActiveModal(null)} onConfirm={() => activeModal.onConfirm(yearInputValue)}>
+                            <input type="number" autoFocus value={yearInputValue} onChange={(e) => setYearInputValue(e.target.value)} placeholder="e.g. 2026" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xl font-bold" />
                         </Modal>
                     )}
                 </div>
@@ -419,17 +496,36 @@
 
             if (view === 'building-select') return (
                 <div className="p-4 space-y-4">
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setView('year-select')} className="text-blue-600 font-bold p-1">←</button>
-                        <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setView('year-select')} className="text-blue-600 font-bold p-1">←</button>
+                            <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
+                        </div>
+                        <button 
+                            onClick={() => pullBuildingsFromCloud(selectedYear)}
+                            disabled={isSyncing}
+                            className={`p-2 rounded-xl border flex items-center gap-2 text-[10px] font-black uppercase ${isSyncing ? 'bg-gray-100 text-gray-400' : 'bg-white text-blue-600 border-blue-100 shadow-sm active:bg-blue-50'}`}
+                        >
+                            {isSyncing ? 'Syncing...' : '☁ Sync Cloud'}
+                        </button>
                     </div>
-                    {yearData[selectedYear].map(b => {
+
+                    {isSyncing && (
+                        <div className="space-y-3">
+                            {[1, 2].map(i => <div key={i} className="h-20 w-full rounded-xl loading-shimmer" />)}
+                        </div>
+                    )}
+
+                    {!isSyncing && yearData[selectedYear].map(b => {
                         const status = getBuildingStatus(b);
                         return (
                             <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
                                 <div>
                                     <h3 className="font-bold text-gray-800">{b.name}</h3>
-                                    <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
+                                        {b.lastSynced && <span className="text-[8px] text-gray-300 font-bold uppercase italic">Synced {new Date(b.lastSynced).toLocaleDateString()}</span>}
+                                    </div>
                                 </div>
                                 <button onClick={(e) => {
                                     e.stopPropagation();
@@ -444,12 +540,7 @@
                     }} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                     
                     {activeModal?.type === 'confirm' && (
-                        <Modal 
-                            title={activeModal.title} 
-                            isDanger={activeModal.isDanger}
-                            onCancel={() => setActiveModal(null)}
-                            onConfirm={activeModal.onConfirm}
-                        />
+                        <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />
                     )}
                 </div>
             );
@@ -457,17 +548,17 @@
             const allDeficiencies = [];
             if (activeBuilding) {
                 Object.keys(activeBuilding.data).forEach(key => {
-                    activeBuilding.data[key].forEach(i => {
-                        if (i.status === 'failed') allDeficiencies.push({ ...i, section: key });
-                    });
+                    if (Array.isArray(activeBuilding.data[key])) {
+                        activeBuilding.data[key].forEach(i => { if (i.status === 'failed') allDeficiencies.push({ ...i, section: key }); });
+                    }
                 });
             }
 
             return (
                 <div className="pb-44">
                     <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
-                        <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Back</button>
-                        <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[50%]">{activeBuilding.name}</h2>
+                        <button onClick={handleSaveAndExit} className="text-blue-600 font-bold px-2 py-1">← Save</button>
+                        <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[40%]">{activeBuilding.name}</h2>
                         <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export PDF</button>
                     </div>
 
@@ -482,11 +573,7 @@
                                     {Object.keys(activeBuilding.details).map(k => (
                                         <div key={k} className="space-y-1">
                                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{k.replace(/([A-Z])/g, ' $1')}</label>
-                                            <input 
-                                                value={activeBuilding.details[k]} 
-                                                onChange={(e) => updateBuildingDetail(k, e.target.value)} 
-                                                className="w-full border-b border-gray-100 py-1 font-semibold text-gray-700 focus:border-blue-500" 
-                                            />
+                                            <input value={activeBuilding.details[k]} onChange={(e) => updateBuildingDetail(k, e.target.value)} className="w-full border-b border-gray-100 py-1 font-semibold text-gray-700 focus:border-blue-500" />
                                         </div>
                                     ))}
                                 </div>
@@ -501,7 +588,7 @@
                                 </button>
                                 {expandedSections[s.id] && (
                                     <div className="bg-white">
-                                        {activeBuilding.data[s.id].map((item, i) => (
+                                        {activeBuilding.data[s.id]?.map((item, i) => (
                                             <InspectionRow 
                                                 key={item.id} 
                                                 index={i+1} 
@@ -578,18 +665,13 @@
                     </div>
 
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50">
-                        <button onClick={() => setView('building-select')} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                        <button onClick={handleSaveAndExit} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-transform flex items-center justify-center gap-2">
                             <span>Save & Exit</span>
                         </button>
                     </div>
 
                     {activeModal?.type === 'confirm' && (
-                        <Modal 
-                            title={activeModal.title} 
-                            isDanger={activeModal.isDanger}
-                            onCancel={() => setActiveModal(null)}
-                            onConfirm={activeModal.onConfirm}
-                        />
+                        <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />
                     )}
                 </div>
             );
