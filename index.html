@@ -3,11 +3,13 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot } from "firebase/firestore";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 
+// --- CONSTANTS ---
 const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
-const PROTECTED_SECTIONS = ['checklist', 'control', 'devices', 'battery', 'lights'];
+const APP_STORAGE_KEY = 'fire_inspect_architect_v5';
 
+// --- INITIAL TEMPLATE ---
 const getNewBuildingTemplate = (name = "New Building") => ({
-  id: `b-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+  id: `b-${Date.now()}`,
   name: name,
   details: {
     buildingName: name, address: "", city: "", panelLocation: "",
@@ -15,35 +17,41 @@ const getNewBuildingTemplate = (name = "New Building") => ({
     dateManufactured: "", lastServiceDate: ""
   },
   sections: [
-    { id: 'checklist', title: 'Pre-job checklist', color: 'bg-orange-500', isDev: false },
-    { id: 'control', title: 'control equipment', color: 'bg-purple-600', isDev: false },
-    { id: 'devices', title: 'Device inventory', color: 'bg-[#1C252E]', isDev: true },
-    { id: 'battery', title: 'Battery health', color: 'bg-blue-500', isDev: false },
-    { id: 'lights', title: 'Emergency lights', color: 'bg-[#EAB308]', isDev: false }
-  ],
-  data: {
-    checklist: Array(5).fill(0).map((_, i) => ({ id: `ck${i}-${Date.now()}`, label: `Checklist Item ${i + 1}`, status: 'pending', note: '', photo: null, fixed: false })),
-    control: Array(7).fill(0).map((_, i) => ({ id: `c${i}-${Date.now()}`, label: `Control Point ${i + 1}`, status: 'pending', note: '', photo: null, fixed: false })),
-    devices: Array(28).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i + 1).toString(), label: `Device ${i + 1}`, type: 'Smoke Detector', status: 'pending', note: '', photo: null, fixed: false })),
-    battery: Array(7).fill(0).map((_, i) => ({ id: `b${i}-${Date.now()}`, label: `Battery Metric ${i + 1}`, status: 'pending', note: '', photo: null, fixed: false })),
-    lights: Array(5).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `Emergency Light ${i + 1}`, status: 'pending', note: '', photo: null, fixed: false })),
-    customDeficiencies: []
-  }
+    { id: 'checklist', title: 'Pre-job checklist', color: 'bg-orange-500', isDev: false, items: 5 },
+    { id: 'control', title: 'control equipment', color: 'bg-purple-600', isDev: false, items: 7 },
+    { id: 'devices', title: 'Device inventory', color: 'bg-[#1C252E]', isDev: true, items: 28 },
+    { id: 'battery', title: 'Battery health', color: 'bg-blue-500', isDev: false, items: 7 },
+    { id: 'lights', title: 'Emergency lights', color: 'bg-[#EAB308]', isDev: false, items: 5 }
+  ].map((s, idx) => ({
+    ...s,
+    order: idx,
+    data: Array(s.items).fill(0).map((_, i) => ({
+      id: `${s.id}-${i}-${Date.now()}`,
+      label: `${s.title} Item ${i + 1}`,
+      status: 'pending',
+      note: '',
+      photo: null,
+      fixed: false,
+      deviceNo: s.isDev ? (i + 1).toString() : '',
+      type: s.isDev ? 'Smoke Detector' : ''
+    }))
+  })),
+  customDeficiencies: []
 });
 
-const Modal = ({ title, children, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel", isDanger = false, hideButtons = false }) => (
-  <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
-    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel}></div>
+// --- COMPONENTS ---
+
+const Modal = ({ title, children, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel", isDanger = false }) => (
+  <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel}></div>
     <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden">
-      <div className="p-6">
+      <div className="p-6 text-center">
         <h3 className="text-lg font-black uppercase text-gray-800 mb-4">{title}</h3>
         {children}
-        {!hideButtons && (
-          <div className="flex gap-3 mt-6">
-            <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs uppercase tracking-widest">{cancelText}</button>
-            <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-xs uppercase tracking-widest`}>{confirmText}</button>
-          </div>
-        )}
+        <div className="flex gap-3 mt-6">
+          <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs uppercase tracking-widest">{cancelText}</button>
+          <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-xs uppercase tracking-widest`}>{confirmText}</button>
+        </div>
       </div>
     </div>
   </div>
@@ -62,38 +70,63 @@ const TriStateButton = ({ status, onToggle }) => {
   return <button onClick={handleClick} className={`${baseClass} bg-gray-200 text-gray-400`}>○</button>;
 };
 
-const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false, onTriggerModal }) => {
-  const [localDraft, setLocalDraft] = useState(null);
-  const [isEditingNote, setIsEditingNote] = useState(false);
+const InspectionRow = ({ 
+  item, 
+  index, 
+  onUpdate, 
+  onDelete, 
+  isDevice = false, 
+  isDeficiencyView = false, 
+  onTriggerModal,
+  draggableProps,
+  dragHandleProps 
+}) => {
+  const [draft, setDraft] = useState(null);
   const fileInputRef = useRef(null);
 
-  const startEdit = () => setLocalDraft({ ...item });
-  const saveEdit = () => { onUpdateMeta(localDraft); setLocalDraft(null); };
-  const cancelEdit = () => {
+  const activeItem = draft || item;
+
+  const handleSave = () => {
+    onUpdate(draft);
+    setDraft(null);
+  };
+
+  const handleCancel = () => {
     onTriggerModal({
       title: "Discard Changes?",
-      onConfirm: () => setLocalDraft(null)
+      onConfirm: () => setDraft(null)
     });
   };
-  const activeItem = localDraft || item;
 
   return (
-    <div className={`bg-white border-b border-gray-100 p-4 ${item.fixed && isDeficiencyView ? 'bg-green-50/20' : ''}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 space-y-2">
+    <div className={`bg-white border-b border-gray-100 p-4 ${item.fixed && isDeficiencyView ? 'bg-green-50' : ''}`} {...draggableProps}>
+      <div className="flex items-start justify-between gap-3">
+        {dragHandleProps && <div {...dragHandleProps} className="mt-2 text-gray-300">⋮⋮</div>}
+        <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2">
             <span className="text-[10px] font-black text-gray-300 mt-1">{index}.</span>
-            <div className="flex-1 space-y-1">
+            <div className="flex-1">
               <input
+                className={`w-full text-sm font-bold bg-transparent outline-none ${draft ? 'text-blue-600' : 'text-gray-800'}`}
                 value={activeItem.label}
-                onFocus={startEdit}
-                onChange={(e) => setLocalDraft({ ...activeItem, label: e.target.value })}
-                className={`w-full text-sm font-bold bg-transparent border-b transition-colors ${localDraft ? 'border-blue-400 bg-blue-50' : 'border-transparent'} ${item.fixed && isDeficiencyView ? 'line-through text-gray-400' : 'text-gray-800'}`}
+                onFocus={() => !draft && setDraft({...item})}
+                onChange={(e) => setDraft({...activeItem, label: e.target.value})}
               />
               {isDevice && (
-                <div className="flex gap-2">
-                  <input value={activeItem.deviceNo} onFocus={startEdit} onChange={(e) => setLocalDraft({ ...activeItem, deviceNo: e.target.value })} className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
-                  <select value={activeItem.type} onFocus={startEdit} onChange={(e) => setLocalDraft({ ...activeItem, type: e.target.value })} className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded">
+                <div className="flex gap-2 mt-1">
+                  <input 
+                    placeholder="#"
+                    className="w-10 bg-gray-100 rounded px-1 text-[10px] font-black outline-none"
+                    value={activeItem.deviceNo}
+                    onFocus={() => !draft && setDraft({...item})}
+                    onChange={(e) => setDraft({...activeItem, deviceNo: e.target.value})}
+                  />
+                  <select 
+                    className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded outline-none"
+                    value={activeItem.type}
+                    onFocus={() => !draft && setDraft({...item})}
+                    onChange={(e) => setDraft({...activeItem, type: e.target.value})}
+                  >
                     {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
@@ -101,250 +134,275 @@ const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, 
             </div>
           </div>
 
-          {localDraft ? (
-            <div className="flex gap-2 pl-6">
-              <button onClick={saveEdit} className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded font-bold uppercase">Save</button>
-              <button onClick={cancelEdit} className="text-[10px] bg-gray-100 text-gray-400 px-3 py-1 rounded font-bold uppercase">Cancel</button>
+          {draft ? (
+            <div className="flex gap-2 mt-3 pl-5">
+              <button onClick={handleSave} className="text-[10px] bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold uppercase tracking-widest">Save</button>
+              <button onClick={handleCancel} className="text-[10px] bg-gray-100 text-gray-400 px-3 py-1.5 rounded-lg font-bold uppercase tracking-widest">Cancel</button>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-4 pl-6 text-[10px] font-bold text-gray-400 uppercase">
-              <button onClick={() => setIsEditingNote(!isEditingNote)}>Note</button>
+            <div className="flex flex-wrap items-center gap-4 mt-2 pl-5 text-[10px] font-bold text-gray-400 uppercase">
+              <button onClick={() => setDraft({...item, showNote: true})}>Note</button>
               <button onClick={() => fileInputRef.current.click()}>Media</button>
               {isDeficiencyView && (
-                <div className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={item.fixed || false}
-                    onChange={(e) => onUpdateMeta({ fixed: e.target.checked, dateFixed: e.target.checked ? new Date().toLocaleDateString() : null })}
+                <div className="flex items-center gap-1 ml-auto">
+                  <input 
+                    type="checkbox" 
+                    checked={item.fixed} 
+                    onChange={(e) => onUpdate({ fixed: e.target.checked, dateFixed: e.target.checked ? new Date().toLocaleDateString() : null })}
                   />
-                  <span className={item.fixed ? "text-green-600" : "text-orange-500"}>Fixed?</span>
+                  <span className={item.fixed ? "text-green-600" : "text-red-500"}>{item.fixed ? `Fixed ${item.dateFixed}` : 'Mark Fixed'}</span>
                 </div>
               )}
-              {onDelete && <button onClick={() => onTriggerModal({ title: "Delete Item?", isDanger: true, onConfirm: onDelete })} className="text-red-300 ml-auto">Delete</button>}
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  const reader = new FileReader();
-                  reader.onloadend = () => onUpdateMeta({ photo: reader.result, mediaType: file.type.startsWith('video') ? 'video' : 'image' });
-                  reader.readAsDataURL(file);
-                }
-              }} />
+              {onDelete && <button onClick={() => onTriggerModal({ title: "Delete Item?", isDanger: true, onConfirm: onDelete })} className="text-red-300">Delete</button>}
             </div>
           )}
-          {(isEditingNote || item.note) && (
-            <textarea value={item.note} onChange={(e) => onUpdateMeta({ note: e.target.value })} className="w-full mt-2 p-2 text-xs bg-gray-50 rounded border border-gray-100" placeholder="Notes..." />
+
+          {(activeItem.note || activeItem.showNote) && (
+            <textarea
+              className="w-full mt-2 p-2 text-xs bg-gray-50 border rounded-lg"
+              placeholder="Add details..."
+              value={activeItem.note}
+              onFocus={() => !draft && setDraft({...item})}
+              onChange={(e) => setDraft({...activeItem, note: e.target.value})}
+            />
           )}
+
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => onUpdate({ photo: reader.result, mediaType: file.type });
+              reader.readAsDataURL(file);
+            }
+          }} />
         </div>
-        {!isDeficiencyView && <TriStateButton status={item.status} onToggle={(s) => onUpdateMeta({ status: s, fixed: false })} />}
+        {!isDeficiencyView && <TriStateButton status={item.status} onToggle={(s) => onUpdate({ status: s, fixed: false })} />}
       </div>
     </div>
   );
 };
 
+// --- MAIN APP ---
+
 export default function App() {
   const [view, setView] = useState('year-select');
-  const [selectedYear, setSelectedYear] = useState(2025);
+  const [selectedYear, setSelectedYear] = useState(null);
   const [selectedBuildingId, setSelectedBuildingId] = useState(null);
   const [expandedSections, setExpandedSections] = useState({});
   const [activeModal, setActiveModal] = useState(null);
-  const [yearInputValue, setYearInputValue] = useState("");
   const [user, setUser] = useState(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const [yearData, setYearData] = useState(() => {
-    const saved = localStorage.getItem('fire_inspect_cloud_v4');
+    const saved = localStorage.getItem(APP_STORAGE_KEY);
     return saved ? JSON.parse(saved) : { 2025: [] };
   });
 
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-app-v4';
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'fire-app-v5';
   const firebaseConfig = JSON.parse(__firebase_config);
 
-  useEffect(() => {
-    const handleStatus = () => setIsOnline(navigator.onLine);
-    window.addEventListener('online', handleStatus);
-    window.addEventListener('offline', handleStatus);
-    return () => {
-      window.removeEventListener('online', handleStatus);
-      window.removeEventListener('offline', handleStatus);
-    };
-  }, []);
-
+  // Initialize Firebase
   useEffect(() => {
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const initAuth = async () => {
+    const init = async () => {
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
         await signInAnonymously(auth);
       }
     };
-    initAuth();
+    init();
 
-    const unsubAuth = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
-        // Correct path following RULE 1: /artifacts/{appId}/public/data/{collectionName}/{docId}
-        const syncDoc = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'master-report');
-        const unsubSnap = onSnapshot(syncDoc, (snapshot) => {
-          if (snapshot.exists()) {
-            const cloudData = snapshot.data().years;
-            setYearData(prev => {
-              const merged = { ...prev, ...cloudData };
-              localStorage.setItem('fire_inspect_cloud_v4', JSON.stringify(merged));
-              return merged;
-            });
+        // RULE 1: Even segments: artifacts / ID / public / data / reports / master
+        const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'master');
+        onSnapshot(docRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data().payload;
+            setYearData(data);
+            localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(data));
           }
-        }, (err) => console.error("Sync Error", err));
-        return () => unsubSnap();
+        }, (err) => console.log("Firestore error:", err));
       }
     });
-    return () => unsubAuth();
+    return () => unsub();
   }, [appId]);
 
-  const saveAll = useCallback(async (newData) => {
-    setYearData(newData);
-    localStorage.setItem('fire_inspect_cloud_v4', JSON.stringify(newData));
-
-    if (user && isOnline) {
-      setIsSyncing(true);
-      try {
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        // Correct path following RULE 1
-        const syncDoc = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'master-report');
-        await setDoc(syncDoc, { 
-          years: newData, 
-          lastUpdated: Date.now(), 
-          updatedBy: user.uid 
-        }, { merge: true });
-      } catch (e) {
-        console.error("Cloud push failed", e);
-      } finally {
-        setIsSyncing(false);
-      }
+  const saveToCloud = useCallback(async (data) => {
+    setYearData(data);
+    localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(data));
+    if (!user) return;
+    try {
+      const db = getFirestore();
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'master');
+      await setDoc(docRef, { payload: data, updated: Date.now() });
+    } catch (e) {
+      console.error("Cloud Save Fail", e);
     }
-  }, [user, isOnline, appId]);
+  }, [user, appId]);
 
-  const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
+  const activeBuilding = selectedYear && selectedBuildingId 
+    ? yearData[selectedYear]?.find(b => b.id === selectedBuildingId) 
+    : null;
 
   const getBuildingStatus = (building) => {
     let pending = 0;
-    let unfixed = 0;
-    let totalDefs = 0;
-    Object.keys(building.data).forEach(key => {
-      if (Array.isArray(building.data[key])) {
-        building.data[key].forEach(item => {
-          if (item.status === 'pending') pending++;
-          if (item.status === 'failed') {
-            totalDefs++;
-            if (!item.fixed) unfixed++;
-          }
-        });
-      }
+    let deficiencies = 0;
+    let fixed = 0;
+    
+    building.sections.forEach(s => {
+      s.data.forEach(item => {
+        if (item.status === 'pending') pending++;
+        if (item.status === 'failed') {
+          deficiencies++;
+          if (item.fixed) fixed++;
+        }
+      });
     });
-    if (pending === 0 && unfixed === 0) return { text: 'Complete', class: 'text-green-500' };
-    if (pending === 0) return { text: `Inspected ${totalDefs}`, class: 'text-blue-500' };
-    return { text: 'In Progress', class: 'text-orange-400' };
+    
+    (building.customDeficiencies || []).forEach(d => {
+      deficiencies++;
+      if (d.fixed) fixed++;
+    });
+
+    if (pending > 0) return { text: 'In Progress', color: 'text-orange-400' };
+    if (deficiencies > 0 && fixed < deficiencies) return { text: `Inspected (${deficiencies} Deficiencies)`, color: 'text-blue-500' };
+    return { text: 'Complete', color: 'text-green-500' };
   };
 
-  const updateItem = (sect, id, meta) => {
-    const newData = {
-      ...yearData,
-      [selectedYear]: yearData[selectedYear].map(b => b.id === selectedBuildingId ? {
-        ...b, data: { ...b.data, [sect]: b.data[sect].map(i => i.id === id ? { ...i, ...meta } : i) }
-      } : b)
-    };
-    saveAll(newData);
+  // --- ACTIONS ---
+  
+  const updateSectionOrder = (oldIdx, newIdx) => {
+    const b = { ...activeBuilding };
+    const [moved] = b.sections.splice(oldIdx, 1);
+    b.sections.splice(newIdx, 0, moved);
+    const newData = { ...yearData, [selectedYear]: yearData[selectedYear].map(x => x.id === b.id ? b : x) };
+    saveToCloud(newData);
   };
+
+  const updateItem = (sectionId, itemId, meta) => {
+    const b = { ...activeBuilding };
+    const section = b.sections.find(s => s.id === sectionId);
+    if (section) {
+      section.data = section.data.map(i => i.id === itemId ? { ...i, ...meta } : i);
+    } else if (sectionId === 'custom') {
+      b.customDeficiencies = b.customDeficiencies.map(i => i.id === itemId ? { ...i, ...meta } : i);
+    }
+    const newData = { ...yearData, [selectedYear]: yearData[selectedYear].map(x => x.id === b.id ? b : x) };
+    saveToCloud(newData);
+  };
+
+  const deleteBuilding = (id) => {
+    const newData = { ...yearData, [selectedYear]: yearData[selectedYear].filter(b => b.id !== id) };
+    saveToCloud(newData);
+    setActiveModal(null);
+  };
+
+  // --- VIEWS ---
 
   if (view === 'year-select') return (
-    <div className="p-4 space-y-4 bg-[#F2F2F7] min-h-screen">
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500' : 'bg-red-500'}`}></div>
-          <span className="text-[10px] font-bold uppercase text-gray-400">{isSyncing ? 'Syncing...' : (isOnline ? 'Online' : 'Offline')}</span>
-        </div>
+    <div className="p-4 bg-[#F2F2F7] min-h-screen">
+      <h1 className="text-xl font-black uppercase tracking-tight mb-6">Annual Inspections</h1>
+      <div className="space-y-3">
+        {Object.keys(yearData).sort().reverse().map(year => (
+          <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center active:scale-95 transition-transform">
+            <span className="font-black text-lg">Year {year}</span>
+            <span className="text-[10px] font-black text-gray-400 uppercase">{yearData[year].length} Buildings</span>
+          </div>
+        ))}
+        <button 
+          onClick={() => setActiveModal({ title: "Add New Year", onConfirm: () => { 
+            const y = prompt("Enter Year:"); 
+            if (y && !yearData[y]) saveToCloud({ ...yearData, [y]: [] }); 
+            setActiveModal(null);
+          }})}
+          className="w-full p-4 border-2 border-dashed border-gray-300 rounded-3xl text-gray-400 font-bold uppercase text-[10px]"
+        >+ Add Year</button>
       </div>
-      {Object.keys(yearData).sort().reverse().map(year => (
-        <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer active:bg-gray-50">
-          <span className="font-bold text-lg text-gray-700">Year {year}</span>
-          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{yearData[year].length} Buildings</span>
-        </div>
-      ))}
-      <button onClick={() => setActiveModal({ type: 'input', title: 'Add New Year', onConfirm: (val) => { if (val && !yearData[val]) saveAll({ ...yearData, [val]: [] }); setActiveModal(null); } })} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Year</button>
-      {activeModal?.type === 'input' && (
-        <Modal title={activeModal.title} onCancel={() => setActiveModal(null)} onConfirm={() => activeModal.onConfirm(yearInputValue)}>
-          <input type="number" autoFocus value={yearInputValue} onChange={(e) => setYearInputValue(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xl font-bold" />
-        </Modal>
-      )}
+      {activeModal && <Modal {...activeModal} onCancel={() => setActiveModal(null)} />}
     </div>
   );
 
   if (view === 'building-select') return (
-    <div className="p-4 space-y-4 bg-[#F2F2F7] min-h-screen">
-      <div className="flex items-center gap-2">
-        <button onClick={() => setView('year-select')} className="text-blue-600 font-bold p-1">←</button>
+    <div className="p-4 bg-[#F2F2F7] min-h-screen">
+      <div className="flex items-center gap-2 mb-6">
+        <button onClick={() => setView('year-select')} className="p-2 text-blue-600 font-black">←</button>
         <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
       </div>
-      {yearData[selectedYear].map(b => {
-        const status = getBuildingStatus(b);
-        return (
-          <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
-            <div>
-              <h3 className="font-bold text-gray-800">{b.name}</h3>
-              <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
+      <div className="space-y-3">
+        {yearData[selectedYear]?.map(b => {
+          const status = getBuildingStatus(b);
+          return (
+            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-5 rounded-3xl shadow-sm border relative group active:bg-gray-50">
+              <h3 className="font-black text-gray-800">{b.name}</h3>
+              <p className={`text-[10px] font-black uppercase mt-1 ${status.color}`}>{status.text}</p>
+              <button 
+                onClick={(e) => { e.stopPropagation(); setActiveModal({ title: "Delete Building?", isDanger: true, onConfirm: () => deleteBuilding(b.id) }); }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-200 hover:text-red-400 p-2"
+              >✕</button>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); setActiveModal({ type: 'confirm', title: 'Delete Building?', isDanger: true, onConfirm: () => { const newData = { ...yearData, [selectedYear]: yearData[selectedYear].filter(x => x.id !== b.id) }; saveAll(newData); setActiveModal(null); } }); }} className="text-red-200 p-2 text-xl">✕</button>
-          </div>
-        );
-      })}
-      <button onClick={() => { const newData = { ...yearData, [selectedYear]: [...yearData[selectedYear], getNewBuildingTemplate(`New Building ${yearData[selectedYear].length + 1}`)] }; saveAll(newData); }} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
-      {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+          );
+        })}
+        <button 
+          onClick={() => {
+            const name = prompt("Building Name:");
+            if (name) {
+              const newData = { ...yearData, [selectedYear]: [...(yearData[selectedYear] || []), getNewBuildingTemplate(name)] };
+              saveToCloud(newData);
+            }
+          }}
+          className="w-full p-5 border-2 border-dashed border-gray-300 rounded-3xl text-gray-400 font-bold uppercase text-[10px]"
+        >+ New Building</button>
+      </div>
+      {activeModal && <Modal {...activeModal} onCancel={() => setActiveModal(null)} />}
     </div>
   );
 
+  // MAIN FORM VIEW
   const allDeficiencies = [];
-  if (activeBuilding) {
-    activeBuilding.sections.forEach(s => {
-      activeBuilding.data[s.id].forEach(i => { if (i.status === 'failed') allDeficiencies.push({ ...i, section: s.id }); });
-    });
-  }
+  activeBuilding.sections.forEach(s => {
+    s.data.forEach(i => { if (i.status === 'failed') allDeficiencies.push({ ...i, sectionId: s.id }); });
+  });
 
   return (
-    <div className="pb-44 bg-[#F2F2F7] min-h-screen">
-      <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
-        <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Save</button>
-        <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[40%]">{activeBuilding.name}</h2>
-        <div className="flex items-center gap-2">
-          {isSyncing && <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>}
-          <button className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border">Export</button>
-        </div>
+    <div className="bg-[#F2F2F7] min-h-screen pb-40">
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b p-4 flex justify-between items-center">
+        <button onClick={() => setView('building-select')} className="text-blue-600 font-black text-xs uppercase">Save</button>
+        <h2 className="font-black uppercase text-xs truncate max-w-[150px]">{activeBuilding.name}</h2>
+        <button className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">Export</button>
       </div>
 
-      <div className="p-4 space-y-3">
-        {/* Section 1: Details */}
-        <div className="rounded-xl border bg-white overflow-hidden shadow-sm">
-          <button onClick={() => setExpandedSections(p => ({ ...p, details: !p.details }))} className="w-full bg-blue-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
+      <div className="p-4 space-y-4">
+        {/* 1. Building Details */}
+        <div className="bg-white rounded-3xl shadow-sm overflow-hidden border">
+          <button 
+            onClick={() => setExpandedSections(p => ({ ...p, details: !p.details }))}
+            className="w-full bg-blue-600 text-white p-4 text-left font-black text-xs uppercase flex justify-between"
+          >
             <span>1. Building Details</span>
-            <span>{expandedSections['details'] ? '−' : '+'}</span>
+            <span>{expandedSections.details ? '−' : '+'}</span>
           </button>
-          {expandedSections['details'] && (
-            <div className="p-4 grid grid-cols-1 gap-4">
+          {expandedSections.details && (
+            <div className="p-6 grid gap-4">
               {Object.keys(activeBuilding.details).map(k => (
-                <div key={k} className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{k.replace(/([A-Z])/g, ' $1')}</label>
-                  <input value={activeBuilding.details[k]} onChange={(e) => {
-                    const newData = { ...yearData };
-                    const b = newData[selectedYear].find(x => x.id === selectedBuildingId);
-                    b.details[k] = e.target.value;
-                    if (k === 'buildingName') b.name = e.target.value;
-                    saveAll(newData);
-                  }} className="w-full border-b border-gray-100 py-1 font-semibold text-gray-700 focus:border-blue-500" />
+                <div key={k} className="border-b pb-1">
+                  <label className="text-[8px] font-black text-gray-300 uppercase block">{k.replace(/([A-Z])/g, ' $1')}</label>
+                  <input 
+                    className="w-full font-bold text-gray-700 outline-none text-sm"
+                    value={activeBuilding.details[k]}
+                    onChange={(e) => {
+                      const newData = { ...yearData };
+                      const b = newData[selectedYear].find(x => x.id === activeBuilding.id);
+                      b.details[k] = e.target.value;
+                      if (k === 'buildingName') b.name = e.target.value;
+                      saveToCloud(newData);
+                    }}
+                  />
                 </div>
               ))}
             </div>
@@ -352,78 +410,118 @@ export default function App() {
         </div>
 
         {/* Dynamic Sections */}
-        {activeBuilding.sections.map((s, idx) => (
-          <div key={s.id} className="rounded-xl border bg-white overflow-hidden shadow-sm">
-            <div className={`w-full ${s.color} text-white p-3 flex justify-between items-center`}>
-              <button onClick={() => setExpandedSections(p => ({ ...p, [s.id]: !p[s.id] }))} className="flex-1 text-left font-bold text-xs uppercase">
-                {idx + 2}. {s.title}
+        {activeBuilding.sections.sort((a,b) => a.order - b.order).map((s, idx) => (
+          <div key={s.id} className="bg-white rounded-3xl shadow-sm overflow-hidden border">
+            <div className={`flex items-center ${s.color} text-white`}>
+              <button 
+                onClick={() => setExpandedSections(p => ({ ...p, [s.id]: !p[s.id] }))}
+                className="flex-1 p-4 text-left font-black text-xs uppercase"
+              >
+                {idx + 2}. {s.title} ({s.data.length})
               </button>
-              <button onClick={() => setExpandedSections(p => ({ ...p, [s.id]: !p[s.id] }))}>{expandedSections[s.id] ? '−' : '+'}</button>
+              <div className="flex pr-2 gap-1">
+                <button onClick={() => updateSectionOrder(idx, idx-1)} disabled={idx===0} className="p-1 opacity-50">↑</button>
+                <button onClick={() => updateSectionOrder(idx, idx+1)} disabled={idx===activeBuilding.sections.length-1} className="p-1 opacity-50">↓</button>
+                <button onClick={() => setExpandedSections(p => ({ ...p, [s.id]: !p[s.id] }))} className="p-2">{expandedSections[s.id] ? '−' : '+'}</button>
+              </div>
             </div>
             {expandedSections[s.id] && (
               <div>
-                {activeBuilding.data[s.id]?.map((item, i) => (
-                  <InspectionRow key={item.id} index={i + 1} item={item} isDevice={s.isDev} onUpdateMeta={(m) => updateItem(s.id, item.id, m)} onTriggerModal={setActiveModal} onDelete={() => {
-                    const newData = { ...yearData };
-                    const b = newData[selectedYear].find(x => x.id === selectedBuildingId);
-                    b.data[s.id] = b.data[s.id].filter(x => x.id !== item.id);
-                    saveAll(newData);
-                    setActiveModal(null);
-                  }} />
+                {s.data.map((item, i) => (
+                  <InspectionRow 
+                    key={item.id}
+                    index={i + 1}
+                    item={item}
+                    isDevice={s.isDev}
+                    onTriggerModal={setActiveModal}
+                    onUpdate={(m) => updateItem(s.id, item.id, m)}
+                    onDelete={() => {
+                      const newData = { ...yearData };
+                      const b = newData[selectedYear].find(x => x.id === activeBuilding.id);
+                      const sect = b.sections.find(sec => sec.id === s.id);
+                      sect.data = sect.data.filter(x => x.id !== item.id);
+                      saveToCloud(newData);
+                      setActiveModal(null);
+                    }}
+                  />
                 ))}
-                <button onClick={() => {
-                  const newData = { ...yearData };
-                  const b = newData[selectedYear].find(x => x.id === selectedBuildingId);
-                  b.data[s.id].push({ id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false });
-                  saveAll(newData);
-                }} className="w-full p-3 text-[10px] font-black text-gray-300 uppercase">+ Add Item</button>
+                <button 
+                  onClick={() => {
+                    const newData = { ...yearData };
+                    const b = newData[selectedYear].find(x => x.id === activeBuilding.id);
+                    const sect = b.sections.find(sec => sec.id === s.id);
+                    sect.data.push({ id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false });
+                    saveToCloud(newData);
+                  }}
+                  className="w-full p-4 text-[10px] font-black text-gray-300 uppercase"
+                >+ Add Item</button>
               </div>
             )}
           </div>
         ))}
 
-        {/* Deficiency Section */}
-        <div className="rounded-xl border border-red-200 bg-white overflow-hidden shadow-sm">
-          <button onClick={() => setExpandedSections(p => ({ ...p, defs: !p.defs }))} className="w-full bg-red-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
+        {/* Deficiencies Section */}
+        <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-red-100">
+          <button 
+            onClick={() => setExpandedSections(p => ({ ...p, defs: !p.defs }))}
+            className="w-full bg-red-600 text-white p-4 text-left font-black text-xs uppercase flex justify-between"
+          >
             <span>{activeBuilding.sections.length + 2}. Deficiencies</span>
-            <span className="bg-white/20 px-2 rounded-md text-[10px]">{allDeficiencies.length + (activeBuilding.data.customDeficiencies?.length || 0)}</span>
+            <span className="bg-white/20 px-2 rounded-full text-[10px]">{allDeficiencies.length + (activeBuilding.customDeficiencies?.length || 0)}</span>
           </button>
-          {expandedSections['defs'] && (
+          {expandedSections.defs && (
             <div>
               {allDeficiencies.map((item, i) => (
-                <InspectionRow key={item.id} index={i + 1} item={item} isDeficiencyView onUpdateMeta={(m) => updateItem(item.section, item.id, m)} onTriggerModal={setActiveModal} />
+                <InspectionRow 
+                  key={item.id} 
+                  index={i + 1} 
+                  item={item} 
+                  isDeficiencyView 
+                  onTriggerModal={setActiveModal}
+                  onUpdate={(m) => updateItem(item.sectionId, item.id, m)}
+                />
               ))}
-              {(activeBuilding.data.customDeficiencies || []).map((item, i) => (
-                <InspectionRow key={item.id} index={allDeficiencies.length + i + 1} item={item} isDeficiencyView onTriggerModal={setActiveModal} onUpdateMeta={(m) => {
-                  const newData = { ...yearData };
-                  const b = newData[selectedYear].find(x => x.id === selectedBuildingId);
-                  b.data.customDeficiencies = b.data.customDeficiencies.map(x => x.id === item.id ? { ...x, ...m } : x);
-                  saveAll(newData);
-                }} onDelete={() => {
-                  const newData = { ...yearData };
-                  const b = newData[selectedYear].find(x => x.id === selectedBuildingId);
-                  b.data.customDeficiencies = b.data.customDeficiencies.filter(x => x.id !== item.id);
-                  saveAll(newData);
-                  setActiveModal(null);
-                }} />
+              {(activeBuilding.customDeficiencies || []).map((item, i) => (
+                <InspectionRow 
+                  key={item.id} 
+                  index={allDeficiencies.length + i + 1} 
+                  item={item} 
+                  isDeficiencyView 
+                  onTriggerModal={setActiveModal}
+                  onUpdate={(m) => updateItem('custom', item.id, m)}
+                  onDelete={() => {
+                    const newData = { ...yearData };
+                    const b = newData[selectedYear].find(x => x.id === activeBuilding.id);
+                    b.customDeficiencies = b.customDeficiencies.filter(x => x.id !== item.id);
+                    saveToCloud(newData);
+                    setActiveModal(null);
+                  }}
+                />
               ))}
-              <button onClick={() => {
-                const newData = { ...yearData };
-                const b = newData[selectedYear].find(x => x.id === selectedBuildingId);
-                if (!b.data.customDeficiencies) b.data.customDeficiencies = [];
-                b.data.customDeficiencies.push({ id: Date.now(), label: "Deficiency", status: "failed", note: "", photo: null, fixed: false });
-                saveAll(newData);
-              }} className="w-full p-3 text-[10px] font-black text-red-200 uppercase">+ Add Deficiency</button>
+              <button 
+                onClick={() => {
+                  const newData = { ...yearData };
+                  const b = newData[selectedYear].find(x => x.id === activeBuilding.id);
+                  if(!b.customDeficiencies) b.customDeficiencies = [];
+                  b.customDeficiencies.push({ id: Date.now(), label: "External Deficiency", status: "failed", note: "", photo: null, fixed: false });
+                  saveToCloud(newData);
+                }}
+                className="w-full p-4 text-[10px] font-black text-red-300 uppercase"
+              >+ Add External Deficiency</button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 z-50">
-        <button onClick={() => setView('building-select')} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg">Save & Exit</button>
+      {/* Footer Actions */}
+      <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t z-50">
+        <button 
+          onClick={() => setView('building-select')}
+          className="w-full bg-green-500 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl shadow-green-100 active:scale-95 transition-transform"
+        >Save & Exit Building</button>
       </div>
 
-      {activeModal && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+      {activeModal && <Modal {...activeModal} onCancel={() => setActiveModal(null)} />}
     </div>
   );
 }
