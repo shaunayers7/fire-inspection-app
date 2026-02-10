@@ -217,6 +217,7 @@
                     [selectedYear]: prev[selectedYear].map(b => {
                         if (b.id === selectedBuildingId) {
                             const newDetails = { ...b.details, [key]: value };
+                            // Sync building name across both the 'name' field and 'buildingName' detail
                             if (key === 'buildingName') {
                                 return { ...b, name: value, details: newDetails };
                             }
