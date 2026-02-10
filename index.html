@@ -72,6 +72,23 @@
             }
         });
 
+        // App-Level Modal Component
+        const Modal = ({ title, children, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel", isDanger = false }) => (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel}></div>
+                <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="p-6">
+                        <h3 className="text-lg font-black uppercase text-gray-800 mb-4">{title}</h3>
+                        {children}
+                        <div className="flex gap-3 mt-6">
+                            <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs uppercase tracking-widest">{cancelText}</button>
+                            <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-xs uppercase tracking-widest`}>{confirmText}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+
         const TriStateButton = ({ status, onToggle }) => {
             const handleClick = (e) => {
                 e.stopPropagation();
@@ -85,14 +102,20 @@
             return <button onClick={handleClick} className={`${baseClass} bg-gray-200 text-gray-400`}>○</button>;
         };
 
-        const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false }) => {
+        const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false, onTriggerModal }) => {
             const [localDraft, setLocalDraft] = useState(null);
             const [isEditingNote, setIsEditingNote] = useState(false);
             const fileInputRef = useRef(null);
 
             const startEdit = () => setLocalDraft({ ...item });
             const saveEdit = () => { onUpdateMeta(localDraft); setLocalDraft(null); };
-            const cancelEdit = () => { if(confirm("Discard changes?")) setLocalDraft(null); };
+            const cancelEdit = () => { 
+                onTriggerModal({
+                    title: "Discard Changes?",
+                    type: 'confirm',
+                    onConfirm: () => { setLocalDraft(null); }
+                });
+            };
             const activeItem = localDraft || item;
 
             return (
@@ -141,7 +164,14 @@
                                             </span>
                                         </div>
                                     )}
-                                    {onDelete && <button onClick={() => { if(confirm("Confirm deletion?")) onDelete(); }} className="text-red-300 ml-auto">Delete</button>}
+                                    {onDelete && <button onClick={() => {
+                                        onTriggerModal({
+                                            title: "Delete Item?",
+                                            type: 'confirm',
+                                            isDanger: true,
+                                            onConfirm: onDelete
+                                        });
+                                    }} className="text-red-300 ml-auto">Delete</button>}
                                     <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
                                         const file = e.target.files[0];
                                         if (file) {
@@ -173,6 +203,9 @@
             const [selectedYear, setSelectedYear] = useState(2025);
             const [selectedBuildingId, setSelectedBuildingId] = useState(null);
             const [expandedSections, setExpandedSections] = useState({});
+            const [activeModal, setActiveModal] = useState(null);
+            const [yearInputValue, setYearInputValue] = useState("");
+            
             const [yearData, setYearData] = useState(() => {
                 const saved = localStorage.getItem('fire_inspection_v3_data');
                 return saved ? JSON.parse(saved) : { 2025: [] };
@@ -213,7 +246,6 @@
                 const doc = new jsPDF();
                 const statusInfo = getBuildingStatus(activeBuilding);
 
-                // Title & Header
                 doc.setFontSize(20);
                 doc.setTextColor(40);
                 doc.text("FIRE INSPECTION REPORT", 105, 20, { align: "center" });
@@ -222,7 +254,6 @@
                 doc.text(`Year: ${selectedYear} | Status: ${statusInfo.text}`, 105, 28, { align: "center" });
                 doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 33, { align: "center" });
 
-                // Section 1: Building Details
                 doc.setFontSize(14);
                 doc.text("1. BUILDING DETAILS", 14, 45);
                 
@@ -239,7 +270,6 @@
                     headStyles: { fillColor: [37, 99, 235] }
                 });
 
-                // Sections 2 - 6: Inspection Data
                 activeBuilding.sections.forEach((s, idx) => {
                     doc.addPage();
                     doc.setFontSize(14);
@@ -268,7 +298,6 @@
                     });
                 });
 
-                // Section 7: Deficiencies
                 doc.addPage();
                 doc.setFontSize(14);
                 doc.text("7. DEFICIENCY SUMMARY", 14, 20);
@@ -279,7 +308,6 @@
                         if (i.status === 'failed') defs.push(i);
                     });
                 });
-                // Add Custom Deficiencies
                 if (activeBuilding.data.customDeficiencies) {
                     activeBuilding.data.customDeficiencies.forEach(i => defs.push(i));
                 }
@@ -304,7 +332,6 @@
                     doc.text("No deficiencies recorded for this building.", 14, 30);
                 }
 
-                // Final Save
                 doc.save(`${activeBuilding.name}_Report_${selectedYear}.pdf`);
             };
 
@@ -323,7 +350,6 @@
                     [selectedYear]: prev[selectedYear].map(b => {
                         if (b.id === selectedBuildingId) {
                             const newDetails = { ...b.details, [key]: value };
-                            // Sync building name across both the 'name' field and 'buildingName' detail
                             if (key === 'buildingName') {
                                 return { ...b, name: value, details: newDetails };
                             }
@@ -334,19 +360,60 @@
                 }));
             };
 
+            const triggerYearAddModal = () => {
+                setYearInputValue("");
+                setActiveModal({
+                    type: 'input',
+                    title: 'Add New Year',
+                    onConfirm: (val) => {
+                        if(val && !yearData[val]) {
+                            setYearData(prev => ({ ...prev, [val]: [] }));
+                        }
+                        setActiveModal(null);
+                    }
+                });
+            };
+
+            const triggerDeleteBuildingModal = (id) => {
+                setActiveModal({
+                    type: 'confirm',
+                    title: 'Delete Building?',
+                    isDanger: true,
+                    onConfirm: () => {
+                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== id) }));
+                        setActiveModal(null);
+                    }
+                });
+            };
+
+            // Main Views
             if (view === 'year-select') return (
                 <div className="p-4 space-y-4">
                     <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
-                    {Object.keys(yearData).map(year => (
+                    {Object.keys(yearData).sort().reverse().map(year => (
                         <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer active:bg-gray-50">
                             <span className="font-bold text-lg text-gray-700">Year {year}</span>
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{yearData[year].length} Buildings</span>
                         </div>
                     ))}
-                    <button onClick={() => {
-                        const newYear = prompt("Enter new year:");
-                        if(newYear && !yearData[newYear]) setYearData({...yearData, [newYear]: []});
-                    }} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Year</button>
+                    <button onClick={triggerYearAddModal} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Year</button>
+                    
+                    {activeModal?.type === 'input' && (
+                        <Modal 
+                            title={activeModal.title} 
+                            onCancel={() => setActiveModal(null)}
+                            onConfirm={() => activeModal.onConfirm(yearInputValue)}
+                        >
+                            <input 
+                                type="number" 
+                                autoFocus
+                                value={yearInputValue} 
+                                onChange={(e) => setYearInputValue(e.target.value)}
+                                placeholder="e.g. 2026"
+                                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xl font-bold"
+                            />
+                        </Modal>
+                    )}
                 </div>
             );
 
@@ -366,9 +433,7 @@
                                 </div>
                                 <button onClick={(e) => {
                                     e.stopPropagation();
-                                    if(confirm("Confirm Building Deletion?")) {
-                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== b.id) }));
-                                    }
+                                    triggerDeleteBuildingModal(b.id);
                                 }} className="text-red-200 p-2 text-xl hover:text-red-400">✕</button>
                             </div>
                         );
@@ -377,6 +442,15 @@
                         const b = getNewBuildingTemplate(`New Building ${yearData[selectedYear].length + 1}`);
                         setYearData(prev => ({ ...prev, [selectedYear]: [...prev[selectedYear], b] }));
                     }} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
+                    
+                    {activeModal?.type === 'confirm' && (
+                        <Modal 
+                            title={activeModal.title} 
+                            isDanger={activeModal.isDanger}
+                            onCancel={() => setActiveModal(null)}
+                            onConfirm={activeModal.onConfirm}
+                        />
+                    )}
                 </div>
             );
 
@@ -434,6 +508,7 @@
                                                 item={item} 
                                                 isDevice={s.isDev} 
                                                 onUpdateMeta={(m) => updateItem(s.id, item.id, m)}
+                                                onTriggerModal={(config) => setActiveModal({...config, type: 'confirm'})}
                                                 onDelete={() => {
                                                     setYearData(prev => ({
                                                         ...prev,
@@ -441,6 +516,7 @@
                                                             ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) }
                                                         } : b)
                                                     }));
+                                                    setActiveModal(null);
                                                 }}
                                             />
                                         ))}
@@ -464,7 +540,7 @@
                             {expandedSections['defs'] && (
                                 <div className="bg-white">
                                     {allDeficiencies.map((item, i) => (
-                                        <InspectionRow key={item.id} index={i+1} item={item} isDeficiencyView onUpdateMeta={(m) => updateItem(item.section, item.id, m)} />
+                                        <InspectionRow key={item.id} index={i+1} item={item} isDeficiencyView onUpdateMeta={(m) => updateItem(item.section, item.id, m)} onTriggerModal={(config) => setActiveModal({...config, type: 'confirm'})} />
                                     ))}
                                     {activeBuilding.data.customDeficiencies?.map((item, i) => (
                                         <InspectionRow 
@@ -472,6 +548,7 @@
                                             index={allDeficiencies.length + i + 1} 
                                             item={item} 
                                             isDeficiencyView 
+                                            onTriggerModal={(config) => setActiveModal({...config, type: 'confirm'})}
                                             onUpdateMeta={(m) => {
                                                 setYearData(prev => ({
                                                     ...prev,
@@ -487,6 +564,7 @@
                                                         ...b, data: { ...b.data, customDeficiencies: b.data.customDeficiencies.filter(x => x.id !== item.id) }
                                                     } : b)
                                                 }));
+                                                setActiveModal(null);
                                             }}
                                         />
                                     ))}
@@ -504,6 +582,15 @@
                             <span>Save & Exit</span>
                         </button>
                     </div>
+
+                    {activeModal?.type === 'confirm' && (
+                        <Modal 
+                            title={activeModal.title} 
+                            isDanger={activeModal.isDanger}
+                            onCancel={() => setActiveModal(null)}
+                            onConfirm={activeModal.onConfirm}
+                        />
+                    )}
                 </div>
             );
         };
