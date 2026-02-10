@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Prevents user scaling and shifting on mobile devices -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fire Inspection App</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -11,8 +12,26 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #F2F2F7; -webkit-tap-highlight-color: transparent; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #F2F2F7; 
+            -webkit-tap-highlight-color: transparent; 
+            /* Prevent bounce scrolling on some mobile browsers */
+            overscroll-behavior-y: contain;
+        }
         .bg-dashed { background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%23D1D5DBFF' stroke-width='4' stroke-dasharray='8%2c 12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e"); }
+        
+        /* iOS/iPhone Specific: Inputs must be at least 16px to prevent automatic 
+           zoom-on-focus which causes the screen to move around. 
+        */
+        input, select, textarea { 
+            font-size: 16px !important; 
+        }
+        
+        @media (min-width: 640px) {
+            input, select, textarea { font-size: 14px !important; }
+        }
+
         input:focus, select:focus, textarea:focus { outline: none; background-color: #F9FAFB; }
     </style>
 </head>
@@ -192,6 +211,22 @@
                 }));
             };
 
+            const updateBuildingDetail = (key, value) => {
+                setYearData(prev => ({
+                    ...prev,
+                    [selectedYear]: prev[selectedYear].map(b => {
+                        if (b.id === selectedBuildingId) {
+                            const newDetails = { ...b.details, [key]: value };
+                            if (key === 'buildingName') {
+                                return { ...b, name: value, details: newDetails };
+                            }
+                            return { ...b, details: newDetails };
+                        }
+                        return b;
+                    })
+                }));
+            };
+
             if (view === 'year-select') return (
                 <div className="p-4 space-y-4">
                     <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
@@ -251,7 +286,7 @@
                 <div className="pb-44">
                     <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
                         <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Back</button>
-                        <h2 className="font-black uppercase text-xs tracking-tight text-gray-600">{activeBuilding.name}</h2>
+                        <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[50%]">{activeBuilding.name}</h2>
                         <button onClick={() => {
                             const blob = new Blob([JSON.stringify(activeBuilding)], {type: 'application/json'});
                             const url = URL.createObjectURL(blob);
@@ -263,7 +298,6 @@
                     </div>
 
                     <div className="p-4 space-y-3">
-                        {/* Section 1: Building Details (10 Items) */}
                         <div className="rounded-xl border overflow-hidden shadow-sm">
                             <button onClick={() => toggleSection('details')} className="w-full bg-blue-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>1. Building Details</span>
@@ -274,16 +308,17 @@
                                     {Object.keys(activeBuilding.details).map(k => (
                                         <div key={k} className="space-y-1">
                                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{k.replace(/([A-Z])/g, ' $1')}</label>
-                                            <input value={activeBuilding.details[k]} onChange={(e) => {
-                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, details: { ...b.details, [k]: e.target.value } } : b) }));
-                                            }} className="w-full border-b border-gray-100 text-sm py-1 font-semibold text-gray-700 focus:border-blue-500" />
+                                            <input 
+                                                value={activeBuilding.details[k]} 
+                                                onChange={(e) => updateBuildingDetail(k, e.target.value)} 
+                                                className="w-full border-b border-gray-100 py-1 font-semibold text-gray-700 focus:border-blue-500" 
+                                            />
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </div>
 
-                        {/* Inventory Sections 2-6 */}
                         {activeBuilding.sections.map((s, idx) => (
                             <div key={s.id} className="rounded-xl border overflow-hidden shadow-sm">
                                 <button onClick={() => toggleSection(s.id)} className={`w-full ${s.color} text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center`}>
@@ -318,7 +353,6 @@
                             </div>
                         ))}
 
-                        {/* Section 7: Deficiencies */}
                         <div className="rounded-xl border border-red-200 overflow-hidden shadow-sm">
                             <button onClick={() => toggleSection('defs')} className="w-full bg-red-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>7. Deficiencies</span>
@@ -365,7 +399,6 @@
                         </div>
                     </div>
 
-                    {/* Bottom Toolbar */}
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50">
                         <button onClick={() => setView('building-select')} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-transform flex items-center justify-center gap-2">
                             <span>Save & Exit</span>
