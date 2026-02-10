@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot } from "firebase/firestore";
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 
 // --- CONSTANTS ---
 const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
-const APP_STORAGE_KEY = 'fire_inspect_architect_v5';
+const APP_STORAGE_KEY = 'fire_inspect_architect_v6';
 
 // --- INITIAL TEMPLATE ---
 const getNewBuildingTemplate = (name = "New Building") => ({
@@ -44,13 +44,13 @@ const getNewBuildingTemplate = (name = "New Building") => ({
 const Modal = ({ title, children, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel", isDanger = false }) => (
   <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel}></div>
-    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden">
+    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200">
       <div className="p-6 text-center">
         <h3 className="text-lg font-black uppercase text-gray-800 mb-4">{title}</h3>
         {children}
         <div className="flex gap-3 mt-6">
-          <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-xs uppercase tracking-widest">{cancelText}</button>
-          <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-xs uppercase tracking-widest`}>{confirmText}</button>
+          <button onClick={onCancel} className="flex-1 py-3 px-4 bg-gray-100 text-gray-500 font-bold rounded-xl text-[10px] uppercase tracking-widest">{cancelText}</button>
+          <button onClick={onConfirm} className={`flex-1 py-3 px-4 ${isDanger ? 'bg-red-500' : 'bg-blue-600'} text-white font-bold rounded-xl text-[10px] uppercase tracking-widest`}>{confirmText}</button>
         </div>
       </div>
     </div>
@@ -77,13 +77,10 @@ const InspectionRow = ({
   onDelete, 
   isDevice = false, 
   isDeficiencyView = false, 
-  onTriggerModal,
-  draggableProps,
-  dragHandleProps 
+  onTriggerModal 
 }) => {
   const [draft, setDraft] = useState(null);
   const fileInputRef = useRef(null);
-
   const activeItem = draft || item;
 
   const handleSave = () => {
@@ -99,9 +96,8 @@ const InspectionRow = ({
   };
 
   return (
-    <div className={`bg-white border-b border-gray-100 p-4 ${item.fixed && isDeficiencyView ? 'bg-green-50' : ''}`} {...draggableProps}>
+    <div className={`bg-white border-b border-gray-100 p-4 ${item.fixed && isDeficiencyView ? 'bg-green-50' : ''}`}>
       <div className="flex items-start justify-between gap-3">
-        {dragHandleProps && <div {...dragHandleProps} className="mt-2 text-gray-300">⋮⋮</div>}
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2">
             <span className="text-[10px] font-black text-gray-300 mt-1">{index}.</span>
@@ -147,6 +143,7 @@ const InspectionRow = ({
                 <div className="flex items-center gap-1 ml-auto">
                   <input 
                     type="checkbox" 
+                    className="accent-green-500"
                     checked={item.fixed} 
                     onChange={(e) => onUpdate({ fixed: e.target.checked, dateFixed: e.target.checked ? new Date().toLocaleDateString() : null })}
                   />
@@ -159,7 +156,7 @@ const InspectionRow = ({
 
           {(activeItem.note || activeItem.showNote) && (
             <textarea
-              className="w-full mt-2 p-2 text-xs bg-gray-50 border rounded-lg"
+              className="w-full mt-2 p-2 text-xs bg-gray-50 border rounded-lg focus:ring-1 focus:ring-blue-200 outline-none"
               placeholder="Add details..."
               value={activeItem.note}
               onFocus={() => !draft && setDraft({...item})}
@@ -167,11 +164,17 @@ const InspectionRow = ({
             />
           )}
 
+          {activeItem.photo && (
+            <div className="mt-2 pl-5">
+              <img src={activeItem.photo} className="w-20 h-20 object-cover rounded-xl border shadow-sm" alt="Preview" />
+            </div>
+          )}
+
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => {
             const file = e.target.files[0];
             if (file) {
               const reader = new FileReader();
-              reader.onload = () => onUpdate({ photo: reader.result, mediaType: file.type });
+              reader.onload = () => onUpdate({ photo: reader.result });
               reader.readAsDataURL(file);
             }
           }} />
@@ -191,57 +194,82 @@ export default function App() {
   const [expandedSections, setExpandedSections] = useState({});
   const [activeModal, setActiveModal] = useState(null);
   const [user, setUser] = useState(null);
+  const [syncStatus, setSyncStatus] = useState('synced'); // 'synced', 'offline', 'syncing'
 
   const [yearData, setYearData] = useState(() => {
     const saved = localStorage.getItem(APP_STORAGE_KEY);
     return saved ? JSON.parse(saved) : { 2025: [] };
   });
 
-  const appId = typeof __app_id !== 'undefined' ? __app_id : 'fire-app-v5';
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'fire-app-v6';
   const firebaseConfig = JSON.parse(__firebase_config);
 
-  // Initialize Firebase
+  // Initialize Firebase & Sync Logic
   useEffect(() => {
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const init = async () => {
+    // Enable offline persistence
+    enableIndexedDbPersistence(db).catch((err) => {
+      if (err.code === 'failed-precondition') console.warn("Persistence failed: multiple tabs open");
+      else if (err.code === 'unimplemented') console.warn("Persistence not supported");
+    });
+
+    const initAuth = async () => {
       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
         await signInWithCustomToken(auth, __initial_auth_token);
       } else {
         await signInAnonymously(auth);
       }
     };
-    init();
+    initAuth();
 
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
-        // RULE 1: Even segments: artifacts / ID / public / data / reports / master
+        // COWOKER SYNC: Listen to the master report document
         const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'master');
-        onSnapshot(docRef, (snap) => {
+        const unsubSnap = onSnapshot(docRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data().payload;
-            setYearData(data);
-            localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(data));
+            // Only update if local state is older or we are not in an active edit
+            setYearData(prev => {
+              if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+              localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(data));
+              return data;
+            });
+            setSyncStatus('synced');
           }
-        }, (err) => console.log("Firestore error:", err));
+        }, (err) => {
+          console.error("Sync Error:", err);
+          setSyncStatus('offline');
+        });
+        return () => unsubSnap();
       }
     });
-    return () => unsub();
+    return () => unsubAuth();
   }, [appId]);
 
   const saveToCloud = useCallback(async (data) => {
     setYearData(data);
     localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(data));
+    setSyncStatus('syncing');
+
     if (!user) return;
     try {
       const db = getFirestore();
       const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'reports', 'master');
-      await setDoc(docRef, { payload: data, updated: Date.now() });
+      // Use setDoc for the shared master file
+      await setDoc(docRef, { 
+        payload: data, 
+        lastModifiedBy: user.uid,
+        updated: Date.now() 
+      });
+      setSyncStatus('synced');
     } catch (e) {
-      console.error("Cloud Save Fail", e);
+      console.error("Cloud Save Fail:", e);
+      setSyncStatus('offline');
     }
   }, [user, appId]);
 
@@ -274,8 +302,7 @@ export default function App() {
     return { text: 'Complete', color: 'text-green-500' };
   };
 
-  // --- ACTIONS ---
-  
+  // --- UI ACTIONS ---
   const updateSectionOrder = (oldIdx, newIdx) => {
     const b = { ...activeBuilding };
     const [moved] = b.sections.splice(oldIdx, 1);
@@ -296,20 +323,17 @@ export default function App() {
     saveToCloud(newData);
   };
 
-  const deleteBuilding = (id) => {
-    const newData = { ...yearData, [selectedYear]: yearData[selectedYear].filter(b => b.id !== id) };
-    saveToCloud(newData);
-    setActiveModal(null);
-  };
-
   // --- VIEWS ---
 
   if (view === 'year-select') return (
     <div className="p-4 bg-[#F2F2F7] min-h-screen">
-      <h1 className="text-xl font-black uppercase tracking-tight mb-6">Annual Inspections</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-xl font-black uppercase tracking-tight">Annual Inspections</h1>
+        <div className={`w-2 h-2 rounded-full ${syncStatus === 'synced' ? 'bg-green-500' : 'bg-orange-400 animate-pulse'}`}></div>
+      </div>
       <div className="space-y-3">
         {Object.keys(yearData).sort().reverse().map(year => (
-          <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center active:scale-95 transition-transform">
+          <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center active:scale-95 transition-transform cursor-pointer">
             <span className="font-black text-lg">Year {year}</span>
             <span className="text-[10px] font-black text-gray-400 uppercase">{yearData[year].length} Buildings</span>
           </div>
@@ -337,11 +361,15 @@ export default function App() {
         {yearData[selectedYear]?.map(b => {
           const status = getBuildingStatus(b);
           return (
-            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-5 rounded-3xl shadow-sm border relative group active:bg-gray-50">
+            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-5 rounded-3xl shadow-sm border relative group active:bg-gray-50 cursor-pointer">
               <h3 className="font-black text-gray-800">{b.name}</h3>
               <p className={`text-[10px] font-black uppercase mt-1 ${status.color}`}>{status.text}</p>
               <button 
-                onClick={(e) => { e.stopPropagation(); setActiveModal({ title: "Delete Building?", isDanger: true, onConfirm: () => deleteBuilding(b.id) }); }}
+                onClick={(e) => { e.stopPropagation(); setActiveModal({ title: "Delete Building?", isDanger: true, onConfirm: () => {
+                   const newData = { ...yearData, [selectedYear]: yearData[selectedYear].filter(x => x.id !== b.id) };
+                   saveToCloud(newData);
+                   setActiveModal(null);
+                }}); }}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-200 hover:text-red-400 p-2"
               >✕</button>
             </div>
@@ -362,7 +390,7 @@ export default function App() {
     </div>
   );
 
-  // MAIN FORM VIEW
+  // FORM VIEW
   const allDeficiencies = [];
   activeBuilding.sections.forEach(s => {
     s.data.forEach(i => { if (i.status === 'failed') allDeficiencies.push({ ...i, sectionId: s.id }); });
@@ -370,30 +398,32 @@ export default function App() {
 
   return (
     <div className="bg-[#F2F2F7] min-h-screen pb-40">
-      {/* Header */}
       <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b p-4 flex justify-between items-center">
-        <button onClick={() => setView('building-select')} className="text-blue-600 font-black text-xs uppercase">Save</button>
+        <button onClick={() => setView('building-select')} className="text-blue-600 font-black text-[10px] uppercase">Back</button>
         <h2 className="font-black uppercase text-xs truncate max-w-[150px]">{activeBuilding.name}</h2>
-        <button className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">Export</button>
+        <div className="flex items-center gap-2">
+           <span className={`w-1.5 h-1.5 rounded-full ${syncStatus === 'synced' ? 'bg-green-500' : 'bg-orange-400 animate-pulse'}`}></span>
+           <button className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">Export</button>
+        </div>
       </div>
 
       <div className="p-4 space-y-4">
-        {/* 1. Building Details */}
+        {/* Building Details Section */}
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden border">
           <button 
             onClick={() => setExpandedSections(p => ({ ...p, details: !p.details }))}
-            className="w-full bg-blue-600 text-white p-4 text-left font-black text-xs uppercase flex justify-between"
+            className="w-full bg-blue-600 text-white p-4 text-left font-black text-xs uppercase flex justify-between items-center"
           >
             <span>1. Building Details</span>
             <span>{expandedSections.details ? '−' : '+'}</span>
           </button>
           {expandedSections.details && (
-            <div className="p-6 grid gap-4">
+            <div className="p-6 grid gap-4 animate-in slide-in-from-top-2 duration-200">
               {Object.keys(activeBuilding.details).map(k => (
-                <div key={k} className="border-b pb-1">
-                  <label className="text-[8px] font-black text-gray-300 uppercase block">{k.replace(/([A-Z])/g, ' $1')}</label>
+                <div key={k} className="border-b border-gray-50 pb-1">
+                  <label className="text-[8px] font-black text-gray-300 uppercase block mb-1">{k.replace(/([A-Z])/g, ' $1')}</label>
                   <input 
-                    className="w-full font-bold text-gray-700 outline-none text-sm"
+                    className="w-full font-bold text-gray-700 outline-none text-sm bg-transparent"
                     value={activeBuilding.details[k]}
                     onChange={(e) => {
                       const newData = { ...yearData };
@@ -409,7 +439,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Dynamic Sections */}
+        {/* Dynamic Inspection Sections */}
         {activeBuilding.sections.sort((a,b) => a.order - b.order).map((s, idx) => (
           <div key={s.id} className="bg-white rounded-3xl shadow-sm overflow-hidden border">
             <div className={`flex items-center ${s.color} text-white`}>
@@ -419,14 +449,14 @@ export default function App() {
               >
                 {idx + 2}. {s.title} ({s.data.length})
               </button>
-              <div className="flex pr-2 gap-1">
-                <button onClick={() => updateSectionOrder(idx, idx-1)} disabled={idx===0} className="p-1 opacity-50">↑</button>
-                <button onClick={() => updateSectionOrder(idx, idx+1)} disabled={idx===activeBuilding.sections.length-1} className="p-1 opacity-50">↓</button>
-                <button onClick={() => setExpandedSections(p => ({ ...p, [s.id]: !p[s.id] }))} className="p-2">{expandedSections[s.id] ? '−' : '+'}</button>
+              <div className="flex pr-2 gap-1 items-center">
+                <button onClick={() => updateSectionOrder(idx, idx-1)} disabled={idx===0} className="p-1 opacity-40 disabled:opacity-0">↑</button>
+                <button onClick={() => updateSectionOrder(idx, idx+1)} disabled={idx===activeBuilding.sections.length-1} className="p-1 opacity-40 disabled:opacity-0">↓</button>
+                <button onClick={() => setExpandedSections(p => ({ ...p, [s.id]: !p[s.id] }))} className="p-2 w-8 text-center">{expandedSections[s.id] ? '−' : '+'}</button>
               </div>
             </div>
             {expandedSections[s.id] && (
-              <div>
+              <div className="animate-in slide-in-from-top-2 duration-200">
                 {s.data.map((item, i) => (
                   <InspectionRow 
                     key={item.id}
@@ -453,7 +483,7 @@ export default function App() {
                     sect.data.push({ id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false });
                     saveToCloud(newData);
                   }}
-                  className="w-full p-4 text-[10px] font-black text-gray-300 uppercase"
+                  className="w-full p-4 text-[10px] font-black text-gray-300 uppercase hover:bg-gray-50"
                 >+ Add Item</button>
               </div>
             )}
@@ -464,13 +494,15 @@ export default function App() {
         <div className="bg-white rounded-3xl shadow-sm overflow-hidden border border-red-100">
           <button 
             onClick={() => setExpandedSections(p => ({ ...p, defs: !p.defs }))}
-            className="w-full bg-red-600 text-white p-4 text-left font-black text-xs uppercase flex justify-between"
+            className="w-full bg-red-600 text-white p-4 text-left font-black text-xs uppercase flex justify-between items-center"
           >
             <span>{activeBuilding.sections.length + 2}. Deficiencies</span>
-            <span className="bg-white/20 px-2 rounded-full text-[10px]">{allDeficiencies.length + (activeBuilding.customDeficiencies?.length || 0)}</span>
+            <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px] font-bold">
+              {allDeficiencies.length + (activeBuilding.customDeficiencies?.length || 0)}
+            </span>
           </button>
           {expandedSections.defs && (
-            <div>
+            <div className="animate-in slide-in-from-top-2 duration-200">
               {allDeficiencies.map((item, i) => (
                 <InspectionRow 
                   key={item.id} 
@@ -503,21 +535,21 @@ export default function App() {
                   const newData = { ...yearData };
                   const b = newData[selectedYear].find(x => x.id === activeBuilding.id);
                   if(!b.customDeficiencies) b.customDeficiencies = [];
-                  b.customDeficiencies.push({ id: Date.now(), label: "External Deficiency", status: "failed", note: "", photo: null, fixed: false });
+                  b.customDeficiencies.push({ id: Date.now(), label: "New Deficiency", status: "failed", note: "", photo: null, fixed: false });
                   saveToCloud(newData);
                 }}
-                className="w-full p-4 text-[10px] font-black text-red-300 uppercase"
+                className="w-full p-4 text-[10px] font-black text-red-300 uppercase hover:bg-red-50"
               >+ Add External Deficiency</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Footer Actions */}
+      {/* Persistent Save & Exit Button */}
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t z-50">
         <button 
           onClick={() => setView('building-select')}
-          className="w-full bg-green-500 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl shadow-green-100 active:scale-95 transition-transform"
+          className="w-full bg-green-500 text-white py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl shadow-green-100 active:scale-95 transition-all"
         >Save & Exit Building</button>
       </div>
 
