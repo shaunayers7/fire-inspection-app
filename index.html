@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Inspection App</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #F2F2F7; }
+        .bg-dashed { background-image: url("data:image/svg+xml,%3csvg width='100%25' height='100%25' xmlns='http://www.w3.org/2000/svg'%3e%3crect width='100%25' height='100%25' fill='none' rx='16' ry='16' stroke='%23D1D5DBFF' stroke-width='4' stroke-dasharray='8%2c 12' stroke-dashoffset='0' stroke-linecap='square'/%3e%3c/svg%3e"); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        
+        // Inline Lucide Icons Fallback (as Lucide React needs special handling in CDN)
+        const Icon = ({ name, size = 18, className = "" }) => {
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
+
+        const getNewBuildingTemplate = (name = "New Building") => ({
+            id: `b-${Date.now()}`,
+            name: name,
+            details: {
+                buildingName: name, address: "", city: "", panelLocation: "",
+                manufacturer: "", panelModel: "", serialNumber: "", softwareVersion: "",
+                dateManufactured: "", lastServiceDate: ""
+            },
+            sections: [
+                { id: 'checklist', title: 'Pre-Job Checklist', color: 'bg-orange-500', isDev: false },
+                { id: 'control', title: 'Control Equipment', color: 'bg-purple-600', isDev: false },
+                { id: 'devices', title: 'Device Inventory', color: 'bg-[#1C252E]', isDev: true },
+                { id: 'battery', title: 'Battery Health', color: 'bg-blue-500', isDev: false },
+                { id: 'lights', title: 'Emergency Light Inventory', color: 'bg-[#EAB308]', isDev: false }
+            ],
+            data: {
+                checklist: Array(5).fill(0).map((_, i) => ({ id: `ck${i}-${Date.now()}`, label: `Checklist Item ${i+1}`, status: 'pending', note: '', photo: null })),
+                control: Array(7).fill(0).map((_, i) => ({ id: `c${i}-${Date.now()}`, label: `Control Point ${i+1}`, status: 'pending', note: '', photo: null })),
+                devices: Array(28).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i+1).toString(), label: `Device ${i+1}`, type: 'Smoke Detector', status: 'pending', note: '', photo: null })),
+                battery: Array(7).fill(0).map((_, i) => ({ id: `b${i}-${Date.now()}`, label: `Battery Metric ${i+1}`, status: 'pending', note: '', photo: null })),
+                lights: Array(5).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `Emergency Light ${i+1}`, status: 'pending', note: '', photo: null })),
+                customDeficiencies: []
+            }
+        });
+
+        const TriStateButton = ({ status, onToggle }) => {
+            const handleClick = () => {
+                if (status === 'pending') onToggle('passed');
+                else if (status === 'passed') onToggle('failed');
+                else onToggle('pending');
+            };
+            const baseClass = "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0 transition-all active:scale-95";
+            if (status === 'passed') return <button onClick={handleClick} className={`${baseClass} bg-green-500 text-white`}>✓</button>;
+            if (status === 'failed') return <button onClick={handleClick} className={`${baseClass} bg-red-500 text-white`}>✕</button>;
+            return <button onClick={handleClick} className={`${baseClass} bg-gray-200 text-gray-400`}>○</button>;
+        };
+
+        const InspectionRow = ({ item, index, onToggle, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false }) => {
+            const [isEditingNote, setIsEditingNote] = useState(false);
+            const [localDraft, setLocalDraft] = useState(null);
+            const fileInputRef = useRef(null);
+
+            const startEdit = () => setLocalDraft({ ...item });
+            const saveEdit = () => { onUpdateMeta(localDraft); setLocalDraft(null); };
+
+            const activeItem = localDraft || item;
+
+            return (
+                <div className={`bg-white border-b border-gray-100 p-4 ${item.fixed && isDeficiencyView ? 'bg-green-50/30' : ''}`}>
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                            <div className="flex items-start gap-2">
+                                <span className="text-xs font-black text-gray-300 mt-1">{index}.</span>
+                                <div className="flex-1 space-y-1">
+                                    <input 
+                                        value={activeItem.label} 
+                                        onFocus={startEdit}
+                                        onChange={(e) => setLocalDraft({...activeItem, label: e.target.value})}
+                                        className={`w-full text-sm font-bold bg-transparent outline-none border-b transition-colors ${localDraft ? 'border-blue-400 bg-blue-50' : 'border-transparent'} ${item.fixed && isDeficiencyView ? 'line-through text-gray-400' : 'text-gray-800'}`}
+                                    />
+                                    {isDevice && (
+                                        <div className="flex gap-2">
+                                            <input value={activeItem.deviceNo} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, deviceNo: e.target.value})} className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
+                                            <select value={activeItem.type} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, type: e.target.value})} className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded">
+                                                {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {localDraft ? (
+                                <div className="flex gap-2 pl-6">
+                                    <button onClick={saveEdit} className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded font-bold">SAVE</button>
+                                    <button onClick={() => setLocalDraft(null)} className="text-[10px] bg-gray-100 text-gray-400 px-2 py-1 rounded font-bold">CANCEL</button>
+                                </div>
+                            ) : (
+                                <div className="flex gap-4 pl-6 text-[10px] font-bold text-gray-400 uppercase">
+                                    <button onClick={() => setIsEditingNote(!isEditingNote)}>Note</button>
+                                    <button onClick={() => fileInputRef.current.click()}>Media</button>
+                                    {isDeficiencyView && (
+                                        <button 
+                                            onClick={() => onUpdateMeta({ fixed: !item.fixed, dateFixed: !item.fixed ? new Date().toLocaleDateString() : null })}
+                                            className={item.fixed ? "text-green-600" : "text-orange-500"}
+                                        >
+                                            {item.fixed ? `Fixed: ${item.dateFixed}` : "[ ] Mark Fixed"}
+                                        </button>
+                                    )}
+                                    {onDelete && <button onClick={onDelete} className="text-red-300 ml-auto">Delete</button>}
+                                    <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onloadend = () => onUpdateMeta({ photo: reader.result });
+                                            reader.readAsDataURL(file);
+                                        }
+                                    }} />
+                                </div>
+                            )}
+                            {isEditingNote && (
+                                <textarea 
+                                    value={item.note} 
+                                    onChange={(e) => onUpdateMeta({ note: e.target.value })}
+                                    className="w-full mt-2 p-2 text-xs bg-gray-50 rounded border border-gray-100 focus:outline-none"
+                                    placeholder="Add notes..."
+                                />
+                            )}
+                        </div>
+                        {!isDeficiencyView && <TriStateButton status={item.status} onToggle={(s) => onUpdateMeta({ status: s })} />}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [view, setView] = useState('year-select');
+            const [selectedYear, setSelectedYear] = useState(2025);
+            const [selectedBuildingId, setSelectedBuildingId] = useState(null);
+            const [yearData, setYearData] = useState(() => {
+                const saved = localStorage.getItem('fire_inspection_v3_data');
+                return saved ? JSON.parse(saved) : { 2025: [] };
+            });
+
+            useEffect(() => {
+                localStorage.setItem('fire_inspection_v3_data', JSON.stringify(yearData));
+                lucide.createIcons();
+            }, [yearData, view]);
+
+            const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
+
+            const getBuildingStatus = (building) => {
+                let pending = 0;
+                let unfixed = 0;
+                let totalDefs = 0;
+
+                Object.keys(building.data).forEach(key => {
+                    building.data[key].forEach(item => {
+                        if (item.status === 'pending') pending++;
+                        if (item.status === 'failed') {
+                            totalDefs++;
+                            if (!item.fixed) unfixed++;
+                        }
+                    });
+                });
+
+                if (pending === 0 && unfixed === 0) return { text: 'Complete', class: 'text-green-500' };
+                if (pending === 0) return { text: `Inspected [${totalDefs}]`, class: 'text-blue-500' };
+                return { text: 'In Progress', class: 'text-orange-400' };
+            };
+
+            const updateItem = (sect, id, meta) => {
+                setYearData(prev => ({
+                    ...prev,
+                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
+                        ...b, data: { ...b.data, [sect]: b.data[sect].map(i => i.id === id ? { ...i, ...meta } : i) }
+                    } : b)
+                }));
+            };
+
+            if (view === 'year-select') return (
+                <div className="p-4 space-y-4">
+                    <h1 className="text-xl font-black uppercase tracking-tighter">Annual Inspections</h1>
+                    {Object.keys(yearData).map(year => (
+                        <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-2xl shadow-sm border flex justify-between items-center">
+                            <span className="font-bold text-lg">Year {year}</span>
+                            <span className="text-xs font-black text-gray-400 uppercase">{yearData[year].length} Buildings</span>
+                        </div>
+                    ))}
+                </div>
+            );
+
+            if (view === 'building-select') return (
+                <div className="p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setView('year-select')} className="text-blue-600 font-bold">← Back</button>
+                        <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
+                    </div>
+                    {yearData[selectedYear].map(b => {
+                        const status = getBuildingStatus(b);
+                        return (
+                            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold">{b.name}</h3>
+                                    <span className={`text-[10px] font-black uppercase ${status.class}`}>{status.text}</span>
+                                </div>
+                                <button onClick={(e) => {
+                                    e.stopPropagation();
+                                    if(confirm("Delete this building?")) {
+                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== b.id) }));
+                                    }
+                                }} className="text-red-300">✕</button>
+                            </div>
+                        );
+                    })}
+                    <button onClick={() => {
+                        const b = getNewBuildingTemplate();
+                        setYearData(prev => ({ ...prev, [selectedYear]: [...prev[selectedYear], b] }));
+                    }} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-xs">+ Add Building</button>
+                </div>
+            );
+
+            const allDeficiencies = [];
+            if (activeBuilding) {
+                Object.keys(activeBuilding.data).forEach(key => {
+                    activeBuilding.data[key].forEach(i => {
+                        if (i.status === 'failed') allDeficiencies.push({ ...i, section: key });
+                    });
+                });
+            }
+
+            return (
+                <div className="pb-32">
+                    <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
+                        <button onClick={() => setView('building-select')} className="text-blue-600 font-bold">← Back</button>
+                        <h2 className="font-black uppercase text-sm">{activeBuilding.name}</h2>
+                        <button onClick={() => {
+                            const blob = new Blob([JSON.stringify(activeBuilding)], {type: 'application/json'});
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${activeBuilding.name}.json`;
+                            a.click();
+                        }} className="text-blue-600 text-xs font-bold">Export</button>
+                    </div>
+
+                    <div className="p-4 space-y-2">
+                        {/* Sections Wrapper */}
+                        <div className="bg-blue-600 text-white p-3 rounded-t-xl font-bold text-xs uppercase">1. Building Details</div>
+                        <div className="bg-white p-4 rounded-b-xl border border-t-0 grid grid-cols-1 gap-3 mb-4">
+                            {Object.keys(activeBuilding.details).map(k => (
+                                <div key={k}>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase">{k}</label>
+                                    <input value={activeBuilding.details[k]} onChange={(e) => {
+                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, details: { ...b.details, [k]: e.target.value } } : b) }));
+                                    }} className="w-full border-b text-xs py-1 focus:outline-none" />
+                                </div>
+                            ))}
+                        </div>
+
+                        {activeBuilding.sections.map((s, idx) => (
+                            <div key={s.id} className="overflow-hidden rounded-xl border mb-2">
+                                <div className={`${s.color} p-3 text-white font-bold text-xs uppercase`}>{idx + 2}. {s.title}</div>
+                                <div className="bg-white">
+                                    {activeBuilding.data[s.id].map((item, i) => (
+                                        <InspectionRow key={item.id} index={i+1} item={item} isDevice={s.isDev} onUpdateMeta={(m) => updateItem(s.id, item.id, m)} onDelete={() => {
+                                            if(confirm("Delete item?")) {
+                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) } } : b) }));
+                                            }
+                                        }} />
+                                    ))}
+                                    <button onClick={() => {
+                                        const newItem = { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null };
+                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...b.data[s.id], newItem] } } : b) }));
+                                    }} className="w-full p-2 text-[10px] font-bold text-gray-400 uppercase">+ Add Row</button>
+                                </div>
+                            </div>
+                        ))}
+
+                        <div className="overflow-hidden rounded-xl border border-red-200">
+                            <div className="bg-red-600 p-3 text-white font-bold text-xs uppercase flex justify-between">
+                                <span>{activeBuilding.sections.length + 2}. Deficiencies</span>
+                                <span>{allDeficiencies.length}</span>
+                            </div>
+                            <div className="bg-white">
+                                {allDeficiencies.map((item, i) => (
+                                    <InspectionRow key={item.id} index={i+1} item={item} isDeficiencyView onUpdateMeta={(m) => updateItem(item.section, item.id, m)} />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t flex flex-col gap-2">
+                        <button onClick={() => setView('building-select')} className="w-full bg-green-500 text-white py-4 rounded-xl font-black uppercase tracking-widest shadow-lg active:scale-95">Save & Exit</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
