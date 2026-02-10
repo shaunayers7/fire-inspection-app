@@ -44,13 +44,15 @@
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
         }
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
         
         // --- CONSTANTS ---
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
@@ -185,11 +187,11 @@
                                             onConfirm: onDelete
                                         });
                                     }} className="text-red-300 ml-auto">Delete</button>}
-                                    <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => {
+                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => {
                                         const file = e.target.files[0];
                                         if (file) {
                                             const reader = new FileReader();
-                                            reader.onloadend = () => onUpdateMeta({ photo: reader.result });
+                                            reader.onloadend = () => onUpdateMeta({ photo: reader.result, mediaType: file.type.startsWith('video') ? 'video' : 'image' });
                                             reader.readAsDataURL(file);
                                         }
                                     }} />
@@ -203,7 +205,16 @@
                                     placeholder="Add notes..."
                                 />
                             )}
-                            {item.photo && <img src={item.photo} className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-200" />}
+                            {item.photo && (
+                                <div className="mt-2 relative group w-24 h-24">
+                                    {item.mediaType === 'video' ? (
+                                        <video src={item.photo} className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                                    ) : (
+                                        <img src={item.photo} className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                                    )}
+                                    <button onClick={() => onUpdateMeta({ photo: null, mediaType: null })} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">×</button>
+                                </div>
+                            )}
                         </div>
                         {!isDeficiencyView && <TriStateButton status={item.status} onToggle={(s) => onUpdateMeta({ status: s, fixed: false, dateFixed: null })} />}
                     </div>
@@ -329,39 +340,65 @@
                 return { text: 'In Progress', class: 'text-orange-400' };
             };
 
-            const handleExport = () => {
+            const handleExport = async () => {
                 if (!activeBuilding) return;
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 const statusInfo = getBuildingStatus(activeBuilding);
 
+                // --- Flow Report Config ---
+                let currentY = 20;
+                const margin = 14;
+                const pageHeight = doc.internal.pageSize.height;
+
+                const checkNewPage = (neededHeight) => {
+                    if (currentY + neededHeight > pageHeight - 20) {
+                        doc.addPage();
+                        currentY = 20;
+                        return true;
+                    }
+                    return false;
+                };
+
                 doc.setFontSize(20);
-                doc.setTextColor(40);
-                doc.text("FIRE INSPECTION REPORT", 105, 20, { align: "center" });
+                doc.setFont("helvetica", "bold");
+                doc.text("FIRE INSPECTION REPORT", 105, currentY, { align: "center" });
+                currentY += 10;
                 
                 doc.setFontSize(10);
-                doc.text(`Year: ${selectedYear} | Status: ${statusInfo.text}`, 105, 28, { align: "center" });
-                doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 33, { align: "center" });
+                doc.setFont("helvetica", "normal");
+                doc.text(`Year: ${selectedYear} | Status: ${statusInfo.text}`, 105, currentY, { align: "center" });
+                currentY += 5;
+                doc.text(`Building: ${activeBuilding.name}`, 105, currentY, { align: "center" });
+                currentY += 15;
 
+                // 1. Building Details
                 doc.setFontSize(14);
-                doc.text("1. BUILDING DETAILS", 14, 45);
+                doc.setFont("helvetica", "bold");
+                doc.text("1. BUILDING DETAILS", margin, currentY);
+                currentY += 5;
+
                 const detailsRows = Object.entries(activeBuilding.details).map(([key, value]) => [
                     key.replace(/([A-Z])/g, ' $1').toUpperCase(),
                     value || 'N/A'
                 ]);
 
                 doc.autoTable({
-                    startY: 50,
+                    startY: currentY,
                     head: [['FIELD', 'INFORMATION']],
                     body: detailsRows,
                     theme: 'striped',
-                    headStyles: { fillColor: [37, 99, 235] }
+                    headStyles: { fillColor: [37, 99, 235] },
+                    didDrawPage: (data) => { currentY = data.cursor.y + 15; }
                 });
 
+                // Sections Loop
                 activeBuilding.sections.forEach((s, idx) => {
-                    doc.addPage();
+                    checkNewPage(10);
                     doc.setFontSize(14);
-                    doc.text(`${idx + 2}. ${s.title.toUpperCase()}`, 14, 20);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(`${idx + 2}. ${s.title.toUpperCase()}`, margin, currentY);
+                    currentY += 5;
 
                     const items = activeBuilding.data[s.id];
                     const rows = items.map((item, i) => [
@@ -373,41 +410,71 @@
                     ]);
 
                     doc.autoTable({
-                        startY: 25,
+                        startY: currentY,
                         head: [['#', 'DEV #', 'ITEM NAME', 'STATUS', 'NOTES']],
                         body: rows,
                         theme: 'grid',
                         headStyles: { fillColor: [30, 41, 54] },
-                        columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 20 }, 3: { cellWidth: 25 } }
+                        columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 20 }, 3: { cellWidth: 25 } },
+                        didDrawPage: (data) => { currentY = data.cursor.y + 10; }
+                    });
+
+                    // Add Photos for this section
+                    items.forEach(item => {
+                        if (item.photo && item.mediaType !== 'video') {
+                            if (checkNewPage(50)) currentY = 20;
+                            try {
+                                doc.addImage(item.photo, 'JPEG', margin, currentY, 40, 40);
+                                doc.setFontSize(8);
+                                doc.text(`Photo for: ${item.label}`, margin, currentY + 45);
+                                currentY += 55;
+                            } catch (e) { console.error("Image fail", e); }
+                        }
                     });
                 });
 
-                doc.addPage();
+                // Deficiencies Summary
+                checkNewPage(20);
                 doc.setFontSize(14);
-                doc.text("7. DEFICIENCY SUMMARY", 14, 20);
+                doc.setFont("helvetica", "bold");
+                doc.text(`${activeBuilding.sections.length + 2}. DEFICIENCY SUMMARY`, margin, currentY);
+                currentY += 5;
 
                 const defs = [];
                 Object.keys(activeBuilding.data).forEach(key => {
-                    activeBuilding.data[key].forEach(i => { if (i.status === 'failed') defs.push(i); });
+                    if (Array.isArray(activeBuilding.data[key])) {
+                        activeBuilding.data[key].forEach(i => { if (i.status === 'failed') defs.push(i); });
+                    }
                 });
-                if (activeBuilding.data.customDeficiencies) {
-                    activeBuilding.data.customDeficiencies.forEach(i => defs.push(i));
-                }
 
                 if (defs.length > 0) {
                     const defRows = defs.map((item, i) => [
                         i + 1, item.label, item.fixed ? `YES (${item.dateFixed})` : 'NO', item.note || 'No notes provided'
                     ]);
                     doc.autoTable({
-                        startY: 25,
+                        startY: currentY,
                         head: [['#', 'DEFICIENCY', 'FIXED?', 'DETAILS']],
                         body: defRows,
                         theme: 'striped',
-                        headStyles: { fillColor: [220, 38, 38] }
+                        headStyles: { fillColor: [220, 38, 38] },
+                        didDrawPage: (data) => { currentY = data.cursor.y + 15; }
+                    });
+
+                    // Deficiency Photos
+                    defs.forEach(item => {
+                        if (item.photo && item.mediaType !== 'video') {
+                            checkNewPage(50);
+                            try {
+                                doc.addImage(item.photo, 'JPEG', margin, currentY, 50, 50);
+                                doc.setFontSize(8);
+                                doc.text(`Deficiency: ${item.label}`, margin, currentY + 55);
+                                currentY += 65;
+                            } catch(e) {}
+                        }
                     });
                 } else {
                     doc.setFontSize(10);
-                    doc.text("No deficiencies recorded for this building.", 14, 30);
+                    doc.text("No deficiencies recorded for this building.", margin, currentY);
                 }
 
                 doc.save(`${activeBuilding.name}_Report_${selectedYear}.pdf`);
@@ -464,15 +531,22 @@
 
             const handleSaveAndExit = async () => {
                 if (activeBuilding) {
-                    const syncedBuilding = await syncBuildingToCloud(activeBuilding, selectedYear);
-                    if (syncedBuilding) {
-                        setYearData(prev => ({
-                            ...prev,
-                            [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? syncedBuilding : b)
-                        }));
-                    }
+                    await syncBuildingToCloud(activeBuilding, selectedYear);
                 }
                 setView('building-select');
+            };
+
+            const moveSection = (fromIndex, toIndex) => {
+                setYearData(prev => {
+                    const building = prev[selectedYear].find(b => b.id === selectedBuildingId);
+                    const newSections = [...building.sections];
+                    const [removed] = newSections.splice(fromIndex, 1);
+                    newSections.splice(toIndex, 0, removed);
+                    return {
+                        ...prev,
+                        [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, sections: newSections } : b)
+                    };
+                });
             };
 
             if (view === 'year-select') return (
@@ -501,21 +575,11 @@
                             <button onClick={() => setView('year-select')} className="text-blue-600 font-bold p-1">←</button>
                             <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
                         </div>
-                        <button 
-                            onClick={() => pullBuildingsFromCloud(selectedYear)}
-                            disabled={isSyncing}
-                            className={`p-2 rounded-xl border flex items-center gap-2 text-[10px] font-black uppercase ${isSyncing ? 'bg-gray-100 text-gray-400' : 'bg-white text-blue-600 border-blue-100 shadow-sm active:bg-blue-50'}`}
-                        >
+                        <button onClick={() => pullBuildingsFromCloud(selectedYear)} disabled={isSyncing} className={`p-2 rounded-xl border flex items-center gap-2 text-[10px] font-black uppercase ${isSyncing ? 'bg-gray-100 text-gray-400' : 'bg-white text-blue-600 border-blue-100 shadow-sm active:bg-blue-50'}`}>
                             {isSyncing ? 'Syncing...' : '☁ Sync Cloud'}
                         </button>
                     </div>
-
-                    {isSyncing && (
-                        <div className="space-y-3">
-                            {[1, 2].map(i => <div key={i} className="h-20 w-full rounded-xl loading-shimmer" />)}
-                        </div>
-                    )}
-
+                    {isSyncing && <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-20 w-full rounded-xl loading-shimmer" />)}</div>}
                     {!isSyncing && yearData[selectedYear].map(b => {
                         const status = getBuildingStatus(b);
                         return (
@@ -527,10 +591,7 @@
                                         {b.lastSynced && <span className="text-[8px] text-gray-300 font-bold uppercase italic">Synced {new Date(b.lastSynced).toLocaleDateString()}</span>}
                                     </div>
                                 </div>
-                                <button onClick={(e) => {
-                                    e.stopPropagation();
-                                    triggerDeleteBuildingModal(b.id);
-                                }} className="text-red-200 p-2 text-xl hover:text-red-400">✕</button>
+                                <button onClick={(e) => { e.stopPropagation(); triggerDeleteBuildingModal(b.id); }} className="text-red-200 p-2 text-xl hover:text-red-400">✕</button>
                             </div>
                         );
                     })}
@@ -538,10 +599,7 @@
                         const b = getNewBuildingTemplate(`New Building ${yearData[selectedYear].length + 1}`);
                         setYearData(prev => ({ ...prev, [selectedYear]: [...prev[selectedYear], b] }));
                     }} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
-                    
-                    {activeModal?.type === 'confirm' && (
-                        <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />
-                    )}
+                    {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
                 </div>
             );
 
@@ -581,28 +639,26 @@
                         </div>
 
                         {activeBuilding.sections.map((s, idx) => (
-                            <div key={s.id} className="rounded-xl border overflow-hidden shadow-sm">
-                                <button onClick={() => toggleSection(s.id)} className={`w-full ${s.color} text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center`}>
-                                    <span>{idx + 2}. {s.title}</span>
-                                    <span className="text-lg opacity-50">{expandedSections[s.id] ? '−' : '+'}</span>
-                                </button>
+                            <div key={s.id} className="rounded-xl border overflow-hidden shadow-sm group">
+                                <div className="flex">
+                                    <div className="bg-gray-800 text-white px-1 flex flex-col justify-center gap-1">
+                                        <button onClick={() => moveSection(idx, idx-1)} disabled={idx===0} className="text-xs opacity-50 disabled:opacity-0">▲</button>
+                                        <button onClick={() => moveSection(idx, idx+1)} disabled={idx===activeBuilding.sections.length-1} className="text-xs opacity-50 disabled:opacity-0">▼</button>
+                                    </div>
+                                    <button onClick={() => toggleSection(s.id)} className={`flex-1 ${s.color} text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center`}>
+                                        <span>{idx + 2}. {s.title}</span>
+                                        <span className="text-lg opacity-50">{expandedSections[s.id] ? '−' : '+'}</span>
+                                    </button>
+                                </div>
                                 {expandedSections[s.id] && (
                                     <div className="bg-white">
                                         {activeBuilding.data[s.id]?.map((item, i) => (
                                             <InspectionRow 
-                                                key={item.id} 
-                                                index={i+1} 
-                                                item={item} 
-                                                isDevice={s.isDev} 
+                                                key={item.id} index={i+1} item={item} isDevice={s.isDev} 
                                                 onUpdateMeta={(m) => updateItem(s.id, item.id, m)}
                                                 onTriggerModal={(config) => setActiveModal({...config, type: 'confirm'})}
                                                 onDelete={() => {
-                                                    setYearData(prev => ({
-                                                        ...prev,
-                                                        [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
-                                                            ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) }
-                                                        } : b)
-                                                    }));
+                                                    setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) } } : b) }));
                                                     setActiveModal(null);
                                                 }}
                                             />
@@ -616,9 +672,18 @@
                             </div>
                         ))}
 
+                        <button onClick={() => {
+                            const newId = `sect-${Date.now()}`;
+                            setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { 
+                                ...b, 
+                                sections: [...b.sections, { id: newId, title: 'Custom Section', color: 'bg-gray-500', isDev: false }],
+                                data: { ...b.data, [newId]: [] }
+                            } : b) }));
+                        }} className="w-full p-3 border-2 border-dashed rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add New Section</button>
+
                         <div className="rounded-xl border border-red-200 overflow-hidden shadow-sm">
                             <button onClick={() => toggleSection('defs')} className="w-full bg-red-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
-                                <span>7. Deficiencies</span>
+                                <span>{activeBuilding.sections.length + 2}. Deficiencies</span>
                                 <div className="flex items-center gap-3">
                                     <span className="bg-white/20 px-2 rounded-md text-[10px]">{allDeficiencies.length + (activeBuilding.data.customDeficiencies?.length || 0)}</span>
                                     <span className="text-lg opacity-50">{expandedSections['defs'] ? '−' : '+'}</span>
@@ -631,26 +696,13 @@
                                     ))}
                                     {activeBuilding.data.customDeficiencies?.map((item, i) => (
                                         <InspectionRow 
-                                            key={item.id} 
-                                            index={allDeficiencies.length + i + 1} 
-                                            item={item} 
-                                            isDeficiencyView 
+                                            key={item.id} index={allDeficiencies.length + i + 1} item={item} isDeficiencyView 
                                             onTriggerModal={(config) => setActiveModal({...config, type: 'confirm'})}
                                             onUpdateMeta={(m) => {
-                                                setYearData(prev => ({
-                                                    ...prev,
-                                                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
-                                                        ...b, data: { ...b.data, customDeficiencies: b.data.customDeficiencies.map(x => x.id === item.id ? {...x, ...m} : x) }
-                                                    } : b)
-                                                }));
+                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, customDeficiencies: b.data.customDeficiencies.map(x => x.id === item.id ? {...x, ...m} : x) } } : b) }));
                                             }}
                                             onDelete={() => {
-                                                setYearData(prev => ({
-                                                    ...prev,
-                                                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
-                                                        ...b, data: { ...b.data, customDeficiencies: b.data.customDeficiencies.filter(x => x.id !== item.id) }
-                                                    } : b)
-                                                }));
+                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, customDeficiencies: b.data.customDeficiencies.filter(x => x.id !== item.id) } } : b) }));
                                                 setActiveModal(null);
                                             }}
                                         />
@@ -670,9 +722,7 @@
                         </button>
                     </div>
 
-                    {activeModal?.type === 'confirm' && (
-                        <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />
-                    )}
+                    {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
                 </div>
             );
         };
