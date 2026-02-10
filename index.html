@@ -10,6 +10,10 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- PDF Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
         body { 
@@ -205,62 +209,103 @@
             const handleExport = () => {
                 if (!activeBuilding) return;
 
-                let report = `====================================================\n`;
-                report += `       PROFESSIONAL FIRE INSPECTION REPORT - ${selectedYear}\n`;
-                report += `====================================================\n\n`;
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                const statusInfo = getBuildingStatus(activeBuilding);
 
-                report += `SECTION 1: BUILDING DETAILS\n`;
-                report += `----------------------------------------------------\n`;
-                Object.entries(activeBuilding.details).forEach(([key, value]) => {
-                    const label = key.replace(/([A-Z])/g, ' $1').toUpperCase();
-                    report += `${label.padEnd(25)}: ${value || 'N/A'}\n`;
-                });
-                report += `\n`;
-
-                activeBuilding.sections.forEach((s, idx) => {
-                    report += `SECTION ${idx + 2}: ${s.title.toUpperCase()}\n`;
-                    report += `----------------------------------------------------\n`;
-                    const items = activeBuilding.data[s.id];
-                    items.forEach((item, i) => {
-                        const status = item.status === 'passed' ? '[PASS]' : item.status === 'failed' ? '[FAIL]' : '[PEND]';
-                        const iden = s.isDev ? `(#${item.deviceNo}) ` : "";
-                        report += `${(i + 1).toString().padStart(2)}. ${status} ${iden}${item.label}\n`;
-                        if (item.note) report += `    NOTE: ${item.note}\n`;
-                    });
-                    report += `\n`;
-                });
-
-                report += `SECTION 7: DEFICIENCY SUMMARY\n`;
-                report += `----------------------------------------------------\n`;
+                // Title & Header
+                doc.setFontSize(20);
+                doc.setTextColor(40);
+                doc.text("FIRE INSPECTION REPORT", 105, 20, { align: "center" });
                 
-                const deficiencies = [];
-                Object.keys(activeBuilding.data).forEach(key => {
-                    activeBuilding.data[key].forEach(item => {
-                        if (item.status === 'failed') deficiencies.push(item);
+                doc.setFontSize(10);
+                doc.text(`Year: ${selectedYear} | Status: ${statusInfo.text}`, 105, 28, { align: "center" });
+                doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 33, { align: "center" });
+
+                // Section 1: Building Details
+                doc.setFontSize(14);
+                doc.text("1. BUILDING DETAILS", 14, 45);
+                
+                const detailsRows = Object.entries(activeBuilding.details).map(([key, value]) => [
+                    key.replace(/([A-Z])/g, ' $1').toUpperCase(),
+                    value || 'N/A'
+                ]);
+
+                doc.autoTable({
+                    startY: 50,
+                    head: [['FIELD', 'INFORMATION']],
+                    body: detailsRows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [37, 99, 235] }
+                });
+
+                // Sections 2 - 6: Inspection Data
+                activeBuilding.sections.forEach((s, idx) => {
+                    doc.addPage();
+                    doc.setFontSize(14);
+                    doc.text(`${idx + 2}. ${s.title.toUpperCase()}`, 14, 20);
+
+                    const items = activeBuilding.data[s.id];
+                    const rows = items.map((item, i) => [
+                        i + 1,
+                        s.isDev ? item.deviceNo : '-',
+                        item.label,
+                        item.status.toUpperCase(),
+                        item.note || '-'
+                    ]);
+
+                    doc.autoTable({
+                        startY: 25,
+                        head: [['#', 'DEV #', 'ITEM NAME', 'STATUS', 'NOTES']],
+                        body: rows,
+                        theme: 'grid',
+                        headStyles: { fillColor: [30, 41, 54] },
+                        columnStyles: {
+                            0: { cellWidth: 10 },
+                            1: { cellWidth: 20 },
+                            3: { cellWidth: 25 },
+                        }
                     });
                 });
 
-                if (deficiencies.length === 0) {
-                    report += `No deficiencies identified during this inspection.\n`;
-                } else {
-                    deficiencies.forEach((item, i) => {
-                        const fixedStatus = item.fixed ? `[FIXED - ${item.dateFixed}]` : `[OUTSTANDING]`;
-                        report += `${(i + 1).toString().padStart(2)}. ${fixedStatus} ${item.label}\n`;
-                        if (item.note) report += `    ISSUE: ${item.note}\n`;
+                // Section 7: Deficiencies
+                doc.addPage();
+                doc.setFontSize(14);
+                doc.text("7. DEFICIENCY SUMMARY", 14, 20);
+
+                const defs = [];
+                Object.keys(activeBuilding.data).forEach(key => {
+                    activeBuilding.data[key].forEach(i => {
+                        if (i.status === 'failed') defs.push(i);
                     });
+                });
+                // Add Custom Deficiencies
+                if (activeBuilding.data.customDeficiencies) {
+                    activeBuilding.data.customDeficiencies.forEach(i => defs.push(i));
                 }
 
-                report += `\n\n====================================================\n`;
-                report += `REPORT GENERATED ON: ${new Date().toLocaleString()}\n`;
-                report += `INSPECTION STATUS: ${getBuildingStatus(activeBuilding).text}\n`;
-                report += `====================================================\n`;
+                if (defs.length > 0) {
+                    const defRows = defs.map((item, i) => [
+                        i + 1,
+                        item.label,
+                        item.fixed ? `YES (${item.dateFixed})` : 'NO',
+                        item.note || 'No notes provided'
+                    ]);
 
-                const blob = new Blob([report], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${activeBuilding.name}_Fire_Inspection_${selectedYear}.txt`;
-                a.click();
+                    doc.autoTable({
+                        startY: 25,
+                        head: [['#', 'DEFICIENCY', 'FIXED?', 'DETAILS']],
+                        body: defRows,
+                        theme: 'striped',
+                        headStyles: { fillColor: [220, 38, 38] }
+                    });
+                } else {
+                    doc.setFontSize(10);
+                    doc.text("No deficiencies recorded for this building.", 14, 30);
+                }
+
+                // Final Save
+                doc.save(`${activeBuilding.name}_Report_${selectedYear}.pdf`);
             };
 
             const updateItem = (sect, id, meta) => {
@@ -349,7 +394,7 @@
                     <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
                         <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Back</button>
                         <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[50%]">{activeBuilding.name}</h2>
-                        <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export</button>
+                        <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export PDF</button>
                     </div>
 
                     <div className="p-4 space-y-3">
