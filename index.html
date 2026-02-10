@@ -202,6 +202,67 @@
                 return { text: 'In Progress', class: 'text-orange-400' };
             };
 
+            const handleExport = () => {
+                if (!activeBuilding) return;
+
+                let report = `====================================================\n`;
+                report += `       PROFESSIONAL FIRE INSPECTION REPORT - ${selectedYear}\n`;
+                report += `====================================================\n\n`;
+
+                report += `SECTION 1: BUILDING DETAILS\n`;
+                report += `----------------------------------------------------\n`;
+                Object.entries(activeBuilding.details).forEach(([key, value]) => {
+                    const label = key.replace(/([A-Z])/g, ' $1').toUpperCase();
+                    report += `${label.padEnd(25)}: ${value || 'N/A'}\n`;
+                });
+                report += `\n`;
+
+                activeBuilding.sections.forEach((s, idx) => {
+                    report += `SECTION ${idx + 2}: ${s.title.toUpperCase()}\n`;
+                    report += `----------------------------------------------------\n`;
+                    const items = activeBuilding.data[s.id];
+                    items.forEach((item, i) => {
+                        const status = item.status === 'passed' ? '[PASS]' : item.status === 'failed' ? '[FAIL]' : '[PEND]';
+                        const iden = s.isDev ? `(#${item.deviceNo}) ` : "";
+                        report += `${(i + 1).toString().padStart(2)}. ${status} ${iden}${item.label}\n`;
+                        if (item.note) report += `    NOTE: ${item.note}\n`;
+                    });
+                    report += `\n`;
+                });
+
+                report += `SECTION 7: DEFICIENCY SUMMARY\n`;
+                report += `----------------------------------------------------\n`;
+                
+                const deficiencies = [];
+                Object.keys(activeBuilding.data).forEach(key => {
+                    activeBuilding.data[key].forEach(item => {
+                        if (item.status === 'failed') deficiencies.push(item);
+                    });
+                });
+
+                if (deficiencies.length === 0) {
+                    report += `No deficiencies identified during this inspection.\n`;
+                } else {
+                    deficiencies.forEach((item, i) => {
+                        const fixedStatus = item.fixed ? `[FIXED - ${item.dateFixed}]` : `[OUTSTANDING]`;
+                        report += `${(i + 1).toString().padStart(2)}. ${fixedStatus} ${item.label}\n`;
+                        if (item.note) report += `    ISSUE: ${item.note}\n`;
+                    });
+                }
+
+                report += `\n\n====================================================\n`;
+                report += `REPORT GENERATED ON: ${new Date().toLocaleString()}\n`;
+                report += `INSPECTION STATUS: ${getBuildingStatus(activeBuilding).text}\n`;
+                report += `====================================================\n`;
+
+                const blob = new Blob([report], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${activeBuilding.name}_Fire_Inspection_${selectedYear}.txt`;
+                a.click();
+            };
+
             const updateItem = (sect, id, meta) => {
                 setYearData(prev => ({
                     ...prev,
@@ -288,14 +349,7 @@
                     <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
                         <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Back</button>
                         <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[50%]">{activeBuilding.name}</h2>
-                        <button onClick={() => {
-                            const blob = new Blob([JSON.stringify(activeBuilding)], {type: 'application/json'});
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${activeBuilding.name}_report.json`;
-                            a.click();
-                        }} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export</button>
+                        <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export</button>
                     </div>
 
                     <div className="p-4 space-y-3">
