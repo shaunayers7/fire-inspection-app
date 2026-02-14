@@ -806,7 +806,7 @@
                 }
             };
             
-            // Auto-sync: Push local changes to cloud
+            // Auto-sync: Push local changes to cloud (with cloud-first check)
             const syncToCloud = async () => {
                 if (!db || !user) {
                     console.log('Firebase not ready for sync');
@@ -814,13 +814,79 @@
                 }
                 
                 try {
-                    console.log('📤 Pushing local changes to cloud...');
-                    const { setDoc, doc } = window.FirebaseSDK;
-                    const syncTime = new Date().toISOString();
+                    console.log('📤 Auto-sync triggered: Pulling from cloud first to avoid conflicts...');
                     
-                    // Push all buildings from all years to cloud
+                    // STEP 1: Pull latest from cloud first (prevents stale data overwrites)
+                    const { collection, getDocs, setDoc, doc } = window.FirebaseSDK;
+                    const buildingsRef = collection(db, `apps/${APP_ID}/buildings`);
+                    const snapshot = await getDocs(buildingsRef);
+                    
+                    const cloudBuildings = {};
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        cloudBuildings[data.id] = data;
+                    });
+                    
+                    console.log(`📥 Cloud has ${Object.keys(cloudBuildings).length} building(s)`);
+                    
+                    // STEP 2: Merge cloud data into local state first
+                    let localYearData = yearData;
+                    const updatedYearData = { ...yearData };
+                    
+                    // Replace local data with cloud data (cloud wins)
+                    for (const year in updatedYearData) {
+                        updatedYearData[year] = updatedYearData[year].filter(localBuilding => {
+                            const cloudVersion = cloudBuildings[localBuilding.id];
+                            
+                            // If building doesn't exist in cloud, keep local (it's new)
+                            if (!cloudVersion) {
+                                console.log(`  ℹ️ Keeping new local building: ${localBuilding.name}`);
+                                return true;
+                            }
+                            
+                            // If cloud version exists and is newer, use cloud version
+                            const cloudTime = new Date(cloudVersion.lastSynced || 0);
+                            const localTime = new Date(localBuilding.lastSynced || 0);
+                            
+                            if (cloudTime > localTime) {
+                                console.log(`  ☁️ Using cloud version (newer) for: ${localBuilding.name}`);
+                                return true; // Keep in list, will be replaced below
+                            }
+                            
+                            console.log(`  📱 Using local version (newer) for: ${localBuilding.name}`);
+                            return true;
+                        });
+                        
+                        // Replace with cloud versions where cloud is newer
+                        updatedYearData[year] = updatedYearData[year].map(localBuilding => {
+                            const cloudVersion = cloudBuildings[localBuilding.id];
+                            if (!cloudVersion) return localBuilding;
+                            
+                            const cloudTime = new Date(cloudVersion.lastSynced || 0);
+                            const localTime = new Date(localBuilding.lastSynced || 0);
+                            
+                            return cloudTime > localTime ? cloudVersion : localBuilding;
+                        });
+                    }
+                    
+                    // STEP 3: Add any cloud buildings that don't exist locally
+                    for (const cloudBuilding of Object.values(cloudBuildings)) {
+                        const year = cloudBuilding.year || 2026;
+                        if (!updatedYearData[year]) updatedYearData[year] = [];
+                        
+                        const existsLocally = updatedYearData[year].some(b => b.id === cloudBuilding.id);
+                        if (!existsLocally) {
+                            console.log(`  ☁️ Adding cloud building not in local: ${cloudBuilding.name}`);
+                            updatedYearData[year].push(cloudBuilding);
+                        }
+                    }
+                    
+                    // STEP 4: Now push the merged state back to cloud
+                    console.log('📤 Pushing merged state to cloud...');
+                    const syncTime = new Date().toISOString();
                     const syncPromises = [];
-                    for (const [year, buildings] of Object.entries(yearData)) {
+                    
+                    for (const [year, buildings] of Object.entries(updatedYearData)) {
                         for (const building of buildings) {
                             const buildingWithSync = {
                                 ...building,
@@ -838,25 +904,19 @@
                     
                     // Log the sync action
                     await logChange('sync', { 
-                        message: 'Pushed changes to cloud', 
-                        buildingCount: Object.values(yearData).reduce((sum, buildings) => sum + buildings.length, 0)
+                        message: 'Synced changes to cloud (merged)', 
+                        buildingCount: Object.values(updatedYearData).reduce((sum, buildings) => sum + buildings.length, 0)
                     });
                     
                     setLastSyncTime(syncTime);
                     
-                    // Update local data with sync time (mark as sync update to prevent loop)
+                    // Update local state with merged data (mark as sync update to prevent loop)
                     isUpdatingFromSync.current = true;
-                    setYearData(prev => {
-                        const updated = { ...prev };
-                        for (const year in updated) {
-                            updated[year] = updated[year].map(b => ({ ...b, lastSynced: syncTime }));
-                        }
-                        return updated;
-                    });
+                    setYearData(updatedYearData);
                     
-                    console.log('✅ Push to cloud complete!');
+                    console.log('✅ Auto-sync complete! Local and cloud are now in sync.');
                 } catch (error) {
-                    console.error('Push to cloud error:', error);
+                    console.error('❌ Auto-sync error:', error);
                 }
             };
             const loadFromCloud = async (firestore = db, isDuringSync = false) => {
@@ -882,6 +942,11 @@
                         const year = data.year || 2026;
                         if (!cloudBuildings[year]) cloudBuildings[year] = [];
                         cloudBuildings[year].push(data);
+                    });
+                    
+                    console.log(`☁️ Loaded ${snapshot.size} building(s) from cloud`);
+                    Object.entries(cloudBuildings).forEach(([year, buildings]) => {
+                        console.log(`  Year ${year}: ${buildings.map(b => `${b.name} (${b.id})`).join(', ')}`);
                     });
                     
                     // ☁️ CLOUD IS SOURCE OF TRUTH (Multi-user collaboration)
@@ -914,8 +979,8 @@
 
             const deleteFromCloud = async (buildingId) => {
                 if (!db || !user) {
-                    console.log('Firebase not ready for delete');
-                    return;
+                    console.error('❌ Firebase not ready for delete - db:', !!db, 'user:', !!user);
+                    throw new Error('Firebase not initialized');
                 }
                 
                 try {
@@ -923,9 +988,18 @@
                     const { doc: docFn, deleteDoc } = window.FirebaseSDK;
                     const buildingRef = docFn(db, `apps/${APP_ID}/buildings/${buildingId}`);
                     await deleteDoc(buildingRef);
-                    console.log(`✅ Building ${buildingId} deleted from cloud`);
+                    console.log(`✅ Building ${buildingId} successfully deleted from cloud`);
+                    
+                    // Verify deletion by trying to get the document
+                    const { getDoc } = window.FirebaseSDK;
+                    const verifyDoc = await getDoc(buildingRef);
+                    if (verifyDoc.exists()) {
+                        console.error(`⚠️ WARNING: Building ${buildingId} still exists in cloud after deletion!`);
+                    } else {
+                        console.log(`✓ Verified: Building ${buildingId} no longer exists in cloud`);
+                    }
                 } catch (error) {
-                    console.error('Delete from cloud error:', error);
+                    console.error(`❌ Failed to delete building ${buildingId} from cloud:`, error);
                     throw error;
                 }
             };
@@ -1496,12 +1570,26 @@
                                         isDanger: true, 
                                         onConfirm: async () => { 
                                             try {
+                                                console.log(`🗑️ Deleting building ${buildingIdToDelete}...`);
+                                                
+                                                // Step 1: Delete from cloud first
                                                 await deleteFromCloud(buildingIdToDelete);
-                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== buildingIdToDelete) })); 
+                                                
+                                                // Step 2: Mark as sync update to prevent auto-sync from running
+                                                isUpdatingFromSync.current = true;
+                                                
+                                                // Step 3: Update local state
+                                                setYearData(prev => ({ 
+                                                    ...prev, 
+                                                    [selectedYear]: prev[selectedYear].filter(x => x.id !== buildingIdToDelete) 
+                                                }));
+                                                
+                                                console.log(`✅ Building ${buildingIdToDelete} deleted successfully`);
                                                 setActiveModal(null);
                                             } catch (error) {
                                                 alert('Failed to delete building from cloud. Please try again.');
                                                 console.error('Delete error:', error);
+                                                isUpdatingFromSync.current = false; // Reset on error
                                             }
                                         } 
                                     }); 
