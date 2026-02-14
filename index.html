@@ -12,10 +12,10 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, query, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         
-        window.FirebaseSDK = { initializeApp, getFirestore, doc, setDoc, getDoc, collection, getDocs, query, updateDoc, deleteDoc, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken };
+        window.FirebaseSDK = { initializeApp, getFirestore, doc, setDoc, collection, getDocs, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken };
     </script>
 
     <!-- PDF Generation Libraries -->

@@ -9,6 +9,5 @@
 - [x] Fix iOS scrolling issues 
 
 ## Phase 2: Design Changes
-- [ ] 
-- [ ] 
-- [ ]
+- [x] check for code bloat 
+- [x] check for any rogue dependancies
