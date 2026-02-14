@@ -132,7 +132,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.2.0'; // Updated: Feb 14, 2026 - Auto-reload on version change + old code detection
+        const APP_VERSION = '2.2.1'; // Updated: Feb 14, 2026 - Better login error messages + case-insensitive email
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
@@ -1269,20 +1269,32 @@
                 e.preventDefault();
                 setAuthError('');
                 try {
+                    const emailLower = loginEmail.toLowerCase().trim();
+                    
                     // Check if email is allowed
-                    if (allowedEmails.length > 0 && !allowedEmails.includes(loginEmail)) {
-                        setAuthError('Access denied. Your email is not authorized. Contact your administrator.');
+                    if (allowedEmails.length > 0 && !allowedEmails.includes(emailLower)) {
+                        console.error('❌ Access denied for:', emailLower);
+                        console.log('Allowed emails:', allowedEmails);
+                        setAuthError('🚫 Access Denied: Your email is not authorized. Contact your administrator.');
                         return;
                     }
                     
                     const { signInWithEmailAndPassword } = window.FirebaseSDK;
-                    await signInWithEmailAndPassword(window.firebaseAuth, loginEmail, loginPassword);
+                    await signInWithEmailAndPassword(window.firebaseAuth, emailLower, loginPassword);
                     console.log('✅ Login successful');
                 } catch (error) {
-                    console.error('Login error:', error);
-                    setAuthError(error.code === 'auth/user-not-found' ? 'No account found with this email.' : 
-                                 error.code === 'auth/wrong-password' ? 'Incorrect password.' :
-                                 error.message);
+                    console.error('❌ Login error:', error.code, error.message);
+                    if (error.code === 'auth/user-not-found') {
+                        setAuthError('❌ No Account Found: This email is not registered. Please sign up or check your email.');
+                    } else if (error.code === 'auth/wrong-password') {
+                        setAuthError('❌ Wrong Password: The password is incorrect. Please try again.');
+                    } else if (error.code === 'auth/invalid-credential') {
+                        setAuthError('❌ Invalid Credentials: Email or password is incorrect.');
+                    } else if (error.code === 'auth/too-many-requests') {
+                        setAuthError('❌ Too Many Attempts: Account temporarily locked. Try again later or reset password.');
+                    } else {
+                        setAuthError(`❌ Login Failed: ${error.message}`);
+                    }
                 }
             };
 
@@ -1290,21 +1302,31 @@
                 e.preventDefault();
                 setAuthError('');
                 try {
+                    const emailLower = loginEmail.toLowerCase().trim();
+                    
                     // Check if email is allowed
-                    if (allowedEmails.length > 0 && !allowedEmails.includes(loginEmail)) {
-                        setAuthError('Access denied. Your email is not authorized. Contact your administrator to request access.');
+                    if (allowedEmails.length > 0 && !allowedEmails.includes(emailLower)) {
+                        console.error('❌ Access denied for signup:', emailLower);
+                        console.log('Allowed emails:', allowedEmails);
+                        setAuthError('🚫 Access Denied: Your email is not authorized. Contact your administrator to request access.');
                         return;
                     }
                     
                     const { createUserWithEmailAndPassword, updateProfile } = window.FirebaseSDK;
-                    const userCredential = await createUserWithEmailAndPassword(window.firebaseAuth, loginEmail, loginPassword);
+                    const userCredential = await createUserWithEmailAndPassword(window.firebaseAuth, emailLower, loginPassword);
                     await updateProfile(userCredential.user, { displayName: loginName });
                     console.log('✅ Signup successful');
                 } catch (error) {
-                    console.error('Signup error:', error);
-                    setAuthError(error.code === 'auth/email-already-in-use' ? 'An account with this email already exists.' :
-                                 error.code === 'auth/weak-password' ? 'Password should be at least 6 characters.' :
-                                 error.message);
+                    console.error('❌ Signup error:', error.code, error.message);
+                    if (error.code === 'auth/email-already-in-use') {
+                        setAuthError('⚠️ Account Exists: An account with this email already exists. Please sign in instead.');
+                    } else if (error.code === 'auth/weak-password') {
+                        setAuthError('⚠️ Weak Password: Password must be at least 6 characters long.');
+                    } else if (error.code === 'auth/invalid-email') {
+                        setAuthError('❌ Invalid Email: Please enter a valid email address.');
+                    } else {
+                        setAuthError(`❌ Signup Failed: ${error.message}`);
+                    }
                 }
             };
 
@@ -1471,7 +1493,7 @@
                                 </div>
                                 
                                 {authError && (
-                                    <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-sm">
+                                    <div className="bg-red-100 border-2 border-red-400 text-red-800 p-4 rounded-xl text-sm font-semibold shadow-lg">
                                         {authError}
                                     </div>
                                 )}
