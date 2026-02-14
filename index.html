@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fire Inspection App</title>
+    
+    <!-- Cache Control: Prevent aggressive caching -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -125,6 +130,10 @@
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
+        
+        // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
+        const APP_VERSION = '2.2.0'; // Updated: Feb 14, 2026 - Auto-reload on version change + old code detection
+        const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
@@ -389,8 +398,30 @@
             const [isAdmin, setIsAdmin] = useState(false);
             const viewRef = useRef('login');
             const [isLoadingData, setIsLoadingData] = useState(true);
+            const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
             
             const [yearData, setYearData] = useState(() => {
+                // Version check: Detect if user has old cached code
+                const storedVersion = localStorage.getItem(VERSION_CHECK_KEY);
+                
+                // CRITICAL iOS FIX: Force reload if version mismatch detected
+                if (storedVersion && storedVersion !== APP_VERSION) {
+                    console.log(`🔄 App updated from v${storedVersion} to v${APP_VERSION}`);
+                    console.log('🔄 Forcing page reload to clear iOS cache...');
+                    localStorage.setItem(VERSION_CHECK_KEY, APP_VERSION);
+                    
+                    // Force hard reload on iOS
+                    setTimeout(() => {
+                        window.location.reload(true);
+                    }, 1000);
+                    
+                    // Return empty data during transition
+                    return { 2025: [], 2026: [] };
+                }
+                
+                // First time or same version - proceed normally
+                localStorage.setItem(VERSION_CHECK_KEY, APP_VERSION);
+                
                 const saved = localStorage.getItem('fire_inspection_v4_data');
                 const isFirstLoad = !saved; // Track if this is the very first load
                 
@@ -702,19 +733,24 @@
                                     // Data is now loaded
                                     setIsLoadingData(false);
                                     
-                                    // Only change view if we're on login screen
-                                    console.log('Current view:', viewRef.current);
-                                    if (viewRef.current === 'login') {
-                                        console.log('✅ Switching to year-select view');
-                                        setView('year-select');
-                                        viewRef.current = 'year-select';
-                                    }
+                                    // Force view change after successful login (fixes iPad white screen)
+                                    console.log('✅ Login successful, switching to year-select view');
+                                    setView('year-select');
+                                    viewRef.current = 'year-select';
+                                    
+                                    // Force re-render on iPad by triggering a state update
+                                    setTimeout(() => {
+                                        if (viewRef.current === 'year-select') {
+                                            console.log('📱 Confirming view is year-select');
+                                        }
+                                    }, 100);
                                 } catch (error) {
                                     console.error('Error during post-login setup:', error);
                                     // Still show the app even if there's an error
                                     setIsAdmin(true); // Fallback to admin
                                     setView('year-select');
                                     viewRef.current = 'year-select';
+                                    setIsLoadingData(false);
                                 }
                             } else {
                                 // User signed out or anonymous, go back to login
@@ -731,6 +767,28 @@
                     }
                 };
                 initFirebase();
+            }, []);
+            
+            // Version logging and cache detection
+            useEffect(() => {
+                window.APP_VERSION = APP_VERSION;
+                console.log(`🔥 Fire Inspection App v${APP_VERSION}`);
+                console.log('📱 Device:', navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop');
+                console.log('🔄 Expected log format: emoji-based messages (🔄, 🗑️, ✨, ☁️)');
+                
+                // CRITICAL: Check if we have the new sync logic
+                const syncFunctionString = syncToCloud.toString();
+                const hasNewLogic = syncFunctionString.includes('Starting merge') || syncFunctionString.includes('REMOVING building');
+                
+                if (!hasNewLogic) {
+                    console.error('❌ OLD CODE DETECTED! You are running cached outdated code.');
+                    console.error('📱 iOS FIX: Close ALL Safari tabs, then open Settings → Safari → Clear History and Website Data');
+                    alert('⚠️ OUTDATED CODE DETECTED\n\nYour browser cached old code. To fix:\n\n1. Close ALL tabs\n2. Settings → Safari → Clear History\n3. Reopen the app\n\nDeletions will NOT sync until you do this!');
+                } else {
+                    console.log('✅ Running latest code with smart deletion sync');
+                }
+                
+                console.log('💡 If you see old-style logs, do: Ctrl+Shift+R (hard refresh)');
             }, []);
 
             useEffect(() => {
@@ -772,12 +830,29 @@
             useEffect(() => {
                 if (authInitialized && user && user.email && view === 'login') {
                     console.log('⚠️ User is logged in but view is stuck on login - forcing to year-select');
+                    // Immediate fix for iPad white screen issue
+                    setView('year-select');
+                    viewRef.current = 'year-select';
+                    
+                    // Double-check after render
                     setTimeout(() => {
-                        setView('year-select');
-                        viewRef.current = 'year-select';
-                    }, 500);
+                        if (view === 'login' && user && user.email) {
+                            console.log('🔄 Second attempt: Forcing view change');
+                            setView('year-select');
+                            viewRef.current = 'year-select';
+                        }
+                    }, 300);
                 }
             }, [authInitialized, user, view]);
+            
+            // Additional failsafe: When data loading completes, ensure view switches
+            useEffect(() => {
+                if (!isLoadingData && user && user.email && view === 'login') {
+                    console.log('📊 Data loaded, switching from login to year-select');
+                    setView('year-select');
+                    viewRef.current = 'year-select';
+                }
+            }, [isLoadingData, user, view]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -827,58 +902,68 @@
                         cloudBuildings[data.id] = data;
                     });
                     
-                    console.log(`📥 Cloud has ${Object.keys(cloudBuildings).length} building(s)`);
+                    console.log(`📥 Cloud has ${Object.keys(cloudBuildings).length} building(s):`);
+                    Object.values(cloudBuildings).forEach(b => {
+                        console.log(`  ☁️ ${b.name} (${b.id})`);
+                    });
                     
                     // STEP 2: Merge cloud data into local state first
-                    let localYearData = yearData;
                     const updatedYearData = { ...yearData };
                     
-                    // Replace local data with cloud data (cloud wins)
+                    console.log('🔄 Starting merge of local and cloud data...');
+                    
+                    // Process each year
                     for (const year in updatedYearData) {
-                        updatedYearData[year] = updatedYearData[year].filter(localBuilding => {
-                            const cloudVersion = cloudBuildings[localBuilding.id];
-                            
-                            // If building doesn't exist in cloud, keep local (it's new)
-                            if (!cloudVersion) {
-                                console.log(`  ℹ️ Keeping new local building: ${localBuilding.name}`);
-                                return true;
-                            }
-                            
-                            // If cloud version exists and is newer, use cloud version
-                            const cloudTime = new Date(cloudVersion.lastSynced || 0);
-                            const localTime = new Date(localBuilding.lastSynced || 0);
-                            
-                            if (cloudTime > localTime) {
-                                console.log(`  ☁️ Using cloud version (newer) for: ${localBuilding.name}`);
-                                return true; // Keep in list, will be replaced below
-                            }
-                            
-                            console.log(`  📱 Using local version (newer) for: ${localBuilding.name}`);
-                            return true;
-                        });
+                        const localBuildings = updatedYearData[year] || [];
+                        const mergedBuildings = [];
                         
-                        // Replace with cloud versions where cloud is newer
-                        updatedYearData[year] = updatedYearData[year].map(localBuilding => {
+                        console.log(`\n📅 Processing year ${year}: ${localBuildings.length} local building(s)`);
+                        
+                        for (const localBuilding of localBuildings) {
                             const cloudVersion = cloudBuildings[localBuilding.id];
-                            if (!cloudVersion) return localBuilding;
                             
-                            const cloudTime = new Date(cloudVersion.lastSynced || 0);
-                            const localTime = new Date(localBuilding.lastSynced || 0);
-                            
-                            return cloudTime > localTime ? cloudVersion : localBuilding;
-                        });
+                            // Case 1: Building exists in cloud
+                            if (cloudVersion) {
+                                const cloudTime = new Date(cloudVersion.lastSynced || 0).getTime();
+                                const localTime = new Date(localBuilding.lastSynced || 0).getTime();
+                                
+                                if (cloudTime > localTime) {
+                                    console.log(`  ☁️ Using CLOUD version (newer): ${localBuilding.name}`);
+                                    mergedBuildings.push(cloudVersion);
+                                } else {
+                                    console.log(`  📱 Using LOCAL version (newer): ${localBuilding.name}`);
+                                    mergedBuildings.push(localBuilding);
+                                }
+                                
+                                // Remove from cloud map so we can track what's left
+                                delete cloudBuildings[localBuilding.id];
+                            }
+                            // Case 2: Building exists locally but NOT in cloud
+                            else {
+                                // If building was NEVER synced (no lastSynced), it's a new local building
+                                if (!localBuilding.lastSynced) {
+                                    console.log(`  ✨ Keeping NEW local building: ${localBuilding.name}`);
+                                    mergedBuildings.push(localBuilding);
+                                }
+                                // If building WAS synced before, but is not in cloud now = DELETED by another user
+                                else {
+                                    console.log(`  🗑️ REMOVING building (deleted by another user): ${localBuilding.name}`);
+                                    // Don't add to mergedBuildings = removed
+                                }
+                            }
+                        }
+                        
+                        updatedYearData[year] = mergedBuildings;
                     }
                     
-                    // STEP 3: Add any cloud buildings that don't exist locally
+                    // STEP 3: Add any remaining cloud buildings that weren't in local
+                    console.log('\n📥 Adding cloud buildings not in local:');
                     for (const cloudBuilding of Object.values(cloudBuildings)) {
                         const year = cloudBuilding.year || 2026;
                         if (!updatedYearData[year]) updatedYearData[year] = [];
                         
-                        const existsLocally = updatedYearData[year].some(b => b.id === cloudBuilding.id);
-                        if (!existsLocally) {
-                            console.log(`  ☁️ Adding cloud building not in local: ${cloudBuilding.name}`);
-                            updatedYearData[year].push(cloudBuilding);
-                        }
+                        console.log(`  ☁️ Adding from cloud: ${cloudBuilding.name}`);
+                        updatedYearData[year].push(cloudBuilding);
                     }
                     
                     // STEP 4: Now push the merged state back to cloud
@@ -1407,6 +1492,12 @@
                                     {isSignup ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
                                 </button>
                             </div>
+                            
+                            {/* Version Display */}
+                            <div className="mt-8 pt-6 border-t text-center">
+                                <p className="text-[10px] text-gray-400 font-semibold">v{APP_VERSION}</p>
+                                <p className="text-[8px] text-gray-300 mt-1">Cloud sync enabled</p>
+                            </div>
                         </div>
                     </div>
                 );
@@ -1507,6 +1598,13 @@
                         </div>
                     ))}
                     <button onClick={() => setActiveModal({ type: 'input', title: 'Add New Year', onConfirm: (val) => { if(val && !yearData[val]) setYearData(prev => ({ ...prev, [val]: [] })); setActiveModal(null); } })} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Year</button>
+                    
+                    {/* Version Footer */}
+                    <div className="text-center mt-8 pt-4 border-t">
+                        <p className="text-[10px] text-gray-400 font-semibold">Fire Inspection App v{APP_VERSION}</p>
+                        <p className="text-[8px] text-gray-300 mt-1">Cloud sync • Multi-user collaboration</p>
+                    </div>
+                    
                     {activeModal?.type === 'input' && (
                         <Modal title={activeModal.title} onCancel={() => setActiveModal(null)} onConfirm={() => activeModal.onConfirm(yearInputValue)}>
                             <input type="number" autoFocus value={yearInputValue} onChange={(e) => setYearInputValue(e.target.value)} placeholder="e.g. 2026" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xl font-bold" />
@@ -1543,7 +1641,16 @@
                     </div>
                     {lastSyncTime && (
                         <div className="text-[10px] text-gray-400 text-center font-semibold">
-                            Last synced: {new Date(lastSyncTime).toLocaleString()}
+                            Last synced: {new Date(lastSyncTime).toLocaleString('en-US', { 
+                                timeZone: 'America/Denver',
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: true
+                            })} MST
                         </div>
                     )}
                     {(!yearData[selectedYear] || yearData[selectedYear].length === 0) && (
@@ -1632,7 +1739,7 @@
                                 'bg-red-50 text-red-600'
                             }`}>
                                 {syncStatus === 'syncing' ? '☁ Syncing to cloud...' :
-                                 syncStatus === 'success' ? '✓ Synced successfully' :
+                                 syncStatus === 'success' ? `✓ Synced ${lastSyncTime ? new Date(lastSyncTime).toLocaleString('en-US', { timeZone: 'America/Denver', hour: 'numeric', minute: '2-digit', hour12: true }) + ' MST' : 'successfully'}` :
                                  '✕ Sync failed - will retry'}
                             </div>
                         )}

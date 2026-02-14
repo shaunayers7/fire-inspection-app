@@ -77,12 +77,14 @@ Each building document contains:
 - `lastSynced` timestamp
 - `year` field for organizing by inspection year
 
-### Conflict Resolution
+### Conflict Resolution (UPDATED FEB 2026)
 - **Cloud is ALWAYS the source of truth**
+- **Smart deletion detection**: If a building was previously synced but is no longer in cloud → it was deleted by another user → remove it locally
+- **New building protection**: Buildings that were never synced (no `lastSynced` timestamp) are kept as new additions
 - When you open the app, cloud data replaces local data
 - When you click "☁ Sync", cloud data replaces local data
 - When you make edits, they auto-push to cloud after 5 seconds
-- **No merging** - cloud always wins to prevent conflicts
+- **Auto-sync is intelligent**: Before pushing, it pulls from cloud and merges properly to avoid overwriting deletions
 
 ### How It Works Behind the Scenes
 1. **On App Load**: 
@@ -91,9 +93,18 @@ Each building document contains:
    
 2. **When You Edit**:
    - Saves to local storage immediately (instant)
-   - After 5 seconds, pushes to cloud
+   - After 5 seconds, auto-sync triggers
    
-3. **When You Click "☁ Sync"**:
+3. **Auto-Sync Process** (THE KEY FIX):
+   - **Step 1**: Pull latest from cloud
+   - **Step 2**: Smart merge:
+     - Building in BOTH local & cloud → Use newer version
+     - Building in LOCAL only + never synced (`lastSynced = null`) → Keep it (new)
+     - Building in LOCAL only + was synced before (`lastSynced` exists) → Remove it (deleted by another user)
+     - Building in CLOUD only → Add it (created by another user)
+   - **Step 3**: Push merged state to cloud
+   
+4. **When You Click "☁ Sync"**:
    - Pulls latest data from cloud
    - Replaces your local data
    - Shows what other users have done
