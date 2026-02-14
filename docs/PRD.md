@@ -27,13 +27,14 @@
 * **Protected Buildings:** Bellevue and Pincher Creek (2026) are baseline buildings that must ALWAYS exist. The initialization logic automatically restores them if missing.
 * **Cloud Sync:** Firebase integration provides multi-user collaboration. Cloud data is merged with local data (newer timestamp wins), but protected buildings are always preserved locally first.
 
-## 7. CLOUD SYNC (NEW)
+## 7. CLOUD SYNC (UPDATED FEB 2026)
 * **Provider:** Firebase Firestore
-* **Auto-Sync:** 5 seconds after last edit, changes sync to cloud automatically
-* **Manual Sync:** "☁ Sync" button in Buildings view
+* **Auto-Push:** 5 seconds after last edit, changes push to cloud automatically
+* **Manual Pull:** "☁ Sync" button pulls latest data from cloud
 * **Multi-User:** Multiple inspectors can collaborate on same buildings
-* **Conflict Resolution:** Newer timestamp wins when same building exists locally and in cloud
-* **Offline Support:** Works offline, syncs when internet available
+* **Source of Truth:** Cloud is ALWAYS the source of truth (no merging)
+* **Offline Support:** Works offline, pushes when internet available
+* **Protected Buildings:** Bellevue & Pincher Creek only restored on FIRST LOAD (new user)
 * **See:** SYNC-FEATURE.md for complete documentation
 
 ## 7. PROJECT MANAGEMENT

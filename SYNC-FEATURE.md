@@ -5,33 +5,35 @@ The Fire Inspection App now includes automatic cloud synchronization using Fireb
 
 ## How It Works
 
-### 1. **Local Storage First**
-- All data is saved immediately to your phone's local storage
-- You can work offline without any issues
-- Data persists even if you close the app or shut down your phone
+### 1. **Cloud is the Source of Truth** ⭐
+- **All devices sync to the same cloud database**
+- When you open the app, it loads the latest data from cloud
+- This ensures everyone sees the same data across all accounts
 
-### 2. **Automatic Cloud Sync**
-- After any change, the app waits 5 seconds then automatically syncs to the cloud
+### 2. **Local Storage for Offline**
+- Data is saved locally so you can work offline
+- When internet is available, cloud data takes priority
+
+### 3. **Automatic Push After Edits**
+- After any change, the app waits 5 seconds then automatically pushes to cloud
 - This prevents excessive writes while you're actively editing
 - Sync happens in the background - you can keep working
 
-### 3. **Multi-User Support**
-- When you open the app, it automatically loads the latest data from the cloud
-- If multiple people edit the same building, the most recent change wins
-- Each building tracks when it was last synced
-
 ### 4. **Manual Sync Button**
 - In the Buildings view, there's a "☁ Sync" button in the top-right
-- Click it to force an immediate sync to the cloud
+- Click it to pull the latest data from cloud immediately
+- This is useful after another user makes changes
 - Button shows current status:
   - **☁ Sync** - Ready to sync
   - **⟳ Syncing...** - Sync in progress
   - **✓ Synced** - Sync successful
   - **✕ Error** - Sync failed (will retry automatically)
 
-### 5. **Sync Status Indicators**
-- **Buildings View**: Shows when data was last synced to cloud
-- **Inspection Form**: Small banner at top shows sync status
+### 5. **How Multi-User Sync Works**
+- **User A** deletes a building and it auto-syncs to cloud (after 5 seconds)
+- **User B** clicks "☁ Sync" button or refreshes page
+- **User B** now sees the building is gone
+- **Cloud is always the source of truth**
 
 ## Usage Scenarios
 
@@ -39,24 +41,23 @@ The Fire Inspection App now includes automatic cloud synchronization using Fireb
 1. Open app and start inspection
 2. Fill out checklist, devices, etc.
 3. Data saves locally immediately
-4. After 5 seconds of no changes, data syncs to cloud automatically
+4. After 5 seconds of no changes, data auto-pushes to cloud
 5. Close app - data is safe both locally and in cloud
 
-### Scenario 2: Multiple Inspectors
-1. Inspector A starts inspection at Building X
-2. Inspector B opens the app on their phone
-3. Inspector B sees Building X with Inspector A's progress
-4. Inspector A finishes the control equipment section
-5. After 5 seconds, it syncs to cloud
-6. Inspector B can now see the updated control equipment data
-7. Inspector B completes the emergency lights section
-8. Both inspectors' work is merged and available to everyone
+### Scenario 2: Multiple Inspectors (REAL-TIME COLLABORATION)
+1. **Inspector A** starts inspection at Building X
+2. **Inspector B** opens the app on their phone (automatically pulls from cloud)
+3. **Inspector B** sees Building X with Inspector A's progress
+4. **Inspector A** deletes Building X (auto-pushes to cloud in 5 seconds)
+5. **Inspector B** clicks "☁ Sync" button
+6. **Inspector B** now sees Building X is deleted
+7. ✅ **Both inspectors are in sync**
 
 ### Scenario 3: Offline Work
 1. Inspector goes to remote location with no internet
 2. Completes entire inspection - all saved locally
-3. When internet becomes available, click "☁ Sync" button
-4. All work uploads to cloud for team to see
+3. When internet becomes available, changes auto-push to cloud
+4. Other team members can click "☁ Sync" to see the updates
 
 ## Technical Details
 
@@ -77,11 +78,25 @@ Each building document contains:
 - `year` field for organizing by inspection year
 
 ### Conflict Resolution
-- Cloud data is loaded when app starts
-- If same building exists locally AND in cloud:
-  - Compare `lastSynced` timestamps
-  - Keep the version with the most recent timestamp
-  - This ensures the latest edits are always preserved
+- **Cloud is ALWAYS the source of truth**
+- When you open the app, cloud data replaces local data
+- When you click "☁ Sync", cloud data replaces local data
+- When you make edits, they auto-push to cloud after 5 seconds
+- **No merging** - cloud always wins to prevent conflicts
+
+### How It Works Behind the Scenes
+1. **On App Load**: 
+   - Pulls latest data from cloud
+   - Replaces local data with cloud data
+   
+2. **When You Edit**:
+   - Saves to local storage immediately (instant)
+   - After 5 seconds, pushes to cloud
+   
+3. **When You Click "☁ Sync"**:
+   - Pulls latest data from cloud
+   - Replaces your local data
+   - Shows what other users have done
 
 ### Firebase Authentication
 - Uses anonymous authentication (no login required)

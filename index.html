@@ -12,7 +12,7 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         
         window.FirebaseSDK = { 
@@ -21,6 +21,7 @@
             doc, 
             setDoc,
             getDoc,
+            deleteDoc,
             collection, 
             getDocs, 
             addDoc,
@@ -391,6 +392,7 @@
             
             const [yearData, setYearData] = useState(() => {
                 const saved = localStorage.getItem('fire_inspection_v4_data');
+                const isFirstLoad = !saved; // Track if this is the very first load
                 
                 // Default 2026 buildings data
                 const default2026Buildings = [
@@ -588,7 +590,7 @@
                         }
                 ];
                 
-                // CRITICAL: Merge logic per PRD - never overwrite, always merge
+                // CRITICAL: Cloud is source of truth for multi-user sync
                 if (saved) {
                     const parsedData = JSON.parse(saved);
                     
@@ -597,21 +599,17 @@
                         parsedData[2026] = [];
                     }
                     
-                    // PROTECTION: Always ensure default buildings exist (merge, don't replace)
-                    for (const defaultBuilding of default2026Buildings) {
-                        const exists = parsedData[2026].some(b => b.id === defaultBuilding.id);
-                        if (!exists) {
-                            console.warn(`🛡️ PROTECTION: Restoring missing building: ${defaultBuilding.name}`);
-                            parsedData[2026].push(defaultBuilding);
-                        }
-                    }
+                    // PROTECTION: Only restore on FIRST load (empty localStorage)
+                    // After that, respect cloud data (multi-user collaboration)
+                    // Note: isFirstLoad is always false here since saved exists
                     
-                    console.log(`✅ Data loaded. Buildings in 2026:`, parsedData[2026].map(b => b.name));
+                    console.log(`✅ Data loaded from localStorage. Buildings in 2026:`, parsedData[2026].map(b => b.name));
                     return parsedData;
                 }
                 
-                // No saved data - return fresh structure
-                console.log('🆕 No saved data found. Creating fresh data with default buildings.');
+                // No saved data - FIRST LOAD: Initialize with default buildings
+                console.log('🆕 First load detected. Creating fresh data with default buildings.');
+                console.log('📋 Protected buildings (Bellevue, Pincher Creek) initialized.');
                 return {
                     2025: [],
                     2026: default2026Buildings
@@ -784,7 +782,8 @@
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
             // --- CLOUD SYNC FUNCTIONS ---
-            const syncToCloud = async () => {
+            // Manual sync: Pull latest from cloud
+            const syncFromCloud = async () => {
                 if (!db || !user) {
                     console.log('Firebase not ready for sync');
                     return;
@@ -792,10 +791,34 @@
                 
                 try {
                     setSyncStatus('syncing');
+                    console.log('📥 Syncing from cloud...');
+                    
+                    // Pull from cloud (cloud is source of truth)
+                    await loadFromCloud(db, true);
+                    
+                    setSyncStatus('success');
+                    console.log('✅ Sync from cloud complete!');
+                    setTimeout(() => setSyncStatus('idle'), 2000);
+                } catch (error) {
+                    console.error('Sync error:', error);
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                }
+            };
+            
+            // Auto-sync: Push local changes to cloud
+            const syncToCloud = async () => {
+                if (!db || !user) {
+                    console.log('Firebase not ready for sync');
+                    return;
+                }
+                
+                try {
+                    console.log('📤 Pushing local changes to cloud...');
                     const { setDoc, doc } = window.FirebaseSDK;
                     const syncTime = new Date().toISOString();
                     
-                    // Sync all buildings from all years
+                    // Push all buildings from all years to cloud
                     const syncPromises = [];
                     for (const [year, buildings] of Object.entries(yearData)) {
                         for (const building of buildings) {
@@ -815,12 +838,11 @@
                     
                     // Log the sync action
                     await logChange('sync', { 
-                        message: 'Synced data to cloud', 
+                        message: 'Pushed changes to cloud', 
                         buildingCount: Object.values(yearData).reduce((sum, buildings) => sum + buildings.length, 0)
                     });
                     
                     setLastSyncTime(syncTime);
-                    setSyncStatus('success');
                     
                     // Update local data with sync time (mark as sync update to prevent loop)
                     isUpdatingFromSync.current = true;
@@ -832,15 +854,12 @@
                         return updated;
                     });
                     
-                    setTimeout(() => setSyncStatus('idle'), 2000);
+                    console.log('✅ Push to cloud complete!');
                 } catch (error) {
-                    console.error('Sync error:', error);
-                    setSyncStatus('error');
-                    setTimeout(() => setSyncStatus('idle'), 3000);
+                    console.error('Push to cloud error:', error);
                 }
             };
-            
-            const loadFromCloud = async (firestore = db) => {
+            const loadFromCloud = async (firestore = db, isDuringSync = false) => {
                 if (!firestore) {
                     setIsLoadingData(false);
                     return;
@@ -852,7 +871,7 @@
                     const snapshot = await getDocs(buildingsRef);
                     
                     if (snapshot.empty) {
-                        console.log('No cloud data found, using local data');
+                        console.log('☁️ No cloud data found. Using local data.');
                         setIsLoadingData(false);
                         return;
                     }
@@ -865,66 +884,18 @@
                         cloudBuildings[year].push(data);
                     });
                     
-                    // Merge cloud and local data (cloud wins if newer)
+                    // ☁️ CLOUD IS SOURCE OF TRUTH (Multi-user collaboration)
+                    // Replace local data with cloud data completely
                     isUpdatingFromSync.current = true;
                     setYearData(prev => {
-                        const merged = { ...prev };
+                        console.log('☁️ Syncing from cloud: Cloud data is now the source of truth');
+                        console.log(`☁️ Cloud has ${Object.values(cloudBuildings).flat().length} building(s)`);
                         
-                        for (const [year, cloudBuildingsInYear] of Object.entries(cloudBuildings)) {
-                            const localBuildingsInYear = merged[year] || [];
-                            const mergedBuildings = [...cloudBuildingsInYear];
-                            
-                            // Add local buildings that don't exist in cloud
-                            for (const localBuilding of localBuildingsInYear) {
-                                const existsInCloud = cloudBuildingsInYear.some(cb => cb.id === localBuilding.id);
-                                if (!existsInCloud) {
-                                    console.log(`📥 Keeping local building: ${localBuilding.name}`);
-                                    mergedBuildings.push(localBuilding);
-                                } else {
-                                    // If exists in both, check which is newer
-                                    const cloudVersion = cloudBuildingsInYear.find(cb => cb.id === localBuilding.id);
-                                    const cloudTime = new Date(cloudVersion.lastSynced || 0);
-                                    const localTime = new Date(localBuilding.lastSynced || 0);
-                                    
-                                    if (localTime > cloudTime) {
-                                        // Replace cloud version with local
-                                        const idx = mergedBuildings.findIndex(b => b.id === localBuilding.id);
-                                        mergedBuildings[idx] = localBuilding;
-                                        console.log(`🔄 Local version newer for: ${localBuilding.name}`);
-                                    } else {
-                                        console.log(`☁️ Cloud version newer for: ${localBuilding.name}`);
-                                    }
-                                }
-                            }
-                            
-                            merged[year] = mergedBuildings;
-                        }
+                        // Ensure all years exist in structure
+                        const result = { 2025: [], 2026: [], ...cloudBuildings };
                         
-                        // 🛡️ CRITICAL PROTECTION: Even after cloud sync, ensure default buildings exist
-                        // This prevents cloud data from deleting Bellevue or Pincher Creek
-                        if (!merged[2026]) merged[2026] = [];
-                        
-                        const default2026Buildings = [
-                            getNewBuildingTemplate("Bellevue"),  // Will be replaced below with actual data
-                            getNewBuildingTemplate("Pincher Creek")
-                        ];
-                        
-                        // Get the actual default buildings from the initialization
-                        const actualDefaults = [
-                            { id: "b-2026-bellevue", name: "Bellevue" },
-                            { id: "b-2026-pincher-creek", name: "Pincher Creek" }
-                        ];
-                        
-                        for (const checkBuilding of actualDefaults) {
-                            const exists = merged[2026].some(b => b.id === checkBuilding.id);
-                            if (!exists) {
-                                console.error(`🚨 ALERT: ${checkBuilding.name} missing after cloud sync! This should not happen. Check Firebase data.`);
-                                console.log(`⚠️ Building ${checkBuilding.name} will be restored on next page reload.`);
-                            }
-                        }
-                        
-                        console.log(`☁️ Cloud sync complete. Buildings in 2026:`, merged[2026].map(b => b.name));
-                        return merged;
+                        console.log(`✅ Cloud sync complete. Buildings in 2026:`, result[2026]?.map(b => b.name) || []);
+                        return result;
                     });
                     
                     const latestSync = snapshot.docs.reduce((latest, doc) => {
@@ -938,6 +909,24 @@
                 } catch (error) {
                     console.error('Load from cloud error:', error);
                     setIsLoadingData(false);
+                }
+            };
+
+            const deleteFromCloud = async (buildingId) => {
+                if (!db || !user) {
+                    console.log('Firebase not ready for delete');
+                    return;
+                }
+                
+                try {
+                    console.log(`🗑️ Deleting building ${buildingId} from cloud...`);
+                    const { doc: docFn, deleteDoc } = window.FirebaseSDK;
+                    const buildingRef = docFn(db, `apps/${APP_ID}/buildings/${buildingId}`);
+                    await deleteDoc(buildingRef);
+                    console.log(`✅ Building ${buildingId} deleted from cloud`);
+                } catch (error) {
+                    console.error('Delete from cloud error:', error);
+                    throw error;
                 }
             };
 
@@ -1461,7 +1450,7 @@
                         </div>
                         <div className="flex items-center gap-2">
                             <button 
-                                onClick={() => syncToCloud()} 
+                                onClick={() => syncFromCloud()} 
                                 disabled={syncStatus === 'syncing'}
                                 className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
                                     syncStatus === 'syncing' ? 'bg-blue-100 text-blue-400' :
@@ -1498,7 +1487,25 @@
                                     <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
                                     <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
                                 </div>
-                                <button onClick={(e) => { e.stopPropagation(); setActiveModal({ type: 'confirm', title: 'Delete Building?', isDanger: true, onConfirm: () => { setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== b.id) })); setActiveModal(null); } }); }} className="text-red-200 p-2 text-xl">✕</button>
+                                <button onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    const buildingIdToDelete = b.id;
+                                    setActiveModal({ 
+                                        type: 'confirm', 
+                                        title: 'Delete Building?', 
+                                        isDanger: true, 
+                                        onConfirm: async () => { 
+                                            try {
+                                                await deleteFromCloud(buildingIdToDelete);
+                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== buildingIdToDelete) })); 
+                                                setActiveModal(null);
+                                            } catch (error) {
+                                                alert('Failed to delete building from cloud. Please try again.');
+                                                console.error('Delete error:', error);
+                                            }
+                                        } 
+                                    }); 
+                                }} className="text-red-200 p-2 text-xl">✕</button>
                             </div>
                         );
                     })}

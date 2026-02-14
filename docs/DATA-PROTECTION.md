@@ -1,15 +1,24 @@
 # Data Protection & Recovery Guide
 
-## 🛡️ Automatic Protection (NEW)
+## 🛡️ Updated Protection Logic (Feb 2026)
 
-As of the latest update, the app now includes **automatic data protection** that prevents Bellevue and Pincher Creek inspection data from being permanently lost.
+The app now uses **cloud-first sync** for proper multi-user collaboration:
 
-### How It Works
+### How It Works Now
 
-1. **On App Load**: The app checks if the default buildings (Bellevue, Pincher Creek) exist in your saved data
-2. **Auto-Restore**: If either building is missing, it's automatically restored with the complete inspection data
-3. **Cloud Sync Protection**: When syncing from cloud, local buildings are preserved if they don't exist in cloud
-4. **Merge, Don't Overwrite**: All sync operations follow the PRD rule - merge data, never completely overwrite
+1. **First Load Only**: Default buildings (Bellevue, Pincher Creek) are created when localStorage is empty
+2. **After First Load**: Cloud is the source of truth
+3. **Multi-User Support**: If one user deletes a building, other users will see it deleted when they sync
+4. **No Auto-Restore**: Buildings are NOT automatically restored after first load
+
+### Why This Change?
+
+The old system would restore deleted buildings even when they were intentionally removed by another user. This prevented proper team collaboration.
+
+**New Behavior:**
+- ✅ User A deletes building → syncs to cloud
+- ✅ User B clicks "☁ Sync" → sees deletion
+- ✅ Cloud is always the source of truth
 
 ### Protected Buildings
 
