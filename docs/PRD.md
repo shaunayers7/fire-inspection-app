@@ -19,3 +19,19 @@
 ## 4. PDF LOGIC
 * **Header:** Professional "FIRE INSPECTION REPORT" centered.
 * **Tables:** Must use `jspdf-autotable` with navy blue headers.
+
+## 6. DATA PERSISTENCE LOCK (CRITICAL)
+* **Storage Key:** `fire_inspection_v4_data` must remain constant.
+* **Save Trigger:** Every change to `yearData` must trigger a `localStorage.setItem`.
+* **Conflict Resolution:** When adding new code features, the AI must check if `localStorage` already has data and "Merge" it rather than overwriting it with a blank template.
+* **Protected Buildings:** Bellevue and Pincher Creek (2026) are baseline buildings that must ALWAYS exist. The initialization logic automatically restores them if missing.
+* **Cloud Sync:** Firebase integration provides multi-user collaboration. Cloud data is merged with local data (newer timestamp wins), but protected buildings are always preserved locally first.
+
+## 7. CLOUD SYNC (NEW)
+* **Provider:** Firebase Firestore
+* **Auto-Sync:** 5 seconds after last edit, changes sync to cloud automatically
+* **Manual Sync:** "☁ Sync" button in Buildings view
+* **Multi-User:** Multiple inspectors can collaborate on same buildings
+* **Conflict Resolution:** Newer timestamp wins when same building exists locally and in cloud
+* **Offline Support:** Works offline, syncs when internet available
+* **See:** SYNC-FEATURE.md for complete documentation

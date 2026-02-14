@@ -480,13 +480,24 @@
                         }
                 ];
                 
-                // If we have saved data, merge 2026 buildings if they don't exist
+                // CRITICAL: Merge logic per PRD - never overwrite, always merge
                 if (saved) {
                     const parsedData = JSON.parse(saved);
-                    // If 2026 doesn't exist or is empty, add the default buildings
-                    if (!parsedData[2026] || parsedData[2026].length === 0) {
-                        parsedData[2026] = default2026Buildings;
+                    
+                    // Ensure 2026 exists
+                    if (!parsedData[2026]) {
+                        parsedData[2026] = [];
                     }
+                    
+                    // PROTECTION: Always ensure default buildings exist (merge, don't replace)
+                    for (const defaultBuilding of default2026Buildings) {
+                        const exists = parsedData[2026].some(b => b.id === defaultBuilding.id);
+                        if (!exists) {
+                            console.log(`Restoring missing building: ${defaultBuilding.name}`);
+                            parsedData[2026].push(defaultBuilding);
+                        }
+                    }
+                    
                     return parsedData;
                 }
                 
@@ -615,6 +626,7 @@
                             for (const localBuilding of localBuildingsInYear) {
                                 const existsInCloud = cloudBuildingsInYear.some(cb => cb.id === localBuilding.id);
                                 if (!existsInCloud) {
+                                    console.log(`📥 Keeping local building: ${localBuilding.name}`);
                                     mergedBuildings.push(localBuilding);
                                 } else {
                                     // If exists in both, check which is newer
@@ -626,6 +638,9 @@
                                         // Replace cloud version with local
                                         const idx = mergedBuildings.findIndex(b => b.id === localBuilding.id);
                                         mergedBuildings[idx] = localBuilding;
+                                        console.log(`🔄 Local version newer for: ${localBuilding.name}`);
+                                    } else {
+                                        console.log(`☁️ Cloud version newer for: ${localBuilding.name}`);
                                     }
                                 }
                             }
