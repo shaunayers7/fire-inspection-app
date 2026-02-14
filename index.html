@@ -277,6 +277,9 @@
             const [yearInputValue, setYearInputValue] = useState("");
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
+            const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
+            const [lastSyncTime, setLastSyncTime] = useState(null);
+            const syncTimeoutRef = useRef(null);
             
             const [yearData, setYearData] = useState(() => {
                 const saved = localStorage.getItem('fire_inspection_v4_data');
@@ -507,16 +510,143 @@
                     } else {
                         await signInAnonymously(auth);
                     }
-                    onAuthStateChanged(auth, setUser);
+                    onAuthStateChanged(auth, async (currentUser) => {
+                        setUser(currentUser);
+                        if (currentUser && firestore) {
+                            // Load cloud data when user is ready
+                            await loadFromCloud(firestore);
+                        }
+                    });
                 };
                 initFirebase();
             }, []);
 
             useEffect(() => {
                 localStorage.setItem('fire_inspection_v4_data', JSON.stringify(yearData));
+                
+                // Auto-sync with debounce (5 seconds after last change)
+                if (db && user) {
+                    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+                    syncTimeoutRef.current = setTimeout(() => {
+                        syncToCloud();
+                    }, 5000);
+                }
             }, [yearData]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
+
+            // --- CLOUD SYNC FUNCTIONS ---
+            const syncToCloud = async () => {
+                if (!db || !user) {
+                    console.log('Firebase not ready for sync');
+                    return;
+                }
+                
+                try {
+                    setSyncStatus('syncing');
+                    const { setDoc, doc } = window.FirebaseSDK;
+                    const syncTime = new Date().toISOString();
+                    
+                    // Sync all buildings from all years
+                    const syncPromises = [];
+                    for (const [year, buildings] of Object.entries(yearData)) {
+                        for (const building of buildings) {
+                            const buildingWithSync = {
+                                ...building,
+                                lastSynced: syncTime,
+                                year: parseInt(year)
+                            };
+                            const docRef = doc(db, `apps/${APP_ID}/buildings/${building.id}`);
+                            syncPromises.push(setDoc(docRef, buildingWithSync));
+                        }
+                    }
+                    
+                    await Promise.all(syncPromises);
+                    setLastSyncTime(syncTime);
+                    setSyncStatus('success');
+                    
+                    // Update local data with sync time
+                    setYearData(prev => {
+                        const updated = { ...prev };
+                        for (const year in updated) {
+                            updated[year] = updated[year].map(b => ({ ...b, lastSynced: syncTime }));
+                        }
+                        return updated;
+                    });
+                    
+                    setTimeout(() => setSyncStatus('idle'), 2000);
+                } catch (error) {
+                    console.error('Sync error:', error);
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                }
+            };
+            
+            const loadFromCloud = async (firestore = db) => {
+                if (!firestore) return;
+                
+                try {
+                    const { collection, getDocs } = window.FirebaseSDK;
+                    const buildingsRef = collection(firestore, `apps/${APP_ID}/buildings`);
+                    const snapshot = await getDocs(buildingsRef);
+                    
+                    if (snapshot.empty) {
+                        console.log('No cloud data found, using local data');
+                        return;
+                    }
+                    
+                    const cloudBuildings = {};
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        const year = data.year || 2026;
+                        if (!cloudBuildings[year]) cloudBuildings[year] = [];
+                        cloudBuildings[year].push(data);
+                    });
+                    
+                    // Merge cloud and local data (cloud wins if newer)
+                    setYearData(prev => {
+                        const merged = { ...prev };
+                        
+                        for (const [year, cloudBuildingsInYear] of Object.entries(cloudBuildings)) {
+                            const localBuildingsInYear = merged[year] || [];
+                            const mergedBuildings = [...cloudBuildingsInYear];
+                            
+                            // Add local buildings that don't exist in cloud
+                            for (const localBuilding of localBuildingsInYear) {
+                                const existsInCloud = cloudBuildingsInYear.some(cb => cb.id === localBuilding.id);
+                                if (!existsInCloud) {
+                                    mergedBuildings.push(localBuilding);
+                                } else {
+                                    // If exists in both, check which is newer
+                                    const cloudVersion = cloudBuildingsInYear.find(cb => cb.id === localBuilding.id);
+                                    const cloudTime = new Date(cloudVersion.lastSynced || 0);
+                                    const localTime = new Date(localBuilding.lastSynced || 0);
+                                    
+                                    if (localTime > cloudTime) {
+                                        // Replace cloud version with local
+                                        const idx = mergedBuildings.findIndex(b => b.id === localBuilding.id);
+                                        mergedBuildings[idx] = localBuilding;
+                                    }
+                                }
+                            }
+                            
+                            merged[year] = mergedBuildings;
+                        }
+                        
+                        return merged;
+                    });
+                    
+                    const latestSync = snapshot.docs.reduce((latest, doc) => {
+                        const syncTime = doc.data().lastSynced;
+                        return syncTime && (!latest || syncTime > latest) ? syncTime : latest;
+                    }, null);
+                    
+                    if (latestSync) setLastSyncTime(latestSync);
+                    console.log('Loaded from cloud:', cloudBuildings);
+                } catch (error) {
+                    console.error('Load from cloud error:', error);
+                }
+            };
 
             // --- REORDER LOGIC ---
             const moveSection = (fromIndex, toIndex) => {
@@ -697,7 +827,27 @@
                             <button onClick={() => setView('year-select')} className="text-blue-600 font-bold p-1">←</button>
                             <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
                         </div>
+                        <button 
+                            onClick={() => syncToCloud()} 
+                            disabled={syncStatus === 'syncing'}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                syncStatus === 'syncing' ? 'bg-blue-100 text-blue-400' :
+                                syncStatus === 'success' ? 'bg-green-500 text-white' :
+                                syncStatus === 'error' ? 'bg-red-500 text-white' :
+                                'bg-blue-600 text-white active:scale-95'
+                            }`}
+                        >
+                            {syncStatus === 'syncing' ? '⟳ Syncing...' :
+                             syncStatus === 'success' ? '✓ Synced' :
+                             syncStatus === 'error' ? '✕ Error' :
+                             '☁ Sync'}
+                        </button>
                     </div>
+                    {lastSyncTime && (
+                        <div className="text-[10px] text-gray-400 text-center font-semibold">
+                            Last synced: {new Date(lastSyncTime).toLocaleString()}
+                        </div>
+                    )}
                     {yearData[selectedYear].map(b => {
                         const status = getBuildingStatus(b);
                         return (
@@ -724,10 +874,23 @@
 
             return (
                 <div className="pb-44" onTouchMove={sectionDrag.onTouchMove()}>
-                    <div className="bg-white p-4 sticky top-0 border-b flex justify-between items-center z-50">
-                        <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Save</button>
-                        <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[40%]">{activeBuilding.name}</h2>
-                        <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export PDF</button>
+                    <div className="bg-white p-4 sticky top-0 border-b z-50">
+                        <div className="flex justify-between items-center mb-2">
+                            <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Save</button>
+                            <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[40%]">{activeBuilding.name}</h2>
+                            <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export PDF</button>
+                        </div>
+                        {syncStatus !== 'idle' && (
+                            <div className={`text-[9px] font-bold text-center py-1 rounded ${
+                                syncStatus === 'syncing' ? 'bg-blue-50 text-blue-600' :
+                                syncStatus === 'success' ? 'bg-green-50 text-green-600' :
+                                'bg-red-50 text-red-600'
+                            }`}>
+                                {syncStatus === 'syncing' ? '☁ Syncing to cloud...' :
+                                 syncStatus === 'success' ? '✓ Synced successfully' :
+                                 '✕ Sync failed - will retry'}
+                            </div>
+                        )}
                     </div>
 
                     <div className="p-4 space-y-3">
