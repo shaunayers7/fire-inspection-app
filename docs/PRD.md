@@ -35,3 +35,7 @@
 * **Conflict Resolution:** Newer timestamp wins when same building exists locally and in cloud
 * **Offline Support:** Works offline, syncs when internet available
 * **See:** SYNC-FEATURE.md for complete documentation
+
+## 7. PROJECT MANAGEMENT
+* **Master Task List:** Located in `docs/TODO.md`.
+* **Workflow Rule:** Before starting a new feature, the AI should check `TODO.md` to see what is next on the list and update the checkbox once the code is written.
