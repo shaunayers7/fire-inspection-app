@@ -1,0 +1,286 @@
+1. BUILDING DETAILS
+FIRE INSPECTION REPORT
+Year: 2026 | Status: Inspected 4 Building: Bellevue
+ FIELD INFORMATION
+ BUILDING NAME Bellevue
+ ADDRESS 21701 28 ave Bellevue
+ CITY Bellevue
+ PANEL LOCATION Mech rm by gym
+ MANUFACTURER Edwards
+ PANEL MODEL 2280
+ SERIAL NUMBER N/A
+ SOFTWARE VERSION Monitored fire watch 411
+ DATE MANUFACTURED N/A
+ LAST SERVICE DATE N/A
+2. PRE-JOB CHECKLIST
+#
+1 2 3 4 5
+3. CONTROL EQUIPMENT
+ DEV # ITEM NAME STATUS NOTES
+ -
+ Building occupants informed of test
+ PASSED
+ -
+ -
+ Time established to test signal devices
+ PASSED
+ -
+ -
+ Access to locked doors
+ PASSED
+ -
+ -
+ Alternate plan made to alert of actual fire
+ PASSED
+ -
+ -
+ System placed on test with monitoring
+ PASSED
+ -
+ # DEV # ITEM NAME STATUS NOTES
+ 1
+ -
+ Power on indicator
+ PASSED
+ -
+ 2
+ -
+ Common trouble indicator
+ PASSED
+ -
+ 3
+ -
+ Common trouble signal
+ PASSED
+ -
+ 4
+ -
+ A/C power failure trouble
+ PASSED
+ -
+ 5
+ -
+ Ground detection lamp
+ PASSED
+ -
+ 6
+ -
+ Ground detection signal
+ PASSED
+ -
+ 7
+ -
+ General alarm
+ PASSED
+ -
+
+ # DEV # ITEM NAME STATUS NOTES
+ 8
+ -
+ Alarm silence
+ PASSED
+ -
+ 9
+ -
+ Alarm silence lamp
+ PASSED
+ -
+ 10
+ -
+ Alarm silence inhibit
+ PASSED
+ -
+ 11
+ -
+ Alarm initiation individually circuit tested
+ PASSED
+ -
+ 12
+ -
+ Alarm lamp operation
+ PASSED
+ -
+ 13
+ -
+ Alarm lamp designation checked
+ PASSED
+ -
+ 14
+ -
+ All audible alarm signals operated on A/C
+ PASSED
+ -
+ 15
+ -
+ Glass and doors clean
+ PASSED
+ -
+ 16
+ -
+ Panel condition and keys
+ PASSED
+ -
+4. DEVICE INVENTORY
+ # DEV # ITEM NAME STATUS NOTES
+ 1
+ 1
+ Device 1
+ PASSED
+ Mech room
+ 2
+ 2
+ Device 2
+ PASSED
+ South gym
+ 3
+ 3
+ Device 3
+ PASSED
+ South chapel
+ 4
+ 4
+ Device 4
+ PASSED
+ North chapel
+ 5
+ 5
+ Device 5
+ PASSED
+ Sacrament prep
+ 6
+ 6
+ Device 6
+ PASSED
+ Sound room
+ 7
+ 7
+ Device 7
+ PASSED
+ West door main entrance
+ 8
+ 8
+ Device 8
+ PASSED
+ East exit
+ 9
+ 9
+ Device 9
+ PASSED
+ Kitchen
+ 10
+ 10
+ Device 10
+ PASSED
+ Multi purpose room
+ 11
+ 11
+ Device 11
+ PASSED
+ Member custodial
+ 12
+ 12
+ Device 12
+ PASSED
+ Storage room
+ 13
+ 13
+ Device 13
+ PASSED
+ Furnace room off storage rm
+ 14
+ 14
+ Device 14
+ PASSED
+ Gym
+ 15
+ 15
+ Device 15
+ PASSED
+ Chapel
+ 16
+ 16
+ Device 16
+ PASSED
+ East hall
+ 17
+ 17
+ Device 17
+ PASSED
+ Multi purpose room
+5. BATTERY HEALTH
+#
+1 2
+ DEV # ITEM NAME STATUS NOTES
+ -
+ Battery AC on
+ PASSED
+ 31.2v dc
+ -
+ Battery AC off
+ FAILED
+ 20.2 v dc
+
+ DEV # ITEM NAME STATUS NOTES
+ -
+ Battery under load
+ FAILED
+ V dc
+ -
+ Battery clean tight terminals
+ PASSED
+ -
+ -
+ Battery type
+ PASSED
+ 12v 7AH
+#
+3 4 5
+6. EMERGENCY LIGHTS
+#
+ DEV # ITEM NAME STATUS NOTES
+     1
+-
+Emergency Light 1
+PASSED
+Storage room
+Panel B-34
+Main entry double head East hall double head Multi purpose double head
+     2
+-
+Emergency Light 2
+FAILED
+North entrance
+1- 6v
+Panel B-10
+Double head in multi purpose rm
+     3
+-
+Emergency Light 3
+PASSED
+Battery pack
+Panel B-34
+Double head x3 chapel
+    -
+Emergency Light 4
+PASSED
+Exit combo gym south Panel B-34
+     5
+-
+Exit signs
+PASSED
+Main entrance East exit
+North exit
+Multi north
+Multi south
+Gym south
+Gym north
+Chapel south Chapel north west Chapel north south
+4
+7. CUSTOM SECTION
+#
+1
+ DEV # ITEM NAME STATUS NOTES
+ -
+ Signal check with salt lake
+ FAILED
+ No account found on SLC monitoring

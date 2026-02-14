@@ -1,0 +1,290 @@
+1. BUILDING DETAILS
+FIRE INSPECTION REPORT
+Year: 2026 | Status: Inspected 6 Building: Pincher Creek
+ FIELD INFORMATION
+ BUILDING NAME Pincher Creek
+ ADDRESS 1240 Wentworth ave
+ CITY Pincher Creek
+ PANEL LOCATION Front door
+ MANUFACTURER Edwards
+ PANEL MODEL Fire shield plus
+ SERIAL NUMBER N/A
+ SOFTWARE VERSION Not monitored
+ DATE MANUFACTURED N/A
+ LAST SERVICE DATE N/A
+2. PRE-JOB CHECKLIST
+#
+1 2 3 4 5
+3. CONTROL EQUIPMENT
+ DEV # ITEM NAME STATUS NOTES
+ -
+ Building occupants informed of test
+ PASSED
+ -
+ -
+ Time established to test signal devices
+ PASSED
+ -
+ -
+ Access to locked doors gained
+ PASSED
+ -
+ -
+ Alternate plan made to alert of actual fire
+ PASSED
+ -
+ -
+ System placed on test with monitoring
+ PASSED
+ -
+ # DEV # ITEM NAME STATUS NOTES
+ 1
+ -
+ Power on indicator
+ PASSED
+ -
+ 2
+ -
+ Common trouble indicator
+ PASSED
+ -
+ 3
+ -
+ Common trouble signal
+ PASSED
+ -
+ 4
+ -
+ A/C power failure trouble
+ PASSED
+ -
+ 5
+ -
+ Ground fault detection lamp
+ PASSED
+ -
+ 6
+ -
+ Ground fault detection signal
+ PASSED
+ -
+ 7
+ -
+ General alarm
+ PASSED
+ -
+
+ # DEV # ITEM NAME STATUS NOTES
+ 8
+ -
+ Alarm silence
+ PASSED
+ -
+ 9
+ -
+ Alarm silence lamp
+ PASSED
+ -
+ 10
+ -
+ Alarm silence inhibit
+ PASSED
+ -
+ 11
+ -
+ Alarm initiation individually circuit tested
+ PASSED
+ -
+ 12
+ -
+ Alarm lamp operation
+ PASSED
+ -
+ 13
+ -
+ Alarm lamp designation checked
+ PASSED
+ -
+ 14
+ -
+ All audible alarm signals operated on A/C
+ PASSED
+ -
+ 15
+ -
+ Glass and doors clean
+ PASSED
+ -
+ 16
+ -
+ Panel condition and keys
+ PASSED
+ -
+4. DEVICE INVENTORY
+ # DEV # ITEM NAME STATUS NOTES
+ 1
+ 1
+ NE entrance
+ PASSED
+ -
+ 2
+ 2
+ SE hall
+ PASSED
+ -
+ 3
+ 3
+ SW entrance
+ PASSED
+ -
+ 4
+ 4
+ Gym W
+ PASSED
+ -
+ 5
+ 5
+ Nw entrance
+ PASSED
+ -
+ 6
+ 6
+ NNE entrance
+ PASSED
+ -
+ 7
+ 7
+ N Chapel
+ PASSED
+ -
+ 8
+ 8
+ S chapel
+ PASSED
+ -
+ 9
+ 9
+ Men's bathroom rm D
+ PASSED
+ -
+ 10
+ 10
+ Men's bathroom rmD
+ PASSED
+ -
+ 11
+ 11
+ Kitchen
+ PASSED
+ -
+ 12
+ 12
+ Rm 105
+ PASSED
+ -
+ 13
+ 13
+ S 106
+ PASSED
+ -
+ 14
+ 14
+ S 101
+ PASSED
+ -
+ 15
+ 15
+ South Hall
+ PASSED
+ -
+ 16
+ 16
+ Gym South
+ PASSED
+ -
+ 17
+ 17
+ North West Hall
+ PASSED
+ -
+ 18
+ 18
+ North Hall
+ PASSED
+ -
+ 19
+ 19
+ Chapel North
+ PASSED
+ -
+5. BATTERY HEALTH
+ # DEV # ITEM NAME STATUS NOTES
+
+ DEV # ITEM NAME STATUS NOTES
+ -
+ A/C power on
+ PASSED
+ 27.6v dc
+ -
+ A/C off
+ PASSED
+ 26.6 v dc
+ -
+ Full load A/C off
+ PASSED
+ 25.1
+ -
+ Battery clean tight terminals
+ PASSED
+ -
+ -
+ Battery type
+ PASSED
+ 12v dc 8AH
+#
+1 2 3 4 5
+6. EMERGENCY LIGHTS
+#
+1 2 3 4 5 6
+7 8
+7. SIGNAL TEST
+#
+1
+ DEV ITEM NAME STATUS NOTES #
+ -
+ EM 1 mech rm C
+ FAILED
+ Panel C-16 12v 7.2Ah
+ -
+ EM 2
+ PASSED
+ Panel C -16
+ -
+ EM 3
+ FAILED
+ Panel C -16 6v 5 ah
+ -
+ EM 4
+ PASSED
+ Panel R -8
+ -
+ EM 5
+ PASSED
+ Panel R -4
+ -
+ EM 6 member custodial rm
+ FAILED
+ Panel A -9 1-6v 5 AH
+ -
+ EM 7 mech rm A
+ PASSED
+ Panel N -1
+ -
+ Exit signs
+ PASSED
+ SW exit, SE exit, S Hall, NE exit, Gym NE, NW exit, N hall, NNE exit, Chapel E, Chapel W, Over flow S
+ DEV # ITEM NAME STATUS NOTES
+ -
+ Signal test
+ PASSED
+ SLC monitoring no account

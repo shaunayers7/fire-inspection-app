@@ -1,0 +1,98 @@
+{
+  "2026": [
+    {
+      "id": "b-2026-bellevue",
+      "name": "Bellevue",
+      "lastSynced": null,
+      "details": {
+        "buildingName": "Bellevue",
+        "address": "21701 28 ave Bellevue",
+        "city": "Bellevue",
+        "panelLocation": "Mech rm by gym",
+        "manufacturer": "Edwards",
+        "panelModel": "2280",
+        "serialNumber": "N/A",
+        "softwareVersion": "Monitored fire watch 411",
+        "dateManufactured": "N/A",
+        "lastServiceDate": "N/A"
+      },
+      "sections": [
+        { "id": "checklist", "title": "Pre-job checklist", "color": "bg-orange-500", "isDev": false },
+        { "id": "control", "title": "control equipment", "color": "bg-purple-600", "isDev": false },
+        { "id": "devices", "title": "Device inventory", "color": "bg-[#1C252E]", "isDev": true },
+        { "id": "battery", "title": "Battery health", "color": "bg-blue-500", "isDev": false },
+        { "id": "lights", "title": "Emergency lights", "color": "bg-[#EAB308]", "isDev": false },
+        { "id": "custom-signal", "title": "Signal Check", "color": "bg-gray-500", "isDev": false }
+      ],
+      "data": {
+        "checklist": [
+          { "id": "ck1-2026-bellevue", "label": "Building occupants informed of test", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "ck2-2026-bellevue", "label": "Time established to test signal devices", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "ck3-2026-bellevue", "label": "Access to locked doors", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "ck4-2026-bellevue", "label": "Alternate plan made to alert of actual fire", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "ck5-2026-bellevue", "label": "System placed on test with monitoring", "status": "passed", "note": "", "photo": null, "fixed": false }
+        ],
+        "control": [
+          { "id": "c1-2026-bellevue", "label": "Power on indicator", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c2-2026-bellevue", "label": "Common trouble indicator", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c3-2026-bellevue", "label": "Common trouble signal", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c4-2026-bellevue", "label": "A/C power failure trouble", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c5-2026-bellevue", "label": "Ground detection lamp", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c6-2026-bellevue", "label": "Ground detection signal", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c7-2026-bellevue", "label": "General alarm", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c8-2026-bellevue", "label": "Alarm silence", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c9-2026-bellevue", "label": "Alarm silence lamp", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c10-2026-bellevue", "label": "Alarm silence inhibit", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c11-2026-bellevue", "label": "Alarm initiation individually circuit tested", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c12-2026-bellevue", "label": "Alarm lamp operation", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c13-2026-bellevue", "label": "Alarm lamp designation checked", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c14-2026-bellevue", "label": "All audible alarm signals operated on A/C", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c15-2026-bellevue", "label": "Glass and doors clean", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "c16-2026-bellevue", "label": "Panel condition and keys", "status": "passed", "note": "", "photo": null, "fixed": false }
+        ],
+        "devices": [
+          { "id": "d1-2026-bellevue", "deviceNo": "1", "label": "Mech room", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d2-2026-bellevue", "deviceNo": "2", "label": "South gym", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d3-2026-bellevue", "deviceNo": "3", "label": "South chapel", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d4-2026-bellevue", "deviceNo": "4", "label": "North chapel", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d5-2026-bellevue", "deviceNo": "5", "label": "Sacrament prep", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d6-2026-bellevue", "deviceNo": "6", "label": "Sound room", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d7-2026-bellevue", "deviceNo": "7", "label": "West door main entrance", "type": "Manual Pull", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d8-2026-bellevue", "deviceNo": "8", "label": "East exit", "type": "Manual Pull", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d9-2026-bellevue", "deviceNo": "9", "label": "Kitchen", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d10-2026-bellevue", "deviceNo": "10", "label": "Multi purpose room", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d11-2026-bellevue", "deviceNo": "11", "label": "Member custodial", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d12-2026-bellevue", "deviceNo": "12", "label": "Storage room", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d13-2026-bellevue", "deviceNo": "13", "label": "Furnace room off storage rm", "type": "Smoke Detector", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d14-2026-bellevue", "deviceNo": "14", "label": "Gym", "type": "Horn/Strobe", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d15-2026-bellevue", "deviceNo": "15", "label": "Chapel", "type": "Horn/Strobe", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d16-2026-bellevue", "deviceNo": "16", "label": "East hall", "type": "Horn/Strobe", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "d17-2026-bellevue", "deviceNo": "17", "label": "Multi purpose room", "type": "Horn/Strobe", "status": "passed", "note": "", "photo": null, "fixed": false }
+        ],
+        "battery": [
+          { "id": "b1-2026-bellevue", "label": "Battery AC on", "status": "passed", "note": "31.2v dc", "photo": null, "fixed": false },
+          { "id": "b2-2026-bellevue", "label": "Battery AC off", "status": "failed", "note": "20.2 v dc", "photo": null, "fixed": false },
+          { "id": "b3-2026-bellevue", "label": "Battery under load", "status": "failed", "note": "V dc", "photo": null, "fixed": false },
+          { "id": "b4-2026-bellevue", "label": "Battery clean tight terminals", "status": "passed", "note": "", "photo": null, "fixed": false },
+          { "id": "b5-2026-bellevue", "label": "Battery type", "status": "passed", "note": "12v 7AH", "photo": null, "fixed": false }
+        ],
+        "lights": [
+          { "id": "e1-2026-bellevue", "label": "Emergency Light 1", "status": "passed", "note": "Storage room\nPanel B-34\nMain entry double head\nEast hall double head\nMulti purpose double head", "photo": null, "fixed": false },
+          { "id": "e2-2026-bellevue", "label": "Emergency Light 2", "status": "failed", "note": "North entrance\n1- 6v\nPanel B-10\nDouble head in multi purpose rm", "photo": null, "fixed": false },
+          { "id": "e3-2026-bellevue", "label": "Emergency Light 3", "status": "passed", "note": "Battery pack\nPanel B-34\nDouble head x3 chapel", "photo": null, "fixed": false },
+          { "id": "e4-2026-bellevue", "label": "Emergency Light 4", "status": "passed", "note": "Exit combo gym south\nPanel B-34", "photo": null, "fixed": false },
+          { "id": "e5-2026-bellevue", "label": "Exit signs", "status": "passed", "note": "Main entrance\nEast exit\nNorth exit\nMulti north\nMulti south\nGym south\nGym north\nChapel south\nChapel north west\nChapel north south", "photo": null, "fixed": false }
+        ],
+        "custom-signal": [
+          { "id": "cs1-2026-bellevue", "label": "Signal check with salt lake", "status": "failed", "note": "No account found on SLC monitoring", "photo": null, "fixed": false }
+        ],
+        "customDeficiencies": [
+          { "id": "cd1-2026-bellevue", "label": "Battery AC off voltage low", "status": "failed", "note": "20.2 v dc - requires replacement", "photo": null, "fixed": false },
+          { "id": "cd2-2026-bellevue", "label": "Battery under load not tested", "status": "failed", "note": "Unable to complete load test", "photo": null, "fixed": false },
+          { "id": "cd3-2026-bellevue", "label": "Emergency Light 2 - North entrance", "status": "failed", "note": "1- 6v battery needs replacement", "photo": null, "fixed": false },
+          { "id": "cd4-2026-bellevue", "label": "Monitoring signal not established", "status": "failed", "note": "No account found on SLC monitoring", "photo": null, "fixed": false }
+        ]
+      }
+    }
+  ]
+}
