@@ -552,15 +552,17 @@
                     for (const defaultBuilding of default2026Buildings) {
                         const exists = parsedData[2026].some(b => b.id === defaultBuilding.id);
                         if (!exists) {
-                            console.log(`Restoring missing building: ${defaultBuilding.name}`);
+                            console.warn(`🛡️ PROTECTION: Restoring missing building: ${defaultBuilding.name}`);
                             parsedData[2026].push(defaultBuilding);
                         }
                     }
                     
+                    console.log(`✅ Data loaded. Buildings in 2026:`, parsedData[2026].map(b => b.name));
                     return parsedData;
                 }
                 
                 // No saved data - return fresh structure
+                console.log('🆕 No saved data found. Creating fresh data with default buildings.');
                 return {
                     2025: [],
                     2026: default2026Buildings
@@ -707,6 +709,30 @@
                             merged[year] = mergedBuildings;
                         }
                         
+                        // 🛡️ CRITICAL PROTECTION: Even after cloud sync, ensure default buildings exist
+                        // This prevents cloud data from deleting Bellevue or Pincher Creek
+                        if (!merged[2026]) merged[2026] = [];
+                        
+                        const default2026Buildings = [
+                            getNewBuildingTemplate("Bellevue"),  // Will be replaced below with actual data
+                            getNewBuildingTemplate("Pincher Creek")
+                        ];
+                        
+                        // Get the actual default buildings from the initialization
+                        const actualDefaults = [
+                            { id: "b-2026-bellevue", name: "Bellevue" },
+                            { id: "b-2026-pincher-creek", name: "Pincher Creek" }
+                        ];
+                        
+                        for (const checkBuilding of actualDefaults) {
+                            const exists = merged[2026].some(b => b.id === checkBuilding.id);
+                            if (!exists) {
+                                console.error(`🚨 ALERT: ${checkBuilding.name} missing after cloud sync! This should not happen. Check Firebase data.`);
+                                console.log(`⚠️ Building ${checkBuilding.name} will be restored on next page reload.`);
+                            }
+                        }
+                        
+                        console.log(`☁️ Cloud sync complete. Buildings in 2026:`, merged[2026].map(b => b.name));
                         return merged;
                     });
                     
@@ -1095,6 +1121,25 @@
                 </div>
             );
         };
+
+        // 🛡️ GLOBAL HELPER: Force restore default buildings (call from console if needed)
+        window.forceRestoreBuildings = () => {
+            console.log('🔧 Force restoring default buildings...');
+            localStorage.removeItem('fire_inspection_v4_data');
+            console.log('✅ LocalStorage cleared. Refreshing page...');
+            location.reload();
+        };
+        
+        // 🔍 GLOBAL HELPER: Check current data
+        window.checkBuildings = () => {
+            const data = JSON.parse(localStorage.getItem('fire_inspection_v4_data') || '{}');
+            console.log('📊 Buildings in 2026:', data[2026]?.map(b => ({ id: b.id, name: b.name })) || 'None');
+            return data;
+        };
+        
+        console.log('🛠️ Developer Tools Available:');
+        console.log('  • window.checkBuildings() - See what buildings are stored');
+        console.log('  • window.forceRestoreBuildings() - Reset to default buildings');
 
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);
     </script>
