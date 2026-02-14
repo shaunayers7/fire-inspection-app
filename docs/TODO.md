@@ -11,3 +11,11 @@
 ## Phase 2: Design Changes
 - [x] check for code bloat 
 - [x] check for any rogue dependancies
+
+## Phase 3: Design Changes
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
+- [ ]
