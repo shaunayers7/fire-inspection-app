@@ -132,7 +132,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.2.1'; // Updated: Feb 14, 2026 - Better login error messages + case-insensitive email
+        const APP_VERSION = '2.3.0'; // Updated: Feb 14, 2026 - Password reset + specific error messages (EMAIL vs PASSWORD)
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
@@ -1285,13 +1285,15 @@
                 } catch (error) {
                     console.error('❌ Login error:', error.code, error.message);
                     if (error.code === 'auth/user-not-found') {
-                        setAuthError('❌ No Account Found: This email is not registered. Please sign up or check your email.');
+                        setAuthError('❌ PROBLEM: EMAIL — This email is not registered. The account does not exist.');
                     } else if (error.code === 'auth/wrong-password') {
-                        setAuthError('❌ Wrong Password: The password is incorrect. Please try again.');
+                        setAuthError('❌ PROBLEM: PASSWORD — The password is incorrect. The email is correct, but password is wrong.');
                     } else if (error.code === 'auth/invalid-credential') {
-                        setAuthError('❌ Invalid Credentials: Email or password is incorrect.');
+                        setAuthError('❌ PROBLEM: PASSWORD — The password is incorrect for this email. Try "Forgot Password" to reset it.');
                     } else if (error.code === 'auth/too-many-requests') {
-                        setAuthError('❌ Too Many Attempts: Account temporarily locked. Try again later or reset password.');
+                        setAuthError('❌ PROBLEM: TOO MANY ATTEMPTS — Account temporarily locked. Use "Forgot Password" to reset.');
+                    } else if (error.code === 'auth/invalid-email') {
+                        setAuthError('❌ PROBLEM: EMAIL FORMAT — The email format is invalid.');
                     } else {
                         setAuthError(`❌ Login Failed: ${error.message}`);
                     }
@@ -1326,6 +1328,30 @@
                         setAuthError('❌ Invalid Email: Please enter a valid email address.');
                     } else {
                         setAuthError(`❌ Signup Failed: ${error.message}`);
+                    }
+                }
+            };
+
+            const handlePasswordReset = async () => {
+                const emailLower = loginEmail.toLowerCase().trim();
+                if (!emailLower || !emailLower.includes('@')) {
+                    setAuthError('⚠️ Enter Email: Please enter your email address first, then try forgot password.');
+                    return;
+                }
+                
+                try {
+                    const { sendPasswordResetEmail } = window.FirebaseSDK;
+                    await sendPasswordResetEmail(window.firebaseAuth, emailLower);
+                    setAuthError('✅ Password Reset Email Sent: Check your inbox for instructions to reset your password.');
+                    console.log('✅ Password reset email sent to:', emailLower);
+                } catch (error) {
+                    console.error('❌ Password reset error:', error.code, error.message);
+                    if (error.code === 'auth/user-not-found') {
+                        setAuthError('❌ No Account: This email is not registered. The account does not exist.');
+                    } else if (error.code === 'auth/invalid-email') {
+                        setAuthError('❌ Invalid Email: Please enter a valid email address.');
+                    } else {
+                        setAuthError(`❌ Password Reset Failed: ${error.message}`);
                     }
                 }
             };
@@ -1487,13 +1513,22 @@
                                         value={loginPassword}
                                         onChange={(e) => setLoginPassword(e.target.value)}
                                         placeholder="••••••••"
-                                        required
+                                        required={isSignup}
                                         className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     />
+                                    {!isSignup && (
+                                        <button 
+                                            type="button"
+                                            onClick={handlePasswordReset}
+                                            className="text-blue-600 text-xs font-semibold hover:underline mt-2"
+                                        >
+                                            🔑 Forgot Password?
+                                        </button>
+                                    )}
                                 </div>
                                 
                                 {authError && (
-                                    <div className="bg-red-100 border-2 border-red-400 text-red-800 p-4 rounded-xl text-sm font-semibold shadow-lg">
+                                    <div className={`border-2 p-4 rounded-xl text-sm font-semibold shadow-lg ${authError.startsWith('✅') ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800'}`}>
                                         {authError}
                                     </div>
                                 )}
