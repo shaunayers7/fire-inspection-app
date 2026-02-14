@@ -12,10 +12,47 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         
-        window.FirebaseSDK = { initializeApp, getFirestore, doc, setDoc, collection, getDocs, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken };
+        window.FirebaseSDK = { 
+            initializeApp, 
+            getFirestore, 
+            doc, 
+            setDoc,
+            getDoc,
+            collection, 
+            getDocs, 
+            addDoc,
+            query,
+            orderBy,
+            limit,
+            serverTimestamp,
+            getAuth, 
+            signInAnonymously, 
+            onAuthStateChanged, 
+            signInWithCustomToken,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            signOut,
+            updateProfile
+        };
+    </script>
+
+    <!-- Firebase Configuration -->
+    <script>
+        // Firebase configuration for fire-inspection-app
+        window.__firebase_config = JSON.stringify({
+            apiKey: "AIzaSyBTKxOrANuORfE4H8AiHECc-Ty46Hqrk9g",
+            authDomain: "fire-inspection-app-9c13f.firebaseapp.com",
+            projectId: "fire-inspection-app-9c13f",
+            storageBucket: "fire-inspection-app-9c13f.firebasestorage.app",
+            messagingSenderId: "423281715493",
+            appId: "1:423281715493:web:f1e66ea9f9f9fb980b92cc"
+        });
+        
+        // Optional: Set a custom app ID (defaults to 'fire-inspect-default')
+        // window.__app_id = 'my-custom-app-id';
     </script>
 
     <!-- PDF Generation Libraries -->
@@ -328,7 +365,7 @@
         };
 
         const App = () => {
-            const [view, setView] = useState('year-select');
+            const [view, setView] = useState('login'); // Start with login
             const [selectedYear, setSelectedYear] = useState(2026);
             const [selectedBuildingId, setSelectedBuildingId] = useState(null);
             const [expandedSections, setExpandedSections] = useState({});
@@ -339,6 +376,18 @@
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
             const [lastSyncTime, setLastSyncTime] = useState(null);
             const syncTimeoutRef = useRef(null);
+            const isUpdatingFromSync = useRef(false); // Track if update is from sync to prevent loop
+            const [authInitialized, setAuthInitialized] = useState(false);
+            const [loginEmail, setLoginEmail] = useState('');
+            const [loginPassword, setLoginPassword] = useState('');
+            const [loginName, setLoginName] = useState('');
+            const [isSignup, setIsSignup] = useState(false);
+            const [authError, setAuthError] = useState('');
+            const [allowedEmails, setAllowedEmails] = useState([]);
+            const [newEmail, setNewEmail] = useState('');
+            const [isAdmin, setIsAdmin] = useState(false);
+            const viewRef = useRef('login');
+            const [isLoadingData, setIsLoadingData] = useState(true);
             
             const [yearData, setYearData] = useState(() => {
                 const saved = localStorage.getItem('fire_inspection_v4_data');
@@ -571,30 +620,129 @@
 
             useEffect(() => {
                 const initFirebase = async () => {
-                    const { initializeApp, getFirestore, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.FirebaseSDK;
-                    const config = JSON.parse(__firebase_config);
-                    const app = initializeApp(config);
-                    const auth = getAuth(app);
-                    const firestore = getFirestore(app);
-                    setDb(firestore);
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                    onAuthStateChanged(auth, async (currentUser) => {
-                        setUser(currentUser);
-                        if (currentUser && firestore) {
-                            // Load cloud data when user is ready
-                            await loadFromCloud(firestore);
+                    try {
+                        // Check if Firebase config exists
+                        if (typeof window.__firebase_config === 'undefined') {
+                            console.warn('⚠️ Firebase not configured. Sync features will be disabled.');
+                            console.log('ℹ️ To enable sync, add your Firebase configuration in index.html');
+                            return;
                         }
-                    });
+
+                        const { initializeApp, getFirestore, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.FirebaseSDK;
+                        const config = JSON.parse(window.__firebase_config);
+                        
+                        // Check if config has placeholder values
+                        if (config.apiKey === "YOUR_API_KEY" || !config.apiKey || config.apiKey.length < 10) {
+                            console.warn('⚠️ Firebase config contains placeholder values. Please update with your actual Firebase project credentials.');
+                            console.log('ℹ️ Get your config from: Firebase Console > Project Settings > Your apps > Web app');
+                            return;
+                        }
+                        
+                        const app = initializeApp(config);
+                        const auth = getAuth(app);
+                        const firestore = getFirestore(app);
+                        setDb(firestore);
+                        window.firebaseAuth = auth; // Make available globally for login
+                        
+                        // Load allowed emails list
+                        const loadAllowedEmails = async () => {
+                            try {
+                                const { doc, getDoc } = window.FirebaseSDK;
+                                const docRef = doc(firestore, `apps/${APP_ID}/settings/allowed_emails`);
+                                const docSnap = await getDoc(docRef);
+                                if (docSnap.exists()) {
+                                    const data = docSnap.data();
+                                    setAllowedEmails(data.emails || []);
+                                    console.log('📧 Allowed emails loaded:', data.emails?.length || 0);
+                                } else {
+                                    // First time - set you as admin
+                                    console.log('⚠️ No whitelist found. Create one in Settings.');
+                                }
+                            } catch (error) {
+                                console.error('Failed to load allowed emails:', error);
+                            }
+                        };
+                        
+                        await loadAllowedEmails();
+                        
+                        onAuthStateChanged(auth, async (currentUser) => {
+                            setUser(currentUser);
+                            setAuthInitialized(true);
+                            
+                            // Sign out anonymous users from old sessions
+                            if (currentUser && !currentUser.email) {
+                                console.log('⚠️ Anonymous user detected, signing out...');
+                                const { signOut } = window.FirebaseSDK;
+                                await signOut(auth);
+                                return;
+                            }
+                            
+                            // Only allow real users (with email), not anonymous
+                            if (currentUser && currentUser.email && firestore) {
+                                console.log('✅ Firebase connected successfully');
+                                console.log('👤 User:', currentUser.email || currentUser.displayName);
+                                
+                                try {
+                                    // Check if user is admin (first user or in admin list)
+                                    const { doc, getDoc } = window.FirebaseSDK;
+                                    const adminDoc = await getDoc(doc(firestore, `apps/${APP_ID}/settings/admins`));
+                                    const admins = adminDoc.exists() ? adminDoc.data().emails || [] : [];
+                                    
+                                    // If no admins exist yet, make this user an admin
+                                    if (admins.length === 0) {
+                                        console.log('🔧 No admins found - making you the first admin');
+                                        setIsAdmin(true);
+                                    } else {
+                                        const userIsAdmin = admins.includes(currentUser.email);
+                                        setIsAdmin(userIsAdmin);
+                                        console.log(userIsAdmin ? '👑 You are an admin' : '👤 You are a regular user');
+                                    }
+                                    
+                                    // Load cloud data when user is ready
+                                    await loadFromCloud(firestore);
+                                    
+                                    // Data is now loaded
+                                    setIsLoadingData(false);
+                                    
+                                    // Only change view if we're on login screen
+                                    console.log('Current view:', viewRef.current);
+                                    if (viewRef.current === 'login') {
+                                        console.log('✅ Switching to year-select view');
+                                        setView('year-select');
+                                        viewRef.current = 'year-select';
+                                    }
+                                } catch (error) {
+                                    console.error('Error during post-login setup:', error);
+                                    // Still show the app even if there's an error
+                                    setIsAdmin(true); // Fallback to admin
+                                    setView('year-select');
+                                    viewRef.current = 'year-select';
+                                }
+                            } else {
+                                // User signed out or anonymous, go back to login
+                                if (authInitialized && viewRef.current !== 'login') {
+                                    setView('login');
+                                    viewRef.current = 'login';
+                                }
+                                setIsLoadingData(false); // Not loading if no user
+                            }
+                        });
+                    } catch (error) {
+                        console.error('❌ Firebase initialization failed:', error);
+                        console.log('ℹ️ The app will work in local-only mode. Data will be saved to your browser only.');
+                    }
                 };
                 initFirebase();
             }, []);
 
             useEffect(() => {
                 localStorage.setItem('fire_inspection_v4_data', JSON.stringify(yearData));
+                
+                // Skip auto-sync if this update came from a sync operation (prevents loop)
+                if (isUpdatingFromSync.current) {
+                    isUpdatingFromSync.current = false;
+                    return;
+                }
                 
                 // Auto-sync with debounce (5 seconds after last change)
                 if (db && user) {
@@ -604,6 +752,34 @@
                     }, 5000);
                 }
             }, [yearData]);
+            
+            // Debug: Monitor view changes
+            useEffect(() => {
+                console.log('📍 View changed to:', view);
+                viewRef.current = view;
+            }, [view]);
+            
+            // Ensure yearData always has required structure
+            useEffect(() => {
+                if (!yearData || Object.keys(yearData).length === 0) {
+                    console.log('⚠️ YearData is empty, initializing with defaults');
+                    setYearData({
+                        2025: [],
+                        2026: []
+                    });
+                }
+            }, []);
+            
+            // Failsafe: If user is logged in but view is stuck on login, force to year-select
+            useEffect(() => {
+                if (authInitialized && user && user.email && view === 'login') {
+                    console.log('⚠️ User is logged in but view is stuck on login - forcing to year-select');
+                    setTimeout(() => {
+                        setView('year-select');
+                        viewRef.current = 'year-select';
+                    }, 500);
+                }
+            }, [authInitialized, user, view]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -626,6 +802,8 @@
                             const buildingWithSync = {
                                 ...building,
                                 lastSynced: syncTime,
+                                lastSyncedBy: user?.email || user?.displayName || 'Unknown',
+                                lastSyncedById: user?.uid,
                                 year: parseInt(year)
                             };
                             const docRef = doc(db, `apps/${APP_ID}/buildings/${building.id}`);
@@ -634,10 +812,18 @@
                     }
                     
                     await Promise.all(syncPromises);
+                    
+                    // Log the sync action
+                    await logChange('sync', { 
+                        message: 'Synced data to cloud', 
+                        buildingCount: Object.values(yearData).reduce((sum, buildings) => sum + buildings.length, 0)
+                    });
+                    
                     setLastSyncTime(syncTime);
                     setSyncStatus('success');
                     
-                    // Update local data with sync time
+                    // Update local data with sync time (mark as sync update to prevent loop)
+                    isUpdatingFromSync.current = true;
                     setYearData(prev => {
                         const updated = { ...prev };
                         for (const year in updated) {
@@ -655,7 +841,10 @@
             };
             
             const loadFromCloud = async (firestore = db) => {
-                if (!firestore) return;
+                if (!firestore) {
+                    setIsLoadingData(false);
+                    return;
+                }
                 
                 try {
                     const { collection, getDocs } = window.FirebaseSDK;
@@ -664,6 +853,7 @@
                     
                     if (snapshot.empty) {
                         console.log('No cloud data found, using local data');
+                        setIsLoadingData(false);
                         return;
                     }
                     
@@ -676,6 +866,7 @@
                     });
                     
                     // Merge cloud and local data (cloud wins if newer)
+                    isUpdatingFromSync.current = true;
                     setYearData(prev => {
                         const merged = { ...prev };
                         
@@ -743,8 +934,10 @@
                     
                     if (latestSync) setLastSyncTime(latestSync);
                     console.log('Loaded from cloud:', cloudBuildings);
+                    setIsLoadingData(false);
                 } catch (error) {
                     console.error('Load from cloud error:', error);
+                    setIsLoadingData(false);
                 }
             };
 
@@ -767,6 +960,9 @@
             const sectionDrag = useDragAndDrop(activeBuilding?.sections || [], moveSection);
 
             const getBuildingStatus = (building) => {
+                if (!building || !building.data) {
+                    return { text: 'No Data', class: 'text-gray-400' };
+                }
                 let pending = 0;
                 let unfixed = 0;
                 let totalDefs = 0;
@@ -887,6 +1083,17 @@
             };
 
             const updateItem = (sect, id, meta) => {
+                // Log the change
+                const item = activeBuilding?.data[sect]?.find(i => i.id === id);
+                if (item) {
+                    logChange('update_item', { 
+                        section: sect, 
+                        itemLabel: item.label,
+                        changes: meta,
+                        building: activeBuilding?.name
+                    });
+                }
+                
                 setYearData(prev => ({
                     ...prev,
                     [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
@@ -896,19 +1103,344 @@
             };
 
             const updateBuildingDetail = (key, value) => {
+                // Log the change
+                logChange('update_building_detail', { 
+                    field: key, 
+                    newValue: value,
+                    building: activeBuilding?.name
+                });
+                
                 setYearData(prev => ({
                     ...prev,
                     [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? (key === 'buildingName' ? { ...b, name: value, details: { ...b.details, [key]: value } } : { ...b, details: { ...b.details, [key]: value } }) : b)
                 }));
             };
 
+            // --- AUTHENTICATION FUNCTIONS ---
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                try {
+                    // Check if email is allowed
+                    if (allowedEmails.length > 0 && !allowedEmails.includes(loginEmail)) {
+                        setAuthError('Access denied. Your email is not authorized. Contact your administrator.');
+                        return;
+                    }
+                    
+                    const { signInWithEmailAndPassword } = window.FirebaseSDK;
+                    await signInWithEmailAndPassword(window.firebaseAuth, loginEmail, loginPassword);
+                    console.log('✅ Login successful');
+                } catch (error) {
+                    console.error('Login error:', error);
+                    setAuthError(error.code === 'auth/user-not-found' ? 'No account found with this email.' : 
+                                 error.code === 'auth/wrong-password' ? 'Incorrect password.' :
+                                 error.message);
+                }
+            };
+
+            const handleSignup = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                try {
+                    // Check if email is allowed
+                    if (allowedEmails.length > 0 && !allowedEmails.includes(loginEmail)) {
+                        setAuthError('Access denied. Your email is not authorized. Contact your administrator to request access.');
+                        return;
+                    }
+                    
+                    const { createUserWithEmailAndPassword, updateProfile } = window.FirebaseSDK;
+                    const userCredential = await createUserWithEmailAndPassword(window.firebaseAuth, loginEmail, loginPassword);
+                    await updateProfile(userCredential.user, { displayName: loginName });
+                    console.log('✅ Signup successful');
+                } catch (error) {
+                    console.error('Signup error:', error);
+                    setAuthError(error.code === 'auth/email-already-in-use' ? 'An account with this email already exists.' :
+                                 error.code === 'auth/weak-password' ? 'Password should be at least 6 characters.' :
+                                 error.message);
+                }
+            };
+
+            const handleLogout = async () => {
+                try {
+                    const { signOut } = window.FirebaseSDK;
+                    await signOut(window.firebaseAuth);
+                    setView('login');
+                    viewRef.current = 'login';
+                    console.log('✅ Logged out');
+                } catch (error) {
+                    console.error('Logout error:', error);
+                }
+            };
+            
+            const addAllowedEmail = async () => {
+                if (!newEmail || !newEmail.includes('@')) {
+                    alert('Please enter a valid email address');
+                    return;
+                }
+                try {
+                    const { doc, setDoc } = window.FirebaseSDK;
+                    const updatedEmails = [...allowedEmails, newEmail.toLowerCase()];
+                    await setDoc(doc(db, `apps/${APP_ID}/settings/allowed_emails`), {
+                        emails: updatedEmails,
+                        updatedBy: user.email,
+                        updatedAt: new Date().toISOString()
+                    });
+                    setAllowedEmails(updatedEmails);
+                    setNewEmail('');
+                    console.log('✅ Email added to whitelist:', newEmail);
+                } catch (error) {
+                    console.error('Failed to add email:', error);
+                    alert('Failed to add email: ' + error.message);
+                }
+            };
+            
+            const removeAllowedEmail = async (email) => {
+                try {
+                    const { doc, setDoc } = window.FirebaseSDK;
+                    const updatedEmails = allowedEmails.filter(e => e !== email);
+                    await setDoc(doc(db, `apps/${APP_ID}/settings/allowed_emails`), {
+                        emails: updatedEmails,
+                        updatedBy: user.email,
+                        updatedAt: new Date().toISOString()
+                    });
+                    setAllowedEmails(updatedEmails);
+                    console.log('✅ Email removed from whitelist:', email);
+                } catch (error) {
+                    console.error('Failed to remove email:', error);
+                    alert('Failed to remove email: ' + error.message);
+                }
+            };
+            
+            const makeAdmin = async (email) => {
+                try {
+                    const { doc, setDoc, getDoc } = window.FirebaseSDK;
+                    const adminDocRef = doc(db, `apps/${APP_ID}/settings/admins`);
+                    const adminDoc = await getDoc(adminDocRef);
+                    const currentAdmins = adminDoc.exists() ? adminDoc.data().emails || [] : [];
+                    
+                    if (!currentAdmins.includes(email)) {
+                        currentAdmins.push(email);
+                        await setDoc(adminDocRef, {
+                            emails: currentAdmins,
+                            updatedBy: user.email,
+                            updatedAt: new Date().toISOString()
+                        });
+                        console.log('✅ Made admin:', email);
+                        alert(`${email} is now an admin`);
+                    }
+                } catch (error) {
+                    console.error('Failed to make admin:', error);
+                    alert('Failed to update admin: ' + error.message);
+                }
+            };
+
+            // Log changes to Firestore
+            const logChange = async (action, details) => {
+                if (!db || !user) return;
+                try {
+                    const { addDoc, collection, serverTimestamp } = window.FirebaseSDK;
+                    await addDoc(collection(db, `apps/${APP_ID}/audit_log`), {
+                        timestamp: serverTimestamp(),
+                        user: user.email || user.displayName || 'Unknown',
+                        userId: user.uid,
+                        action,
+                        details,
+                        year: selectedYear,
+                        buildingId: selectedBuildingId
+                    });
+                } catch (error) {
+                    console.error('Failed to log change:', error);
+                }
+            };
+
+            // --- LOGIN VIEW ---
+            if (!authInitialized) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Initializing...</p>
+                        </div>
+                    </div>
+                );
+            }
+            
+            // Show loading while data loads from cloud
+            if (isLoadingData && user && user.email) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading data...</p>
+                            <p className="text-xs text-gray-400 mt-2">{user.email}</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'login' && !user) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
+                        <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-md">
+                            <h1 className="text-3xl font-black text-center mb-2 text-gray-800">🔥 Fire Inspection</h1>
+                            <p className="text-center text-gray-500 text-sm mb-8">Team Collaboration Portal</p>
+                            
+                            <form onSubmit={isSignup ? handleSignup : handleLogin} className="space-y-4">
+                                {isSignup && (
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Full Name</label>
+                                        <input 
+                                            type="text"
+                                            value={loginName}
+                                            onChange={(e) => setLoginName(e.target.value)}
+                                            placeholder="John Doe"
+                                            required
+                                            className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Email</label>
+                                    <input 
+                                        type="email"
+                                        value={loginEmail}
+                                        onChange={(e) => setLoginEmail(e.target.value)}
+                                        placeholder="inspector@example.com"
+                                        required
+                                        className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Password</label>
+                                    <input 
+                                        type="password"
+                                        value={loginPassword}
+                                        onChange={(e) => setLoginPassword(e.target.value)}
+                                        placeholder="••••••••"
+                                        required
+                                        className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+                                
+                                {authError && (
+                                    <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-sm">
+                                        {authError}
+                                    </div>
+                                )}
+                                
+                                <button 
+                                    type="submit"
+                                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold uppercase tracking-wide hover:bg-blue-700 active:scale-95 transition-transform"
+                                >
+                                    {isSignup ? 'Create Account' : 'Sign In'}
+                                </button>
+                            </form>
+                            
+                            <div className="mt-6 text-center">
+                                <button 
+                                    onClick={() => { setIsSignup(!isSignup); setAuthError(''); }}
+                                    className="text-blue-600 text-sm font-semibold hover:underline"
+                                >
+                                    {isSignup ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (view === 'settings' && isAdmin) return (
+                <div className="p-4 space-y-4">
+                    <div className="flex items-center justify-between mb-4">
+                        <button onClick={() => { setView('year-select'); viewRef.current = 'year-select'; }} className="text-blue-600 font-bold p-1">← Back</button>
+                        <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Settings</h1>
+                        <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase">Logout</button>
+                    </div>
+                    
+                    <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
+                        <h2 className="text-lg font-bold text-gray-800">Allowed Emails</h2>
+                        <p className="text-sm text-gray-600">Only these emails can sign up and access the app.</p>
+                        
+                        <div className="flex gap-2">
+                            <input 
+                                type="email"
+                                value={newEmail}
+                                onChange={(e) => setNewEmail(e.target.value)}
+                                placeholder="email@example.com"
+                                className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl"
+                            />
+                            <button 
+                                onClick={addAllowedEmail}
+                                className="px-4 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 active:scale-95 transition-transform"
+                            >
+                                Add
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {allowedEmails.length === 0 && (
+                                <div className="text-center py-8 text-gray-400">
+                                    <p className="font-semibold">No emails added yet</p>
+                                    <p className="text-xs mt-2">Add emails above to control who can access the app</p>
+                                </div>
+                            )}
+                            {allowedEmails.map(email => (
+                                <div key={email} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                    <span className="font-medium text-gray-700">{email}</span>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            onClick={() => makeAdmin(email)}
+                                            className="text-xs px-3 py-1 bg-purple-100 text-purple-600 rounded-lg font-bold hover:bg-purple-200"
+                                        >
+                                            Make Admin
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                if (confirm(`Remove ${email} from allowed list?`)) {
+                                                    removeAllowedEmail(email);
+                                                }
+                                            }}
+                                            className="text-red-500 font-bold px-2 hover:bg-red-50 rounded"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="pt-4 border-t">
+                            <p className="text-xs text-gray-500">
+                                💡 <strong>Tip:</strong> Users must be on this list to sign up or log in. Remove users to revoke access.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+
             if (view === 'year-select') return (
                 <div className="p-4 space-y-4">
-                    <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
+                    <div className="flex items-center justify-between mb-4">
+                        <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
+                        <div className="flex items-center gap-3">
+                            {isAdmin && (
+                                <button 
+                                    onClick={() => { setView('settings'); viewRef.current = 'settings'; }}
+                                    className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200"
+                                >
+                                    ⚙️ Settings
+                                </button>
+                            )}
+                            <div className="text-right">
+                                <p className="text-xs font-semibold text-gray-700">{user?.displayName || user?.email || 'User'}</p>
+                                <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase">Logout</button>
+                            </div>
+                        </div>
+                    </div>
                     {Object.keys(yearData).sort().reverse().map(year => (
-                        <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); }} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer active:bg-gray-50">
+                        <div key={year} onClick={() => { setSelectedYear(year); setView('building-select'); viewRef.current = 'building-select'; }} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer active:bg-gray-50">
                             <span className="font-bold text-lg text-gray-700">Year {year}</span>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{yearData[year].length} Buildings</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{(yearData[year] || []).length} Buildings</span>
                         </div>
                     ))}
                     <button onClick={() => setActiveModal({ type: 'input', title: 'Add New Year', onConfirm: (val) => { if(val && !yearData[val]) setYearData(prev => ({ ...prev, [val]: [] })); setActiveModal(null); } })} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Year</button>
@@ -924,43 +1456,53 @@
                 <div className="p-4 space-y-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <button onClick={() => setView('year-select')} className="text-blue-600 font-bold p-1">←</button>
+                            <button onClick={() => { setView('year-select'); viewRef.current = 'year-select'; }} className="text-blue-600 font-bold p-1">←</button>
                             <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
                         </div>
-                        <button 
-                            onClick={() => syncToCloud()} 
-                            disabled={syncStatus === 'syncing'}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                                syncStatus === 'syncing' ? 'bg-blue-100 text-blue-400' :
-                                syncStatus === 'success' ? 'bg-green-500 text-white' :
-                                syncStatus === 'error' ? 'bg-red-500 text-white' :
-                                'bg-blue-600 text-white active:scale-95'
-                            }`}
-                        >
-                            {syncStatus === 'syncing' ? '⟳ Syncing...' :
-                             syncStatus === 'success' ? '✓ Synced' :
-                             syncStatus === 'error' ? '✕ Error' :
-                             '☁ Sync'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => syncToCloud()} 
+                                disabled={syncStatus === 'syncing'}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                    syncStatus === 'syncing' ? 'bg-blue-100 text-blue-400' :
+                                    syncStatus === 'success' ? 'bg-green-500 text-white' :
+                                    syncStatus === 'error' ? 'bg-red-500 text-white' :
+                                    'bg-blue-600 text-white active:scale-95'
+                                }`}
+                            >
+                                {syncStatus === 'syncing' ? '⟳ Syncing...' :
+                                 syncStatus === 'success' ? '✓ Synced' :
+                                 syncStatus === 'error' ? '✕ Error' :
+                                 '☁ Sync'}
+                            </button>
+                            <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase">Logout</button>
+                        </div>
                     </div>
                     {lastSyncTime && (
                         <div className="text-[10px] text-gray-400 text-center font-semibold">
                             Last synced: {new Date(lastSyncTime).toLocaleString()}
                         </div>
                     )}
-                    {yearData[selectedYear].map(b => {
+                    {(!yearData[selectedYear] || yearData[selectedYear].length === 0) && (
+                        <div className="text-center py-12 text-gray-400">
+                            <p className="font-semibold">No buildings for {selectedYear}</p>
+                            <p className="text-xs mt-2">Add a building below to get started</p>
+                        </div>
+                    )}
+                    {(yearData[selectedYear] || []).map(b => {
+                        if (!b || !b.id) return null; // Safety check
                         const status = getBuildingStatus(b);
                         return (
-                            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
+                            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); viewRef.current = 'form'; }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
                                 <div>
-                                    <h3 className="font-bold text-gray-800">{b.name}</h3>
+                                    <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
                                     <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
                                 </div>
                                 <button onClick={(e) => { e.stopPropagation(); setActiveModal({ type: 'confirm', title: 'Delete Building?', isDanger: true, onConfirm: () => { setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].filter(x => x.id !== b.id) })); setActiveModal(null); } }); }} className="text-red-200 p-2 text-xl">✕</button>
                             </div>
                         );
                     })}
-                    <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...prev[selectedYear], getNewBuildingTemplate(`New Building ${yearData[selectedYear].length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
+                    <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
                 </div>
             );
@@ -971,12 +1513,20 @@
                     activeBuilding.data[s.id].forEach(i => { if (i.status === 'failed') allDeficiencies.push({ ...i, section: s.id }); });
                 });
             }
+            
+            // If in form view but no active building, go back
+            if (view === 'form' && !activeBuilding) {
+                console.warn('No active building found, returning to building select');
+                setView('building-select');
+                viewRef.current = 'building-select';
+                return null;
+            }
 
             return (
                 <div className="pb-44">
                     <div className="bg-white p-4 sticky top-0 border-b z-50">
                         <div className="flex justify-between items-center mb-2">
-                            <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Save</button>
+                            <button onClick={() => { setView('building-select'); viewRef.current = 'building-select'; }} className="text-blue-600 font-bold px-2 py-1">← Save</button>
                             <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[40%]">{activeBuilding.name}</h2>
                             <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export PDF</button>
                         </div>
@@ -1112,7 +1662,7 @@
                     </div>
 
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50">
-                        <button onClick={() => setView('building-select')} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
+                        <button onClick={() => { setView('building-select'); viewRef.current = 'building-select'; }} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
                             Save & Exit
                         </button>
                     </div>

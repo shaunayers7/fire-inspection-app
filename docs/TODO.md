@@ -13,9 +13,14 @@
 - [x] check for any rogue dependancies
 
 ## Phase 3: Design Changes
-- [ ]
-- [ ]
-- [ ]
-- [ ]
-- [ ]
-- [ ]
+- [ ] 1. Be able to copy any building with keeping the building details, Pre-job checklists, any added devices and notes for locations, So basically if we found an exptra device, and add it, the next year it gets copied to the new check sheet, but the checks get reset so that we can check and "X" it for a neew inspection. All the headings and subheadings stay the same
+, battery health and titles are the same but with a blank input field to add a new value.
+- [ ] 2.add a section to add a name of who is doing the inspection from Electric Boyes
+- [ ] 3.add further descriptions to all sections if pressed on an information icon so that it explains further what the category or heading means, and these are also editable and saved, also will copy to the next years building
+- [ ] 4.Make sure the firebass is working
+- [ ] 5.
+- [ ] 6.
+
+## Phase 3: Design Changes
+- [ ] 1.
+- [ ] 2.
