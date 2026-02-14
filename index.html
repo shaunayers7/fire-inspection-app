@@ -28,25 +28,52 @@
             font-family: 'Inter', sans-serif; 
             background-color: #F2F2F7; 
             -webkit-tap-highlight-color: transparent; 
-            overscroll-behavior-y: contain;
+            overscroll-behavior-y: none;
             user-select: none;
+            /* iOS smooth scrolling */
+            -webkit-overflow-scrolling: touch;
+            overflow-y: auto;
+            /* Fixed positioning for iOS */
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
-        input, select, textarea { font-size: 16px !important; user-select: text; }
+        
+        #root {
+            height: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* iOS momentum scrolling for all scrollable areas */
+        * {
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        input, select, textarea { 
+            font-size: 16px !important; 
+            user-select: text;
+            -webkit-user-select: text;
+        }
         @media (min-width: 640px) {
             input, select, textarea { font-size: 14px !important; }
         }
-        input:focus, select:focus, textarea:focus { outline: none; background-color: #F9FAFB; }
+        input:focus, select:focus, textarea:focus { 
+            outline: none; 
+            background-color: #F9FAFB;
+        }
         
-        /* Long-press Drag Animations */
+        /* Long-press Drag Animations - only block touch when actively dragging */
         .draggable-item {
             transition: transform 0.2s, box-shadow 0.2s;
-            touch-action: none;
+            touch-action: pan-y; /* Allow vertical scrolling */
         }
         .is-dragging {
             transform: scale(1.02);
             box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
             z-index: 99;
             opacity: 0.9;
+            touch-action: none; /* Only block touch when actively dragging */
         }
         .drag-placeholder {
             border: 2px dashed #cbd5e1;
@@ -97,32 +124,64 @@
         const useDragAndDrop = (items, onReorder) => {
             const [draggingId, setDraggingId] = useState(null);
             const timerRef = useRef(null);
+            const touchStartPos = useRef({ x: 0, y: 0 });
+            const hasMoved = useRef(false);
             
             const onTouchStart = (id) => (e) => {
+                // Record start position
+                touchStartPos.current = {
+                    x: e.touches[0].clientX,
+                    y: e.touches[0].clientY
+                };
+                hasMoved.current = false;
+                
+                // Start long-press timer (1.5 seconds)
                 timerRef.current = setTimeout(() => {
-                    setDraggingId(id);
-                    if (window.navigator.vibrate) window.navigator.vibrate(50);
+                    // Only activate drag if user hasn't scrolled
+                    if (!hasMoved.current) {
+                        setDraggingId(id);
+                        if (window.navigator.vibrate) window.navigator.vibrate(50);
+                    }
                 }, 1500);
+            };
+
+            const onTouchMove = (id) => (e) => {
+                // Check if user is scrolling (moved more than 10px)
+                if (!draggingId && timerRef.current) {
+                    const deltaX = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
+                    const deltaY = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
+                    
+                    if (deltaY > 10 || deltaX > 10) {
+                        // User is scrolling, cancel drag
+                        hasMoved.current = true;
+                        clearTimeout(timerRef.current);
+                        timerRef.current = null;
+                        return;
+                    }
+                }
+                
+                // If actively dragging, handle reorder
+                if (draggingId) {
+                    e.preventDefault(); // Only prevent default when actively dragging
+                    const touch = e.touches[0];
+                    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+                    const targetId = element?.closest('[data-drag-id]')?.getAttribute('data-drag-id');
+                    
+                    if (targetId && targetId !== draggingId) {
+                        const fromIndex = items.findIndex(i => i.id === draggingId);
+                        const toIndex = items.findIndex(i => i.id === targetId);
+                        if (fromIndex !== -1 && toIndex !== -1) {
+                            onReorder(fromIndex, toIndex);
+                        }
+                    }
+                }
             };
 
             const onTouchEnd = () => {
                 if (timerRef.current) clearTimeout(timerRef.current);
+                timerRef.current = null;
                 setDraggingId(null);
-            };
-
-            const onTouchMove = (id) => (e) => {
-                if (!draggingId) return;
-                const touch = e.touches[0];
-                const element = document.elementFromPoint(touch.clientX, touch.clientY);
-                const targetId = element?.closest('[data-drag-id]')?.getAttribute('data-drag-id');
-                
-                if (targetId && targetId !== draggingId) {
-                    const fromIndex = items.findIndex(i => i.id === draggingId);
-                    const toIndex = items.findIndex(i => i.id === targetId);
-                    if (fromIndex !== -1 && toIndex !== -1) {
-                        onReorder(fromIndex, toIndex);
-                    }
-                }
+                hasMoved.current = false;
             };
 
             return { draggingId, onTouchStart, onTouchEnd, onTouchMove };
@@ -888,7 +947,7 @@
             }
 
             return (
-                <div className="pb-44" onTouchMove={sectionDrag.onTouchMove()}>
+                <div className="pb-44">
                     <div className="bg-white p-4 sticky top-0 border-b z-50">
                         <div className="flex justify-between items-center mb-2">
                             <button onClick={() => setView('building-select')} className="text-blue-600 font-bold px-2 py-1">← Save</button>
@@ -936,12 +995,13 @@
                                 <div 
                                     key={s.id} 
                                     data-drag-id={s.id}
+                                    onTouchStart={sectionDrag.onTouchStart(s.id)}
+                                    onTouchMove={sectionDrag.onTouchMove(s.id)}
+                                    onTouchEnd={sectionDrag.onTouchEnd}
                                     className={`rounded-xl border overflow-hidden shadow-sm draggable-item ${isSectionDragging ? 'is-dragging' : ''}`}
                                 >
                                     <div className={`w-full ${s.color} text-white p-3 flex justify-between items-center`}>
                                         <button 
-                                            onTouchStart={sectionDrag.onTouchStart(s.id)}
-                                            onTouchEnd={sectionDrag.onTouchEnd}
                                             onClick={() => setExpandedSections(p => ({...p, [s.id]: !p[s.id]}))} 
                                             className="flex-1 text-left font-bold text-xs uppercase"
                                         >
