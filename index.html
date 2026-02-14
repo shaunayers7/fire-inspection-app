@@ -132,7 +132,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.3.0'; // Updated: Feb 14, 2026 - Password reset + specific error messages (EMAIL vs PASSWORD)
+        const APP_VERSION = '2.4.0'; // Updated: Feb 14, 2026 - Admin user management tools
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
@@ -394,6 +394,7 @@
             const [isSignup, setIsSignup] = useState(false);
             const [authError, setAuthError] = useState('');
             const [allowedEmails, setAllowedEmails] = useState([]);
+            const [adminEmails, setAdminEmails] = useState([]);
             const [newEmail, setNewEmail] = useState('');
             const [isAdmin, setIsAdmin] = useState(false);
             const viewRef = useRef('login');
@@ -776,19 +777,16 @@
                 console.log('📱 Device:', navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop');
                 console.log('🔄 Expected log format: emoji-based messages (🔄, 🗑️, ✨, ☁️)');
                 
-                // CRITICAL: Check if we have the new sync logic
+                // Check if we have the new sync logic (informational only, no alert)
                 const syncFunctionString = syncToCloud.toString();
                 const hasNewLogic = syncFunctionString.includes('Starting merge') || syncFunctionString.includes('REMOVING building');
                 
                 if (!hasNewLogic) {
-                    console.error('❌ OLD CODE DETECTED! You are running cached outdated code.');
-                    console.error('📱 iOS FIX: Close ALL Safari tabs, then open Settings → Safari → Clear History and Website Data');
-                    alert('⚠️ OUTDATED CODE DETECTED\n\nYour browser cached old code. To fix:\n\n1. Close ALL tabs\n2. Settings → Safari → Clear History\n3. Reopen the app\n\nDeletions will NOT sync until you do this!');
+                    console.warn('⚠️ Old code detection triggered, but this might be a false positive.');
+                    console.log('✅ If sync is working properly, you can ignore this warning.');
                 } else {
                     console.log('✅ Running latest code with smart deletion sync');
                 }
-                
-                console.log('💡 If you see old-style logs, do: Ctrl+Shift+R (hard refresh)');
             }, []);
 
             useEffect(() => {
@@ -853,6 +851,13 @@
                     viewRef.current = 'year-select';
                 }
             }, [isLoadingData, user, view]);
+
+            // Load admin list when settings view is opened
+            useEffect(() => {
+                if (view === 'settings' && isAdmin && db) {
+                    loadAdminList();
+                }
+            }, [view, isAdmin, db]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -1407,6 +1412,19 @@
                 }
             };
             
+            const loadAdminList = async () => {
+                try {
+                    const { doc, getDoc } = window.FirebaseSDK;
+                    const adminDocRef = doc(db, `apps/${APP_ID}/settings/admins`);
+                    const adminDoc = await getDoc(adminDocRef);
+                    const admins = adminDoc.exists() ? adminDoc.data().emails || [] : [];
+                    setAdminEmails(admins);
+                    console.log('👑 Admin list loaded:', admins.length);
+                } catch (error) {
+                    console.error('Failed to load admin list:', error);
+                }
+            };
+
             const makeAdmin = async (email) => {
                 try {
                     const { doc, setDoc, getDoc } = window.FirebaseSDK;
@@ -1421,12 +1439,48 @@
                             updatedBy: user.email,
                             updatedAt: new Date().toISOString()
                         });
+                        setAdminEmails(currentAdmins);
                         console.log('✅ Made admin:', email);
                         alert(`${email} is now an admin`);
+                    } else {
+                        alert(`${email} is already an admin`);
                     }
                 } catch (error) {
                     console.error('Failed to make admin:', error);
                     alert('Failed to update admin: ' + error.message);
+                }
+            };
+
+            const removeAdmin = async (email) => {
+                if (adminEmails.length === 1) {
+                    alert('⚠️ Cannot remove the last admin. Add another admin first.');
+                    return;
+                }
+                if (email === user.email) {
+                    if (!confirm('⚠️ You are removing yourself as admin. You will lose access to settings. Continue?')) {
+                        return;
+                    }
+                }
+                try {
+                    const { doc, setDoc } = window.FirebaseSDK;
+                    const updatedAdmins = adminEmails.filter(e => e !== email);
+                    await setDoc(doc(db, `apps/${APP_ID}/settings/admins`), {
+                        emails: updatedAdmins,
+                        updatedBy: user.email,
+                        updatedAt: new Date().toISOString()
+                    });
+                    setAdminEmails(updatedAdmins);
+                    console.log('✅ Admin removed:', email);
+                    alert(`${email} removed from admins`);
+                    
+                    if (email === user.email) {
+                        setIsAdmin(false);
+                        setView('year-select');
+                        viewRef.current = 'year-select';
+                    }
+                } catch (error) {
+                    console.error('Failed to remove admin:', error);
+                    alert('Failed to remove admin: ' + error.message);
                 }
             };
 
@@ -1565,7 +1619,11 @@
                     <div className="flex items-center justify-between mb-4">
                         <button onClick={() => { setView('year-select'); viewRef.current = 'year-select'; }} className="text-blue-600 font-bold p-1">← Back</button>
                         <h1 className="text-xl font-black uppercase tracking-tighter text-gray-800">Settings</h1>
-                        <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase">Logout</button>
+                        <div className="text-right">
+                            <p className="text-xs font-semibold text-gray-700">{user?.displayName || 'User'}</p>
+                            <p className="text-[9px] text-gray-500 font-medium">{user?.email}</p>
+                            <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase mt-0.5">Logout</button>
+                        </div>
                     </div>
                     
                     <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
@@ -1597,13 +1655,23 @@
                             )}
                             {allowedEmails.map(email => (
                                 <div key={email} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                                    <span className="font-medium text-gray-700">{email}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-medium text-gray-700">{email}</span>
+                                        {adminEmails.includes(email) && (
+                                            <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-600 rounded-full font-bold">ADMIN</span>
+                                        )}
+                                    </div>
                                     <div className="flex gap-2">
                                         <button 
                                             onClick={() => makeAdmin(email)}
-                                            className="text-xs px-3 py-1 bg-purple-100 text-purple-600 rounded-lg font-bold hover:bg-purple-200"
+                                            disabled={adminEmails.includes(email)}
+                                            className={`text-xs px-3 py-1 rounded-lg font-bold ${
+                                                adminEmails.includes(email) 
+                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                                                : 'bg-purple-100 text-purple-600 hover:bg-purple-200'
+                                            }`}
                                         >
-                                            Make Admin
+                                            {adminEmails.includes(email) ? '✓ Admin' : 'Make Admin'}
                                         </button>
                                         <button 
                                             onClick={() => {
@@ -1626,6 +1694,67 @@
                             </p>
                         </div>
                     </div>
+                    
+                    <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-800">👑 Admin Users</h2>
+                                <p className="text-sm text-gray-600">Admins can manage settings and user access.</p>
+                            </div>
+                            <button 
+                                onClick={loadAdminList}
+                                className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200"
+                            >
+                                🔄 Refresh
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {adminEmails.length === 0 && (
+                                <div className="text-center py-8 text-gray-400">
+                                    <p className="font-semibold">No admins found</p>
+                                    <p className="text-xs mt-2">Click Refresh to load admin list</p>
+                                </div>
+                            )}
+                            {adminEmails.map(email => (
+                                <div key={email} className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border-2 border-purple-200">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-purple-600 font-bold">👑</span>
+                                        <span className="font-semibold text-gray-800">{email}</span>
+                                        {email === user?.email && (
+                                            <span className="text-[10px] px-2 py-0.5 bg-purple-200 text-purple-700 rounded-full font-bold">YOU</span>
+                                        )}
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            if (confirm(`Remove ${email} from admins?`)) {
+                                                removeAdmin(email);
+                                            }
+                                        }}
+                                        className="text-red-500 font-bold px-2 hover:bg-red-50 rounded text-sm"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="pt-4 border-t">
+                            <p className="text-xs text-gray-500">
+                                ⚠️ <strong>Warning:</strong> At least one admin must exist. Removing yourself will revoke your admin access.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
+                        <h3 className="text-sm font-bold text-blue-800 mb-2">📋 User Management Tips</h3>
+                        <ul className="text-xs text-blue-700 space-y-2">
+                            <li>• <strong>Allowed Emails:</strong> Users must be on this list to create accounts</li>
+                            <li>• <strong>Make Admin:</strong> Click on any allowed email to promote them to admin</li>
+                            <li>• <strong>Delete Users in Firebase:</strong> Go to Firebase Console → Authentication → Users to delete accounts</li>
+                            <li>• <strong>Anonymous Users:</strong> Can be safely deleted from Firebase - app only uses email/password</li>
+                        </ul>
+                    </div>
                 </div>
             );
 
@@ -1643,8 +1772,9 @@
                                 </button>
                             )}
                             <div className="text-right">
-                                <p className="text-xs font-semibold text-gray-700">{user?.displayName || user?.email || 'User'}</p>
-                                <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase">Logout</button>
+                                <p className="text-xs font-semibold text-gray-700">{user?.displayName || 'User'}</p>
+                                <p className="text-[9px] text-gray-500 font-medium">{user?.email}</p>
+                                <button onClick={handleLogout} className="text-[10px] text-red-500 font-bold uppercase mt-0.5">Logout</button>
                             </div>
                         </div>
                     </div>
@@ -1677,7 +1807,11 @@
                             <button onClick={() => { setView('year-select'); viewRef.current = 'year-select'; }} className="text-blue-600 font-bold p-1">←</button>
                             <h1 className="text-xl font-black uppercase">Buildings {selectedYear}</h1>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
+                            <div className="text-right">
+                                <p className="text-xs font-semibold text-gray-700">{user?.displayName || 'User'}</p>
+                                <p className="text-[9px] text-gray-500 font-medium">{user?.email}</p>
+                            </div>
                             <button 
                                 onClick={() => syncFromCloud()} 
                                 disabled={syncStatus === 'syncing'}
