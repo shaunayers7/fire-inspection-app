@@ -38,6 +38,7 @@ You already enabled Anonymous auth. Now add Email/Password:
    - Your full name
    - Your email
    - A password (6+ characters)
+  - Confirm password (must match)
 5. Click **"Create Account"**
 6. You'll be automatically logged in!
 
