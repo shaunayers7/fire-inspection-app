@@ -128,7 +128,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.4.1'; // Updated: Feb 14, 2026 - Password reset fix + Firebase import cleanup
+        const APP_VERSION = '2.4.3'; // Updated: Feb 15, 2026 - Fixed blank screen after login (race condition fix)
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
@@ -1524,7 +1524,22 @@
                 );
             }
 
-            if (view === 'login' && !user) {
+            if (view === 'login') {
+                // If user is already logged in, redirect to year-select
+                if (user && user.email) {
+                    console.log('⚠️ Already logged in, redirecting to year-select');
+                    setView('year-select');
+                    viewRef.current = 'year-select';
+                    return (
+                        <div className="flex items-center justify-center min-h-screen bg-gray-100">
+                            <div className="text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                <p className="text-gray-600">Redirecting...</p>
+                            </div>
+                        </div>
+                    );
+                }
+                
                 return (
                     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
                         <div className="bg-white rounded-3xl shadow-xl p-8 w-full max-w-md">
