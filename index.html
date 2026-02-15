@@ -17,8 +17,8 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         
         window.FirebaseSDK = { 
             initializeApp, 
@@ -30,16 +30,12 @@
             collection, 
             getDocs, 
             addDoc,
-            query,
-            orderBy,
-            limit,
             serverTimestamp,
             getAuth, 
-            signInAnonymously, 
             onAuthStateChanged, 
-            signInWithCustomToken,
             createUserWithEmailAndPassword,
             signInWithEmailAndPassword,
+            sendPasswordResetEmail,
             signOut,
             updateProfile
         };
@@ -132,7 +128,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.4.0'; // Updated: Feb 14, 2026 - Admin user management tools
+        const APP_VERSION = '2.4.1'; // Updated: Feb 14, 2026 - Password reset fix + Firebase import cleanup
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
@@ -658,7 +654,7 @@
                             return;
                         }
 
-                        const { initializeApp, getFirestore, getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.FirebaseSDK;
+                        const { initializeApp, getFirestore, getAuth, onAuthStateChanged } = window.FirebaseSDK;
                         const config = JSON.parse(window.__firebase_config);
                         
                         // Check if config has placeholder values
