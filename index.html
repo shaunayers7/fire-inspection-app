@@ -128,11 +128,12 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.4.1'; // Updated: Feb 14, 2026 - Password reset fix + Firebase import cleanup
+        const APP_VERSION = '2.4.2'; // Updated: Feb 15, 2026 - Auto-sync improvements + unsaved changes warnings
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
+        const LAST_EDIT_KEY = 'fire_inspection_last_edit_time';
 
         // Permanent Core Sections IDs
         const PROTECTED_SECTIONS = ['checklist', 'control', 'devices', 'battery', 'lights'];
@@ -396,6 +397,8 @@
             const viewRef = useRef('login');
             const [isLoadingData, setIsLoadingData] = useState(true);
             const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
+            const [hasUnsyncedChanges, setHasUnsyncedChanges] = useState(false);
+            const [lastEditTime, setLastEditTime] = useState(null);
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -794,6 +797,12 @@
                     return;
                 }
                 
+                // Mark that we have unsaved changes and record edit time
+                const editTime = Date.now();
+                setLastEditTime(editTime);
+                localStorage.setItem(LAST_EDIT_KEY, editTime.toString());
+                setHasUnsyncedChanges(true);
+                
                 // Auto-sync with debounce (5 seconds after last change)
                 if (db && user) {
                     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
@@ -854,6 +863,33 @@
                     loadAdminList();
                 }
             }, [view, isAdmin, db]);
+            
+            // Warn before closing/refreshing if there are unsaved changes
+            useEffect(() => {
+                const handleBeforeUnload = (e) => {
+                    if (hasUnsyncedChanges) {
+                        const message = 'You have unsaved changes that haven\'t been synced to the cloud. Your changes are saved locally, but other team members won\'t see them until you sync.';
+                        e.preventDefault();
+                        e.returnValue = message;
+                        return message;
+                    }
+                };
+                
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+            }, [hasUnsyncedChanges]);
+            
+            // Check for unsaved changes on mount (in case of previous incomplete session)
+            useEffect(() => {
+                const lastEdit = localStorage.getItem(LAST_EDIT_KEY);
+                if (lastEdit && lastSyncTime) {
+                    const editTime = parseInt(lastEdit);
+                    const syncTime = new Date(lastSyncTime).getTime();
+                    if (editTime > syncTime) {
+                        setHasUnsyncedChanges(true);
+                    }
+                }
+            }, [lastSyncTime]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -873,6 +909,8 @@
                     await loadFromCloud(db, true);
                     
                     setSyncStatus('success');
+                    setHasUnsyncedChanges(false);
+                    localStorage.removeItem(LAST_EDIT_KEY);
                     console.log('✅ Sync from cloud complete!');
                     setTimeout(() => setSyncStatus('idle'), 2000);
                 } catch (error) {
@@ -995,6 +1033,10 @@
                     });
                     
                     setLastSyncTime(syncTime);
+                    
+                    // Clear unsaved changes flag
+                    setHasUnsyncedChanges(false);
+                    localStorage.removeItem(LAST_EDIT_KEY);
                     
                     // Update local state with merged data (mark as sync update to prevent loop)
                     isUpdatingFromSync.current = true;
@@ -1358,6 +1400,32 @@
             };
 
             const handleLogout = async () => {
+                // Check for unsaved changes
+                if (hasUnsyncedChanges) {
+                    const confirmLogout = confirm(
+                        '⚠️ You have unsaved changes that haven\'t been synced to the cloud.\n\n' +
+                        'Choose:\n' +
+                        '• OK = Sync now, then logout\n' +
+                        '• Cancel = Stay logged in'
+                    );
+                    
+                    if (!confirmLogout) {
+                        return; // User cancelled
+                    }
+                    
+                    // Sync before logout
+                    try {
+                        setSyncStatus('syncing');
+                        await syncToCloud();
+                        setSyncStatus('success');
+                        // Wait a moment to show success
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    } catch (error) {
+                        alert('❌ Sync failed. Your changes are saved locally but not synced. Try again or contact support.');
+                        return; // Don't logout if sync failed
+                    }
+                }
+                
                 try {
                     const { signOut } = window.FirebaseSDK;
                     await signOut(window.firebaseAuth);
@@ -1919,6 +1987,12 @@
                             <h2 className="font-black uppercase text-xs tracking-tight text-gray-600 truncate max-w-[40%]">{activeBuilding.name}</h2>
                             <button onClick={handleExport} className="bg-gray-50 p-2 rounded-lg text-blue-600 font-black text-[10px] uppercase border shadow-sm">Export PDF</button>
                         </div>
+                        {/* Unsynced changes warning */}
+                        {hasUnsyncedChanges && syncStatus === 'idle' && (
+                            <div className="text-[9px] font-bold text-center py-1 rounded bg-orange-50 text-orange-600 border border-orange-200">
+                                ⚠️ Unsaved changes • Auto-sync in 5 sec • Click "Save & Exit" to sync now
+                            </div>
+                        )}
                         {syncStatus !== 'idle' && (
                             <div className={`text-[9px] font-bold text-center py-1 rounded ${
                                 syncStatus === 'syncing' ? 'bg-blue-50 text-blue-600' :
@@ -2051,9 +2125,31 @@
                     </div>
 
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50">
-                        <button onClick={() => { setView('building-select'); viewRef.current = 'building-select'; }} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
-                            Save & Exit
-                        </button>
+                        {hasUnsyncedChanges ? (
+                            <button 
+                                onClick={async () => {
+                                    try {
+                                        setSyncStatus('syncing');
+                                        await syncToCloud();
+                                        setSyncStatus('success');
+                                        setTimeout(() => {
+                                            setView('building-select');
+                                            viewRef.current = 'building-select';
+                                        }, 500);
+                                    } catch (error) {
+                                        alert('Sync failed. Changes saved locally. Try again.');
+                                        setSyncStatus('error');
+                                    }
+                                }} 
+                                className="w-full bg-orange-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform"
+                            >
+                                ☁️ Sync & Exit
+                            </button>
+                        ) : (
+                            <button onClick={() => { setView('building-select'); viewRef.current = 'building-select'; }} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
+                                ✓ All Saved • Exit
+                            </button>
+                        )}
                     </div>
 
                     {activeModal && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
