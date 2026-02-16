@@ -178,10 +178,40 @@
                 { id: 'lights', title: 'Emergency lights', color: 'bg-[#EAB308]', isDev: false }
             ],
             data: {
-                checklist: Array(5).fill(0).map((_, i) => ({ id: `ck${i}-${Date.now()}`, label: `Checklist Item ${i+1}`, status: 'pending', note: '', photo: null, fixed: false })),
-                control: Array(7).fill(0).map((_, i) => ({ id: `c${i}-${Date.now()}`, label: `Control Point ${i+1}`, status: 'pending', note: '', photo: null, fixed: false })),
+                checklist: [
+                    { id: `ck0-${Date.now()}`, label: 'Building occupants informed of test', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `ck1-${Date.now()}`, label: 'Time established to test signal devices', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `ck2-${Date.now()}`, label: 'Access to locked doors', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `ck3-${Date.now()}`, label: 'Alternate plan made to alert of actual fire', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `ck4-${Date.now()}`, label: 'System placed on test with monitoring', status: 'pending', note: '', photo: null, fixed: false }
+                ],
+                control: [
+                    { id: `c0-${Date.now()}`, label: 'Power on indicator', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c1-${Date.now()}`, label: 'Common trouble indicator', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c2-${Date.now()}`, label: 'Common trouble signal', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c3-${Date.now()}`, label: 'A/C power failure trouble', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c4-${Date.now()}`, label: 'Ground detection lamp', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c5-${Date.now()}`, label: 'Ground detection signal', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c6-${Date.now()}`, label: 'General alarm', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c7-${Date.now()}`, label: 'Alarm silence', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c8-${Date.now()}`, label: 'Alarm silence lamp', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c9-${Date.now()}`, label: 'Alarm silence inhibit', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c10-${Date.now()}`, label: 'Alarm initiation individually circuit tested', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c11-${Date.now()}`, label: 'Alarm lamp operation', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c12-${Date.now()}`, label: 'Alarm lamp designation checked', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c13-${Date.now()}`, label: 'All audible alarm signals operated on A/C', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c14-${Date.now()}`, label: 'Glass and doors clean', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c15-${Date.now()}`, label: 'Panel condition and keys', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `c16-${Date.now()}`, label: 'Signal check with salt lake', status: 'pending', note: '', photo: null, fixed: false }
+                ],
                 devices: Array(28).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i+1).toString(), label: `Device ${i+1}`, type: 'Smoke Detector', status: 'pending', note: '', photo: null, fixed: false })),
-                battery: Array(7).fill(0).map((_, i) => ({ id: `b${i}-${Date.now()}`, label: `Battery Metric ${i+1}`, status: 'pending', note: '', photo: null, fixed: false })),
+                battery: [
+                    { id: `b0-${Date.now()}`, label: 'Battery AC on', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `b1-${Date.now()}`, label: 'Battery AC off', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `b2-${Date.now()}`, label: 'Battery under load', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `b3-${Date.now()}`, label: 'Battery clean tight terminals', status: 'pending', note: '', photo: null, fixed: false },
+                    { id: `b4-${Date.now()}`, label: 'Battery type', status: 'pending', note: '', photo: null, fixed: false }
+                ],
                 lights: Array(5).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `Emergency Light ${i+1}`, status: 'pending', note: '', photo: null, fixed: false })),
                 customDeficiencies: []
             }
