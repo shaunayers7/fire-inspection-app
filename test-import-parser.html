@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Import Parser</title>
+    <style>
+        body { font-family: monospace; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .test-section { margin: 30px 0; padding: 20px; border: 2px solid #ccc; border-radius: 8px; }
+        .success { background: #d4edda; border-color: #28a745; }
+        .error { background: #f8d7da; border-color: #dc3545; }
+        h2 { margin-top: 0; }
+        .detail { margin: 5px 0; padding: 5px; background: rgba(0,0,0,0.05); }
+        pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Import Parser Test Suite</h1>
+    <p>Testing the parseImportText function with different report formats...</p>
+    
+    <div id="results"></div>
+
+    <script>
+        // Copy the getNewBuildingTemplate function from index.html
+        const getNewBuildingTemplate = (name = 'New Building', address = '', city = '', initialStatus = 'not-started') => ({
+            id: `b-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name,
+            lastSynced: null,
+            details: {
+                buildingName: name,
+                address: address,
+                city: city,
+                panelLocation: '',
+                manufacturer: '',
+                panelModel: '',
+                serialNumber: 'N/A',
+                softwareVersion: 'N/A',
+                dateManufactured: 'N/A',
+                lastServiceDate: 'N/A'
+            },
+            sections: [
+                { id: 'checklist', title: 'Pre-job checklist', color: 'bg-orange-500', isDev: false },
+                { id: 'control', title: 'control equipment', color: 'bg-purple-600', isDev: false },
+                { id: 'devices', title: 'Device inventory', color: 'bg-[#1C252E]', isDev: true },
+                { id: 'battery', title: 'Battery health', color: 'bg-blue-500', isDev: false },
+                { id: 'lights', title: 'Emergency lights', color: 'bg-[#EAB308]', isDev: false }
+            ],
+            data: {
+                checklist: Array(5).fill(0).map((_, i) => ({ id: `ck${i}-${Date.now()}`, label: `Checklist Item ${i+1}`, status: initialStatus, note: '', photo: null, fixed: false })),
+                control: Array(16).fill(0).map((_, i) => ({ id: `c${i}-${Date.now()}`, label: `Control Equipment ${i+1}`, status: initialStatus, note: '', photo: null, fixed: false })),
+                devices: Array(10).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: `${i+1}`, label: `Device ${i+1}`, type: 'Smoke Detector', status: initialStatus, note: '', photo: null, fixed: false })),
+                battery: [
+                    { id: `b1-${Date.now()}`, label: 'Battery voltage AC on', status: initialStatus, note: '', photo: null, fixed: false },
+                    { id: `b2-${Date.now()}`, label: 'Battery under load', status: initialStatus, note: '', photo: null, fixed: false },
+                    { id: `b3-${Date.now()}`, label: 'Battery clean tight terminals', status: initialStatus, note: '', photo: null, fixed: false },
+                    { id: `b4-${Date.now()}`, label: 'Battery type', status: initialStatus, note: '', photo: null, fixed: false }
+                ],
+                lights: Array(5).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `Emergency Light ${i+1}`, status: initialStatus, note: '', photo: null, fixed: false })),
+                customDeficiencies: []
+            }
+        });
+
+        // Copy the updated parseImportText function
+        const parseImportText = (text) => {
+            const fullText = text.trim();
+            if (!fullText) return [];
+            
+            const lines = fullText.split('\n').map(l => l.trim());
+            const buildings = [];
+            
+            // Detect format: Check if this is a detailed inspection report or simple list
+            const isDetailedReport = fullText.includes('Fire Alarm panel') || 
+                                    fullText.includes('Annual Fire Alarm Inspection Report') ||
+                                    fullText.includes('FIRE INSPECTION REPORT') ||
+                                    (fullText.includes('Client:') && fullText.includes('Building:')) ||
+                                    fullText.includes('Manufacturer:') ||
+                                    fullText.includes('MANUFACTURER');
+            
+            if (isDetailedReport) {
+                // DETAILED FORMAT: Parse the entire text as ONE building
+                let buildingName = '';
+                let address = '';
+                let city = '';
+                let manufacturer = '';
+                let panelModel = '';
+                let panelLocation = '';
+                let serialNumber = '';
+                let softwareVersion = '';
+                let dateManufactured = '';
+                let lastServiceDate = '';
+                
+                // Helper to get value from next line (for table format)
+                const getNextLineValue = (idx) => {
+                    if (idx + 1 < lines.length) {
+                        const nextLine = lines[idx + 1].trim();
+                        // Skip if next line is also a label
+                        if (!nextLine.match(/^(BUILDING NAME|ADDRESS|CITY|PANEL LOCATION|MANUFACTURER|PANEL MODEL|SERIAL NUMBER|SOFTWARE VERSION|DATE MANUFACTURED|LAST SERVICE DATE)$/i)) {
+                            return nextLine;
+                        }
+                    }
+                    return '';
+                };
+                
+                lines.forEach((line, idx) => {
+                    // Skip empty lines
+                    if (line.length === 0) {
+                        return;
+                    }
+                    
+                    // TABLE FORMAT (Bellevue/Pincher Creek style)
+                    // Extract building details from structured table format
+                    if (line.match(/^BUILDING NAME$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value && !buildingName) buildingName = value;
+                    }
+                    if (line.match(/^ADDRESS$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value && !address) address = value;
+                    }
+                    if (line.match(/^CITY$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value && !city) city = value;
+                    }
+                    if (line.match(/^PANEL LOCATION$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) panelLocation = value;
+                    }
+                    if (line.match(/^MANUFACTURER$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) manufacturer = value;
+                    }
+                    if (line.match(/^PANEL MODEL$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) panelModel = value;
+                    }
+                    if (line.match(/^SERIAL NUMBER$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) serialNumber = value;
+                    }
+                    if (line.match(/^SOFTWARE VERSION$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) softwareVersion = value;
+                    }
+                    if (line.match(/^DATE MANUFACTURED$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) dateManufactured = value;
+                    }
+                    if (line.match(/^LAST SERVICE DATE$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) lastServiceDate = value;
+                    }
+                    
+                    // INLINE FORMAT (Old inspection reports)
+                    // Extract manufacturer and model from same line
+                    if (line.includes('Manufacturer:')) {
+                        const mfgMatch = line.match(/Manufacturer:\s*([A-Za-z0-9]+)/i);
+                        if (mfgMatch && !manufacturer) manufacturer = mfgMatch[1];
+                        
+                        // Extract model - everything after "Model #:" or "Model:" up to next field or end
+                        const modelMatch = line.match(/Model\s*#?:\s*(.+?)(?=\s*Panel\s+Located|\s*$)/i);
+                        if (modelMatch && !panelModel) {
+                            panelModel = modelMatch[1].trim();
+                        }
+                    }
+                    
+                    // Extract panel location (inline format)
+                    if (line.match(/^Panel\s+Located/i)) {
+                        const locValue = line.replace(/^Panel\s+Located\s*/i, '').trim();
+                        if (locValue && !panelLocation) panelLocation = locValue;
+                    }
+                    
+                    // Skip lines that are only form labels
+                    if (/^(Client:|Building:|Date:|Comments?:?|Address:)(\s+(Client:|Building:|Date:|Comments?:?|Address:))*\s*$/i.test(line)) {
+                        return;
+                    }
+                    
+                    // Handle line after label-only line - this is the actual building data (old format)
+                    if (idx > 0 && !buildingName && !line.includes('Manufacturer:') && !line.includes('Panel Located')) {
+                        const prevLine = lines[idx - 1];
+                        // Check if previous line was labels only
+                        if (/^(Client:|Building:|Date:|Comments?:?|Address:)/i.test(prevLine)) {
+                            // This line contains the building data
+                            let cleanText = line.trim();
+                            
+                            // Remove "LDS Church –" or similar prefixes
+                            cleanText = cleanText.replace(/^LDS Church\s*[-–—]\s*/i, '').trim();
+                            
+                            // Split into words to parse
+                            const words = cleanText.split(/\s+/).filter(w => w.length > 0);
+                            
+                            if (words.length >= 1) {
+                                // Find street type indicator (St, Ave, etc.)
+                                let streetIdx = -1;
+                                for (let i = 0; i < words.length; i++) {
+                                    if (/^(St\.?|Ave\.?|Avenue|Street|Rd\.?|Road|Dr\.?|Drive|Blvd\.?|Boulevard|Lane|Way|Parkway|Court|Ct\.?)$/i.test(words[i])) {
+                                        streetIdx = i;
+                                        break;
+                                    }
+                                }
+                                
+                                if (streetIdx > 0) {
+                                    // Found street type - last word is city, before that is address, rest is building name
+                                    city = words[words.length - 1];
+                                    
+                                    // Find where address starts (look for street name before street type)
+                                    let addressStart = streetIdx - 1;
+                                    
+                                    // Check if there's a street number (starts with digit)
+                                    for (let i = streetIdx - 1; i >= 0; i--) {
+                                        if (/^\d/.test(words[i])) {
+                                            addressStart = i;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    buildingName = words.slice(0, addressStart).join(' ');
+                                    address = words.slice(addressStart, streetIdx + 1).join(' ');
+                                } else {
+                                    // No street type found - use last word as city, rest as building name
+                                    city = words[words.length - 1];
+                                    buildingName = words.slice(0, -1).join(' ');
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Create ONE building from the entire report
+                if (buildingName) {
+                    const building = getNewBuildingTemplate(buildingName, address, city, 'passed');
+                    
+                    // Populate all available panel/building details
+                    if (manufacturer) building.details.manufacturer = manufacturer;
+                    if (panelModel) building.details.panelModel = panelModel;
+                    if (panelLocation) building.details.panelLocation = panelLocation;
+                    if (serialNumber && serialNumber !== 'N/A') building.details.serialNumber = serialNumber;
+                    if (softwareVersion && softwareVersion !== 'N/A') building.details.softwareVersion = softwareVersion;
+                    if (dateManufactured && dateManufactured !== 'N/A') building.details.dateManufactured = dateManufactured;
+                    if (lastServiceDate && lastServiceDate !== 'N/A') building.details.lastServiceDate = lastServiceDate;
+                    
+                    buildings.push(building);
+                    console.log(`📥 Parsed building: ${buildingName} | Panel: ${manufacturer} ${panelModel} @ ${panelLocation}`);
+                }
+            } else {
+                // SIMPLE FORMAT: Parse as multiple buildings (one per line)
+                lines.filter(line => line.length > 0).forEach(line => {
+                    const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+                    const name = parts[0]?.trim() || '';
+                    const address = parts[1]?.trim() || '';
+                    const city = parts[2]?.trim() || '';
+                    
+                    if (name && name.length > 0) {
+                        buildings.push(getNewBuildingTemplate(name, address, city));
+                    }
+                });
+            }
+            
+            return buildings;
+        };
+
+        // Test cases
+        const tests = [
+            {
+                name: "Bellevue Format (2026 Table Style)",
+                input: `1. BUILDING DETAILS
+FIRE INSPECTION REPORT
+Year: 2026 | Status: Inspected 4 Building: Bellevue
+FIELD INFORMATION
+BUILDING NAME
+Bellevue
+ADDRESS
+21701 28 ave Bellevue
+CITY
+Bellevue
+PANEL LOCATION
+Mech rm by gym
+MANUFACTURER
+Edwards
+PANEL MODEL
+2280
+SERIAL NUMBER
+N/A
+SOFTWARE VERSION
+Monitored fire watch 411`,
+                expected: {
+                    name: 'Bellevue',
+                    address: '21701 28 ave Bellevue',
+                    city: 'Bellevue',
+                    manufacturer: 'Edwards',
+                    panelModel: '2280',
+                    panelLocation: 'Mech rm by gym',
+                    softwareVersion: 'Monitored fire watch 411'
+                }
+            },
+            {
+                name: "Old Format (2025 Inline Style) - Raymond Tay",
+                input: `Client: Building: Date: Comments
+LDS Church – Welling FM Group Taylor St. Raymond
+Address:
+Fire Alarm panel Manufacturer: Edwards Model #: Fireshield Plus
+Panel Located West Entrance`,
+                expected: {
+                    name: 'Welling FM Group',
+                    address: 'Taylor St.',
+                    city: 'Raymond',
+                    manufacturer: 'Edwards',
+                    panelModel: 'Fireshield Plus',
+                    panelLocation: 'West Entrance'
+                }
+            },
+            {
+                name: "Old Format - Claresholm",
+                input: `Annual Fire Alarm Inspection Report
+Client: Building: Date:
+Welling |FM Group LDS Church
+Fire Alarm panel Manufacturer: Edwards Model #: 2260
+Claresholm Address:`,
+                expected: {
+                    name: 'Welling |FM Group LDS Church',
+                    manufacturer: 'Edwards',
+                    panelModel: '2260'
+                }
+            },
+            {
+                name: "Pincher Creek Format (2026 Table Style)",
+                input: `FIRE INSPECTION REPORT
+BUILDING NAME
+Pincher Creek
+ADDRESS
+1240 Wentworth ave
+CITY
+Pincher Creek
+PANEL LOCATION
+Front door
+MANUFACTURER
+Edwards
+PANEL MODEL
+Fire shield plus
+SERIAL NUMBER
+N/A
+SOFTWARE VERSION
+Not monitored`,
+                expected: {
+                    name: 'Pincher Creek',
+                    address: '1240 Wentworth ave',
+                    city: 'Pincher Creek',
+                    manufacturer: 'Edwards',
+                    panelModel: 'Fire shield plus',
+                    panelLocation: 'Front door',
+                    softwareVersion: 'Not monitored'
+                }
+            }
+        ];
+
+        // Run tests
+        const resultsDiv = document.getElementById('results');
+        tests.forEach((test, idx) => {
+            const result = parseImportText(test.input);
+            const building = result[0];
+            
+            let passed = true;
+            let errors = [];
+            
+            if (!building) {
+                passed = false;
+                errors.push('❌ No building parsed');
+            } else {
+                // Check each expected field
+                Object.entries(test.expected).forEach(([key, expectedValue]) => {
+                    let actualValue;
+                    if (key === 'name') {
+                        actualValue = building.name;
+                    } else if (key === 'address' || key === 'city') {
+                        actualValue = building.details[key];
+                    } else {
+                        actualValue = building.details[key];
+                    }
+                    
+                    if (actualValue !== expectedValue) {
+                        passed = false;
+                        errors.push(`❌ ${key}: expected "${expectedValue}", got "${actualValue}"`);
+                    } else {
+                        errors.push(`✅ ${key}: "${actualValue}"`);
+                    }
+                });
+            }
+            
+            const section = document.createElement('div');
+            section.className = `test-section ${passed ? 'success' : 'error'}`;
+            section.innerHTML = `
+                <h2>${passed ? '✅' : '❌'} Test ${idx + 1}: ${test.name}</h2>
+                <div class="detail"><strong>Status:</strong> ${passed ? 'PASSED' : 'FAILED'}</div>
+                <div class="detail"><strong>Results:</strong></div>
+                ${errors.map(e => `<div class="detail">${e}</div>`).join('')}
+                ${building ? `
+                    <details style="margin-top: 10px;">
+                        <summary style="cursor: pointer; font-weight: bold;">View Full Object</summary>
+                        <pre>${JSON.stringify(building.details, null, 2)}</pre>
+                    </details>
+                ` : ''}
+            `;
+            resultsDiv.appendChild(section);
+        });
+
+        // Summary
+        const passed = tests.filter((test, idx) => {
+            const result = parseImportText(test.input);
+            const building = result[0];
+            if (!building) return false;
+            return Object.entries(test.expected).every(([key, expectedValue]) => {
+                let actualValue = key === 'name' ? building.name : building.details[key];
+                return actualValue === expectedValue;
+            });
+        }).length;
+
+        const summary = document.createElement('div');
+        summary.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 20px; background: white; border: 3px solid #333; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+        summary.innerHTML = `
+            <div style="font-size: 20px; margin-bottom: 10px;">${passed === tests.length ? '🎉' : '⚠️'} Test Results</div>
+            <div style="font-size: 24px; color: ${passed === tests.length ? '#28a745' : '#dc3545'};">
+                ${passed} / ${tests.length} Passed
+            </div>
+        `;
+        document.body.appendChild(summary);
+    </script>
+</body>
+</html>

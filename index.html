@@ -227,8 +227,10 @@
             // Detect format: Check if this is a detailed inspection report or simple list
             const isDetailedReport = fullText.includes('Fire Alarm panel') || 
                                     fullText.includes('Annual Fire Alarm Inspection Report') ||
+                                    fullText.includes('FIRE INSPECTION REPORT') ||
                                     (fullText.includes('Client:') && fullText.includes('Building:')) ||
-                                    fullText.includes('Manufacturer:');
+                                    fullText.includes('Manufacturer:') ||
+                                    fullText.includes('MANUFACTURER');
             
             if (isDetailedReport) {
                 // DETAILED FORMAT: Parse the entire text as ONE building
@@ -238,6 +240,22 @@
                 let manufacturer = '';
                 let panelModel = '';
                 let panelLocation = '';
+                let serialNumber = '';
+                let softwareVersion = '';
+                let dateManufactured = '';
+                let lastServiceDate = '';
+                
+                // Helper to get value from next line (for table format)
+                const getNextLineValue = (idx) => {
+                    if (idx + 1 < lines.length) {
+                        const nextLine = lines[idx + 1].trim();
+                        // Skip if next line is also a label
+                        if (!nextLine.match(/^(BUILDING NAME|ADDRESS|CITY|PANEL LOCATION|MANUFACTURER|PANEL MODEL|SERIAL NUMBER|SOFTWARE VERSION|DATE MANUFACTURED|LAST SERVICE DATE)$/i)) {
+                            return nextLine;
+                        }
+                    }
+                    return '';
+                };
                 
                 lines.forEach((line, idx) => {
                     // Skip empty lines
@@ -245,12 +263,74 @@
                         return;
                     }
                     
-                    // Skip lines that are only form labels (Client: Building: Date: Comments:)
+                    // TABLE FORMAT (Bellevue/Pincher Creek style)
+                    // Extract building details from structured table format
+                    if (line.match(/^BUILDING NAME$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value && !buildingName) buildingName = value;
+                    }
+                    if (line.match(/^ADDRESS$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value && !address) address = value;
+                    }
+                    if (line.match(/^CITY$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value && !city) city = value;
+                    }
+                    if (line.match(/^PANEL LOCATION$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) panelLocation = value;
+                    }
+                    if (line.match(/^MANUFACTURER$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) manufacturer = value;
+                    }
+                    if (line.match(/^PANEL MODEL$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) panelModel = value;
+                    }
+                    if (line.match(/^SERIAL NUMBER$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) serialNumber = value;
+                    }
+                    if (line.match(/^SOFTWARE VERSION$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) softwareVersion = value;
+                    }
+                    if (line.match(/^DATE MANUFACTURED$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) dateManufactured = value;
+                    }
+                    if (line.match(/^LAST SERVICE DATE$/i)) {
+                        const value = getNextLineValue(idx);
+                        if (value) lastServiceDate = value;
+                    }
+                    
+                    // INLINE FORMAT (Old inspection reports)
+                    // Extract manufacturer and model from same line
+                    if (line.includes('Manufacturer:')) {
+                        const mfgMatch = line.match(/Manufacturer:\s*([A-Za-z0-9]+)/i);
+                        if (mfgMatch && !manufacturer) manufacturer = mfgMatch[1];
+                        
+                        // Extract model - everything after "Model #:" or "Model:" up to next field or end
+                        const modelMatch = line.match(/Model\s*#?:\s*(.+?)(?=\s*Panel\s+Located|\s*$)/i);
+                        if (modelMatch && !panelModel) {
+                            panelModel = modelMatch[1].trim();
+                        }
+                    }
+                    
+                    // Extract panel location (inline format)
+                    if (line.match(/^Panel\s+Located/i)) {
+                        const locValue = line.replace(/^Panel\s+Located\s*/i, '').trim();
+                        if (locValue && !panelLocation) panelLocation = locValue;
+                    }
+                    
+                    // Skip lines that are only form labels
                     if (/^(Client:|Building:|Date:|Comments?:?|Address:)(\s+(Client:|Building:|Date:|Comments?:?|Address:))*\s*$/i.test(line)) {
                         return;
                     }
                     
-                    // Handle line after label-only line - this is the actual building data
+                    // Handle line after label-only line - this is the actual building data (old format)
                     if (idx > 0 && !buildingName && !line.includes('Manufacturer:') && !line.includes('Panel Located')) {
                         const prevLine = lines[idx - 1];
                         // Check if previous line was labels only
@@ -301,33 +381,24 @@
                             }
                         }
                     }
-                    
-                    // Extract manufacturer and model
-                    if (line.includes('Manufacturer:')) {
-                        const mfgMatch = line.match(/Manufacturer:\s*([A-Za-z0-9]+)/i);
-                        if (mfgMatch) manufacturer = mfgMatch[1];
-                        
-                        // Extract model - everything after "Model #:" or "Model:" up to next field or end
-                        const modelMatch = line.match(/Model\s*#?:\s*(.+?)(?=\s*Panel\s+Located|\s*$)/i);
-                        if (modelMatch) {
-                            panelModel = modelMatch[1].trim();
-                        }
-                    }
-                    
-                    // Extract panel location
-                    if (line.match(/^Panel\s+Located/i)) {
-                        panelLocation = line.replace(/^Panel\s+Located\s*/i, '').trim();
-                    }
                 });
                 
                 // Create ONE building from the entire report
                 // Mark as 'passed' since this is a completed inspection report
                 if (buildingName) {
                     const building = getNewBuildingTemplate(buildingName, address, city, 'passed');
-                    building.details.manufacturer = manufacturer;
-                    building.details.panelModel = panelModel;
-                    building.details.panelLocation = panelLocation;
+                    
+                    // Populate all available panel/building details
+                    if (manufacturer) building.details.manufacturer = manufacturer;
+                    if (panelModel) building.details.panelModel = panelModel;
+                    if (panelLocation) building.details.panelLocation = panelLocation;
+                    if (serialNumber && serialNumber !== 'N/A') building.details.serialNumber = serialNumber;
+                    if (softwareVersion && softwareVersion !== 'N/A') building.details.softwareVersion = softwareVersion;
+                    if (dateManufactured && dateManufactured !== 'N/A') building.details.dateManufactured = dateManufactured;
+                    if (lastServiceDate && lastServiceDate !== 'N/A') building.details.lastServiceDate = lastServiceDate;
+                    
                     buildings.push(building);
+                    console.log(`📥 Parsed building: ${buildingName} | Panel: ${manufacturer} ${panelModel} @ ${panelLocation}`);
                 }
             } else {
                 // SIMPLE FORMAT: Parse as multiple buildings (one per line)
