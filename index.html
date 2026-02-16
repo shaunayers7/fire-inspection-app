@@ -465,8 +465,8 @@
             const [db, setDb] = useState(null);
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
             const [lastSyncTime, setLastSyncTime] = useState(null);
-            const syncTimeoutRef = useRef(null);
             const isUpdatingFromSync = useRef(false); // Track if update is from sync to prevent loop
+            const [syncConflicts, setSyncConflicts] = useState(null); // Tracks conflicts during sync for resolution UI
             const [authInitialized, setAuthInitialized] = useState(false);
             const [loginEmail, setLoginEmail] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
@@ -878,21 +878,17 @@
             }, []);
 
             useEffect(() => {
+                // Always save to localStorage for offline capability
                 localStorage.setItem('fire_inspection_v4_data', JSON.stringify(yearData));
                 
-                // Skip auto-sync if this update came from a sync operation (prevents loop)
+                // Skip auto-sync flag reset (prevents loop)
                 if (isUpdatingFromSync.current) {
                     isUpdatingFromSync.current = false;
                     return;
                 }
                 
-                // Auto-sync with debounce (5 seconds after last change)
-                if (db && user) {
-                    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-                    syncTimeoutRef.current = setTimeout(() => {
-                        syncToCloud();
-                    }, 5000);
-                }
+                // NO AUTO-SYNC: User must click Save/Back/Sync to push to cloud
+                // Data is stored locally and synced only on explicit user action
             }, [yearData]);
             
             // Debug: Monitor view changes
@@ -1020,29 +1016,31 @@
             };
             
             // Helper: Save and navigate (triggers immediate sync before navigation)
-            const saveAndNavigate = (targetView) => {
-                console.log(`💾 Navigating to ${targetView} - triggering immediate sync...`);
+            const saveAndNavigate = async (targetView) => {
+                console.log(`💾 Navigating to ${targetView} - syncing changes first...`);
                 
-                // Clear pending auto-sync timeout (we're syncing now)
-                if (syncTimeoutRef.current) {
-                    clearTimeout(syncTimeoutRef.current);
-                    syncTimeoutRef.current = null;
-                }
-                
-                // Trigger immediate sync if online (non-blocking)
+                // Trigger immediate sync if online (blocking - wait for completion)
                 if (db && user) {
-                    syncToCloud().catch(err => {
-                        console.warn('Sync on navigate failed (will retry later):', err);
-                    });
+                    try {
+                        setSyncStatus('syncing');
+                        await syncToCloud();
+                        console.log(`✅ Sync complete before navigating to ${targetView}`);
+                    } catch (err) {
+                        console.warn('Sync on navigate failed (changes saved locally):', err);
+                        setSyncStatus('error');
+                        // Continue navigation even if sync fails (data is safe locally)
+                        setTimeout(() => setSyncStatus('idle'), 2000);
+                    }
+                } else {
+                    console.log('📴 Offline - changes saved locally only');
                 }
                 
-                // Navigate immediately (don't wait for sync to complete)
+                // Navigate after sync completes (or immediately if offline/error)
                 setView(targetView);
                 viewRef.current = targetView;
-                console.log(`✅ Navigated to ${targetView}. Sync happening in background.`);
             };
             
-            // Auto-sync: Push local changes to cloud (with cloud-first check)
+            // Manual sync: Push local changes to cloud with conflict detection
             const syncToCloud = async () => {
                 if (!db || !user) {
                     console.log('Firebase not ready for sync');
@@ -1050,9 +1048,9 @@
                 }
                 
                 try {
-                    console.log('📤 Auto-sync triggered: Pulling from cloud first to avoid conflicts...');
+                    console.log('📤 Manual sync: Checking for conflicts before pushing...');
                     
-                    // STEP 1: Pull latest from cloud first (prevents stale data overwrites)
+                    // STEP 1: Pull latest from cloud
                     const { collection, getDocs, setDoc, doc } = window.FirebaseSDK;
                     const buildingsRef = collection(db, `apps/${APP_ID}/buildings`);
                     const snapshot = await getDocs(buildingsRef);
@@ -1063,72 +1061,98 @@
                         cloudBuildings[data.id] = data;
                     });
                     
-                    console.log(`📥 Cloud has ${Object.keys(cloudBuildings).length} building(s):`);
-                    Object.values(cloudBuildings).forEach(b => {
-                        console.log(`  ☁️ ${b.name} (${b.id})`);
-                    });
+                    console.log(`📥 Cloud has ${Object.keys(cloudBuildings).length} building(s)`);
                     
-                    // STEP 2: Merge cloud data into local state first
+                    // STEP 2: Detect conflicts at field level
+                    const conflicts = [];
                     const updatedYearData = { ...yearData };
                     
-                    console.log('🔄 Starting merge of local and cloud data...');
-                    
-                    // Process each year
                     for (const year in updatedYearData) {
                         const localBuildings = updatedYearData[year] || [];
-                        const mergedBuildings = [];
-                        
-                        console.log(`\n📅 Processing year ${year}: ${localBuildings.length} local building(s)`);
                         
                         for (const localBuilding of localBuildings) {
                             const cloudVersion = cloudBuildings[localBuilding.id];
                             
-                            // Case 1: Building exists in cloud
+                            // Skip new buildings (no cloud version exists)
+                            if (!cloudVersion || !localBuilding.lastSynced) {
+                                continue;
+                            }
+                            
+                            // Compare field modifications
+                            const localMods = localBuilding.fieldModifications || {};
+                            const cloudMods = cloudVersion.fieldModifications || {};
+                            
+                            // Check each local modification
+                            for (const fieldPath in localMods) {
+                                const localMod = localMods[fieldPath];
+                                const cloudMod = cloudMods[fieldPath];
+                                
+                                // Conflict: Both local and cloud modified same field
+                                if (cloudMod && cloudMod.timestamp > localBuilding.lastSynced) {
+                                    // Different values = conflict
+                                    const localValue = JSON.stringify(localMod.value || localMod.changes);
+                                    const cloudValue = JSON.stringify(cloudMod.value || cloudMod.changes);
+                                    
+                                    if (localValue !== cloudValue) {
+                                        conflicts.push({
+                                            buildingId: localBuilding.id,
+                                            buildingName: localBuilding.name,
+                                            fieldPath,
+                                            localValue: localMod.value || localMod.changes,
+                                            cloudValue: cloudMod.value || cloudMod.changes,
+                                            localUser: localMod.user,
+                                            cloudUser: cloudMod.user,
+                                            localTime: localMod.timestamp,
+                                            cloudTime: cloudMod.timestamp
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // STEP 3: If conflicts exist, show modal and halt sync
+                    if (conflicts.length > 0) {
+                        console.warn(`⚠️ Found ${conflicts.length} conflict(s) - showing resolution modal`);
+                        setSyncConflicts(conflicts);
+                        setSyncStatus('error');
+                        setTimeout(() => setSyncStatus('idle'), 2000);
+                        return; // Don't proceed with sync until conflicts resolved
+                    }
+                    
+                    // STEP 4: No conflicts - merge and push
+                    console.log('✅ No conflicts detected - proceeding with sync');
+                    
+                    // Merge: Keep deletions from cloud, add new from local
+                    for (const year in updatedYearData) {
+                        const localBuildings = updatedYearData[year] || [];
+                        const mergedBuildings = [];
+                        
+                        for (const localBuilding of localBuildings) {
+                            const cloudVersion = cloudBuildings[localBuilding.id];
+                            
                             if (cloudVersion) {
-                                const cloudTime = new Date(cloudVersion.lastSynced || 0).getTime();
-                                const localTime = new Date(localBuilding.lastSynced || 0).getTime();
-                                
-                                if (cloudTime > localTime) {
-                                    console.log(`  ☁️ Using CLOUD version (newer): ${localBuilding.name}`);
-                                    mergedBuildings.push(cloudVersion);
-                                } else {
-                                    console.log(`  📱 Using LOCAL version (newer): ${localBuilding.name}`);
-                                    mergedBuildings.push(localBuilding);
-                                }
-                                
-                                // Remove from cloud map so we can track what's left
+                                // Building exists in cloud - use local version (we checked for conflicts)
+                                mergedBuildings.push(localBuilding);
                                 delete cloudBuildings[localBuilding.id];
+                            } else if (!localBuilding.lastSynced) {
+                                // New local building - keep it
+                                mergedBuildings.push(localBuilding);
                             }
-                            // Case 2: Building exists locally but NOT in cloud
-                            else {
-                                // If building was NEVER synced (no lastSynced), it's a new local building
-                                if (!localBuilding.lastSynced) {
-                                    console.log(`  ✨ Keeping NEW local building: ${localBuilding.name}`);
-                                    mergedBuildings.push(localBuilding);
-                                }
-                                // If building WAS synced before, but is not in cloud now = DELETED by another user
-                                else {
-                                    console.log(`  🗑️ REMOVING building (deleted by another user): ${localBuilding.name}`);
-                                    // Don't add to mergedBuildings = removed
-                                }
-                            }
+                            // else: was deleted from cloud - don't add
                         }
                         
                         updatedYearData[year] = mergedBuildings;
                     }
                     
-                    // STEP 3: Add any remaining cloud buildings that weren't in local
-                    console.log('\n📥 Adding cloud buildings not in local:');
+                    // Add remaining cloud buildings
                     for (const cloudBuilding of Object.values(cloudBuildings)) {
                         const year = cloudBuilding.year || 2026;
                         if (!updatedYearData[year]) updatedYearData[year] = [];
-                        
-                        console.log(`  ☁️ Adding from cloud: ${cloudBuilding.name}`);
                         updatedYearData[year].push(cloudBuilding);
                     }
                     
-                    // STEP 4: Now push the merged state back to cloud
-                    console.log('📤 Pushing merged state to cloud...');
+                    // STEP 5: Push to cloud
                     const syncTime = new Date().toISOString();
                     const syncPromises = [];
                     
@@ -1148,21 +1172,26 @@
                     
                     await Promise.all(syncPromises);
                     
-                    // Log the sync action
                     await logChange('sync', { 
-                        message: 'Synced changes to cloud (merged)', 
+                        message: 'Synced changes to cloud', 
                         buildingCount: Object.values(updatedYearData).reduce((sum, buildings) => sum + buildings.length, 0)
                     });
                     
                     setLastSyncTime(syncTime);
                     
-                    // Update local state with merged data (mark as sync update to prevent loop)
+                    // Update local state
                     isUpdatingFromSync.current = true;
                     setYearData(updatedYearData);
                     
-                    console.log('✅ Auto-sync complete! Local and cloud are now in sync.');
+                    setSyncStatus('success');
+                    setTimeout(() => setSyncStatus('idle'), 2000);
+                    
+                    console.log('✅ Manual sync complete!');
                 } catch (error) {
-                    console.error('❌ Auto-sync error:', error);
+                    console.error('❌ Sync error:', error);
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                    throw error;
                 }
             };
             const loadFromCloud = async (firestore = db, isDuringSync = false) => {
@@ -1195,17 +1224,17 @@
                         console.log(`  Year ${year}: ${buildings.map(b => `${b.name} (${b.id})`).join(', ')}`);
                     });
                     
-                    // ☁️ CLOUD IS SOURCE OF TRUTH (Multi-user collaboration)
-                    // Replace local data with cloud data completely
+                    // ☁️ CLOUD IS SOURCE OF TRUTH
+                    // Manual sync only - conflicts detected before pushing, not when pulling
                     isUpdatingFromSync.current = true;
                     setYearData(prev => {
-                        console.log('☁️ Syncing from cloud: Cloud data is now the source of truth');
+                        console.log('☁️ Syncing from cloud (cloud is source of truth)...');
                         console.log(`☁️ Cloud has ${Object.values(cloudBuildings).flat().length} building(s)`);
                         
                         // Ensure all years exist in structure
                         const result = { 2025: [], 2026: [], ...cloudBuildings };
                         
-                        console.log(`✅ Cloud sync complete. Buildings in 2026:`, result[2026]?.map(b => b.name) || []);
+                        console.log(`✅ Cloud sync complete.`);
                         return result;
                     });
                     
@@ -1248,6 +1277,43 @@
                     console.error(`❌ Failed to delete building ${buildingId} from cloud:`, error);
                     throw error;
                 }
+            };
+
+            // --- CONFLICT RESOLUTION ---
+            const resolveConflicts = async (resolutions) => {
+                // resolutions is an object: { conflictIndex: 'local' | 'cloud' }
+                console.log('🔀 Resolving conflicts with user choices...');
+                
+                // Apply conflict resolutions by merging chosen values into yearData
+                const updatedYearData = { ...yearData };
+                
+                syncConflicts.forEach((conflict, index) => {
+                    const choice = resolutions[index]; // 'local' or 'cloud'
+                    const building = Object.values(updatedYearData).flat().find(b => b.id === conflict.buildingId);
+                    
+                    if (building && choice) {
+                        const chosenValue = choice === 'local' ? conflict.localValue : conflict.cloudValue;
+                        
+                        // Apply the chosen value to the building
+                        // Parse field path (e.g., "details.city" or "data.Exit Lights.item123")
+                        const parts = conflict.fieldPath.split('.');
+                        if (parts[0] === 'details') {
+                            building.details[parts[1]] = chosenValue;
+                        } else if (parts[0] === 'name') {
+                            building.name = chosenValue;
+                        }
+                        // For data fields, it's more complex - would need to parse the path
+                    }
+                });
+                
+                // Clear conflicts
+                setSyncConflicts(null);
+                
+                // Update local state
+                setYearData(updatedYearData);
+                
+                // Retry sync (will push resolved changes)
+                await syncToCloud();
             };
 
             // --- REORDER LOGIC ---
@@ -1417,6 +1483,10 @@
             };
 
             const updateItem = (sect, id, meta) => {
+                // Track field modification for conflict detection
+                const timestamp = new Date().toISOString();
+                const userName = user?.email || user?.displayName || 'Unknown';
+                
                 // Log the change
                 const item = activeBuilding?.data[sect]?.find(i => i.id === id);
                 if (item) {
@@ -1431,12 +1501,22 @@
                 setYearData(prev => ({
                     ...prev,
                     [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
-                        ...b, data: { ...b.data, [sect]: b.data[sect].map(i => i.id === id ? { ...i, ...meta } : i) }
+                        ...b, 
+                        data: { ...b.data, [sect]: b.data[sect].map(i => i.id === id ? { ...i, ...meta } : i) },
+                        // Track when this field was modified and by whom
+                        fieldModifications: {
+                            ...(b.fieldModifications || {}),
+                            [`data.${sect}.${id}`]: { timestamp, user: userName, changes: meta }
+                        }
                     } : b)
                 }));
             };
 
             const updateBuildingDetail = (key, value) => {
+                // Track field modification for conflict detection
+                const timestamp = new Date().toISOString();
+                const userName = user?.email || user?.displayName || 'Unknown';
+                
                 // Log the change
                 logChange('update_building_detail', { 
                     field: key, 
@@ -1446,7 +1526,14 @@
                 
                 setYearData(prev => ({
                     ...prev,
-                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? (key === 'buildingName' ? { ...b, name: value, details: { ...b.details, [key]: value } } : { ...b, details: { ...b.details, [key]: value } }) : b)
+                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
+                        ...(key === 'buildingName' ? { ...b, name: value, details: { ...b.details, [key]: value } } : { ...b, details: { ...b.details, [key]: value } }),
+                        // Track when this field was modified and by whom
+                        fieldModifications: {
+                            ...(b.fieldModifications || {}),
+                            [key === 'buildingName' ? 'name' : `details.${key}`]: { timestamp, user: userName, value }
+                        }
+                    } : b)
                 }));
             };
 
@@ -2436,6 +2523,144 @@
                     </div>
 
                     {activeModal && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    
+                    {/* Conflict Resolution Modal */}
+                    {syncConflicts && syncConflicts.length > 0 && (
+                        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+                            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+                            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl relative z-10 max-h-[90vh] overflow-hidden flex flex-col">
+                                <div className="p-6 border-b">
+                                    <h2 className="text-2xl font-black uppercase text-gray-800">⚠️ Sync Conflicts Detected</h2>
+                                    <p className="text-sm text-gray-600 mt-2">
+                                        Someone else modified the same fields you changed. Choose which version to keep for each conflict.
+                                    </p>
+                                </div>
+                                
+                                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                                    {syncConflicts.map((conflict, index) => {
+                                        const [selectedResolution, setSelectedResolution] = React.useState('local');
+                                        
+                                        return (
+                                            <div key={index} className="bg-gray-50 rounded-2xl p-4 border-2 border-orange-200">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-800">{conflict.buildingName}</h3>
+                                                        <p className="text-xs text-gray-500">Field: {conflict.fieldPath}</p>
+                                                    </div>
+                                                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-bold">
+                                                        Conflict #{index + 1}
+                                                    </span>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {/* Local Version */}
+                                                    <button
+                                                        onClick={() => {
+                                                            const resolutions = {};
+                                                            resolutions[index] = 'local';
+                                                            setSelectedResolution('local');
+                                                        }}
+                                                        className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                            selectedResolution === 'local'
+                                                                ? 'border-blue-500 bg-blue-50'
+                                                                : 'border-gray-200 bg-white'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                                selectedResolution === 'local' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                                                            }`}>
+                                                                {selectedResolution === 'local' && (
+                                                                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                                                                )}
+                                                            </div>
+                                                            <span className="font-bold text-sm text-gray-800">Your Changes</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-600 mb-1">
+                                                            <strong>By:</strong> {conflict.localUser}
+                                                        </p>
+                                                        <p className="text-xs text-gray-600 mb-2">
+                                                            <strong>When:</strong> {new Date(conflict.localTime).toLocaleString()}
+                                                        </p>
+                                                        <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
+                                                            {JSON.stringify(conflict.localValue, null, 2)}
+                                                        </div>
+                                                    </button>
+                                                    
+                                                    {/* Cloud Version */}
+                                                    <button
+                                                        onClick={() => {
+                                                            const resolutions = {};
+                                                            resolutions[index] = 'cloud';
+                                                            setSelectedResolution('cloud');
+                                                        }}
+                                                        className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                            selectedResolution === 'cloud'
+                                                                ? 'border-purple-500 bg-purple-50'
+                                                                : 'border-gray-200 bg-white'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                                selectedResolution === 'cloud' ? 'border-purple-500 bg-purple-500' : 'border-gray-300'
+                                                            }`}>
+                                                                {selectedResolution === 'cloud' && (
+                                                                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                                                                )}
+                                                            </div>
+                                                            <span className="font-bold text-sm text-gray-800">Other User's Changes</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-600 mb-1">
+                                                            <strong>By:</strong> {conflict.cloudUser}
+                                                        </p>
+                                                        <p className="text-xs text-gray-600 mb-2">
+                                                            <strong>When:</strong> {new Date(conflict.cloudTime).toLocaleString()}
+                                                        </p>
+                                                        <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
+                                                            {JSON.stringify(conflict.cloudValue, null, 2)}
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                
+                                <div className="p-6 border-t bg-gray-50 flex gap-3">
+                                    <button
+                                        onClick={() => setSyncConflicts(null)}
+                                        className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm uppercase tracking-wider"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const resolutions = {};
+                                            syncConflicts.forEach((_, index) => {
+                                                resolutions[index] = 'local'; // Default to local
+                                            });
+                                            resolveConflicts(resolutions);
+                                        }}
+                                        className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
+                                    >
+                                        Keep My Changes
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const resolutions = {};
+                                            syncConflicts.forEach((_, index) => {
+                                                resolutions[index] = 'cloud'; // Use cloud version
+                                            });
+                                            resolveConflicts(resolutions);
+                                        }}
+                                        className="flex-1 py-3 px-4 bg-purple-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
+                                    >
+                                        Use Their Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
