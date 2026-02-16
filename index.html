@@ -188,20 +188,82 @@
         });
 
         const parseImportText = (text) => {
-            const lines = text.trim().split('\n').filter(line => line.trim());
+            const fullText = text.trim();
+            if (!fullText) return [];
+            
+            const lines = fullText.split('\n').map(l => l.trim());
             const buildings = [];
             
-            lines.forEach(line => {
-                // Support tab-separated or comma-separated values
-                const parts = line.includes('\t') ? line.split('\t') : line.split(',');
-                const name = parts[0]?.trim() || 'Unnamed Building';
-                const address = parts[1]?.trim() || '';
-                const city = parts[2]?.trim() || '';
+            // Detect format: Check if this is a detailed inspection report or simple list
+            const isDetailedReport = fullText.includes('Fire Alarm panel') || 
+                                    fullText.includes('Annual Fire Alarm Inspection Report') ||
+                                    (fullText.includes('Client:') && fullText.includes('Building:')) ||
+                                    fullText.includes('Manufacturer:');
+            
+            if (isDetailedReport) {
+                // DETAILED FORMAT: Parse the entire text as ONE building
+                let buildingName = '';
+                let address = '';
+                let city = '';
+                let manufacturer = '';
+                let panelModel = '';
+                let panelLocation = '';
                 
-                if (name && name !== 'Unnamed Building') {
-                    buildings.push(getNewBuildingTemplate(name, address, city));
+                lines.forEach((line, idx) => {
+                    // Extract building name from "Building:" line
+                    if (line.startsWith('Building:')) {
+                        buildingName = line.replace('Building:', '').trim();
+                    }
+                    // Alternative: Extract from "Client:" line if Building is empty
+                    else if (line.startsWith('Client:') && !buildingName) {
+                        const clientText = line.replace('Client:', '').trim();
+                        // Remove "LDS Church" prefix if present
+                        buildingName = clientText.replace(/^LDS Church\s*[-–]\s*/i, '').trim();
+                    }
+                    // Extract address
+                    else if (line.startsWith('Address:')) {
+                        const addressText = line.replace('Address:', '').trim();
+                        if (addressText) {
+                            address = addressText;
+                        } else if (lines[idx + 1] && !lines[idx + 1].includes(':')) {
+                            address = lines[idx + 1];
+                        }
+                    }
+                    // Extract manufacturer and model
+                    else if (line.includes('Manufacturer:')) {
+                        const match = line.match(/Manufacturer:\s*([^\s]+)/i);
+                        if (match) manufacturer = match[1];
+                        const modelMatch = line.match(/Model\s*#?:\s*([^\s]+(?:\s+\w+)?)/i);
+                        if (modelMatch) panelModel = modelMatch[1];
+                    }
+                    // Extract panel location
+                    else if (line.startsWith('Panel Located')) {
+                        panelLocation = line.replace('Panel Located', '').trim();
+                    }
+                });
+                
+                // Create ONE building from the entire report
+                if (buildingName) {
+                    const building = getNewBuildingTemplate(buildingName, address, city);
+                    building.details.manufacturer = manufacturer;
+                    building.details.panelModel = panelModel;
+                    building.details.panelLocation = panelLocation;
+                    buildings.push(building);
                 }
-            });
+            } else {
+                // SIMPLE FORMAT: Parse as multiple buildings (one per line)
+                // Format: Name, Address, City or Name[TAB]Address[TAB]City
+                lines.filter(line => line.length > 0).forEach(line => {
+                    const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+                    const name = parts[0]?.trim() || '';
+                    const address = parts[1]?.trim() || '';
+                    const city = parts[2]?.trim() || '';
+                    
+                    if (name && name.length > 0) {
+                        buildings.push(getNewBuildingTemplate(name, address, city));
+                    }
+                });
+            }
             
             return buildings;
         };
@@ -2049,15 +2111,18 @@
                             setImportTextValue('');
                         }} confirmText="Import">
                             <div className="space-y-3">
-                                <p className="text-xs text-gray-500">Paste building data. One building per line.</p>
-                                <p className="text-[10px] text-gray-400 font-mono bg-gray-50 p-2 rounded">Format: Name, Address, City<br/>or Name[TAB]Address[TAB]City</p>
+                                <p className="text-xs text-gray-500">Paste building data - supports multiple formats:</p>
+                                <p className="text-[10px] text-gray-400 font-mono bg-gray-50 p-2 rounded">
+                                    <strong>Simple:</strong> Name, Address, City<br/>
+                                    <strong>Detailed:</strong> Full inspection report with "Building:", "Manufacturer:", etc.
+                                </p>
                                 <textarea 
                                     value={importTextValue} 
                                     onChange={(e) => setImportTextValue(e.target.value)} 
-                                    placeholder="Example:\nChurch Name, 123 Main St, Town\nChurch 2, 456 Oak Ave, City" 
+                                    placeholder="Simple format:\nChurch Name, 123 Main St, City\n\nOr paste full inspection report with Building:, Address:, Manufacturer:, etc." 
                                     className="w-full h-48 p-3 border border-gray-300 rounded-xl text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
-                                <p className="text-[10px] text-gray-500">{importTextValue.trim().split('\n').filter(l => l.trim()).length} building(s) detected</p>
+                                <p className="text-[10px] text-gray-500">{parseImportText(importTextValue).length} building(s) detected</p>
                             </div>
                         </Modal>
                     )}
