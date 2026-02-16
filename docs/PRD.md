@@ -40,3 +40,9 @@
 ## 7. PROJECT MANAGEMENT
 * **Master Task List:** Located in `docs/TODO.md`.
 * **Workflow Rule:** Before starting a new feature, the AI should check `TODO.md` to see what is next on the list and update the checkbox once the code is written.
+
+## 8. FEATURE AUTHORIZATION POLICY (CRITICAL)
+* **Explicit Approval Required:** No features, text, UI elements, or functionality may be added unless explicitly requested by the user.
+* **No Unauthorized Changes:** Do not modify, add, or remove any words, labels, status messages, or content that was not specifically asked for.
+* **User Intent Only:** All implementations must strictly follow user requirements without adding "helpful" extras or interpretations.
+* **When In Doubt:** Ask the user before adding any feature or content that was not clearly specified in the request.

@@ -1167,7 +1167,6 @@
                     }
                 });
                 if (pending === 0 && unfixed === 0) return { text: 'Complete', class: 'text-green-500' };
-                if (pending === 0) return { text: `Inspected ${totalDefs}`, class: 'text-blue-500' };
                 return { text: 'In Progress', class: 'text-orange-400' };
             };
 
