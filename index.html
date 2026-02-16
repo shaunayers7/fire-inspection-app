@@ -161,12 +161,12 @@
         // Permanent Core Sections IDs
         const PROTECTED_SECTIONS = ['checklist', 'control', 'devices', 'battery', 'lights'];
 
-        const getNewBuildingTemplate = (name = "New Building") => ({
+        const getNewBuildingTemplate = (name = "New Building", address = "", city = "") => ({
             id: `b-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             name: name,
             lastSynced: null,
             details: {
-                buildingName: name, address: "", city: "", panelLocation: "",
+                buildingName: name, address: address, city: city, panelLocation: "",
                 manufacturer: "", panelModel: "", serialNumber: "", softwareVersion: "",
                 dateManufactured: "", lastServiceDate: ""
             },
@@ -186,6 +186,25 @@
                 customDeficiencies: []
             }
         });
+
+        const parseImportText = (text) => {
+            const lines = text.trim().split('\n').filter(line => line.trim());
+            const buildings = [];
+            
+            lines.forEach(line => {
+                // Support tab-separated or comma-separated values
+                const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+                const name = parts[0]?.trim() || 'Unnamed Building';
+                const address = parts[1]?.trim() || '';
+                const city = parts[2]?.trim() || '';
+                
+                if (name && name !== 'Unnamed Building') {
+                    buildings.push(getNewBuildingTemplate(name, address, city));
+                }
+            });
+            
+            return buildings;
+        };
 
         // --- HOOK: Long Press Drag & Drop ---
         const useDragAndDrop = (items, onReorder) => {
@@ -401,6 +420,7 @@
             const [expandedSections, setExpandedSections] = useState({});
             const [activeModal, setActiveModal] = useState(null);
             const [yearInputValue, setYearInputValue] = useState("");
+            const [importTextValue, setImportTextValue] = useState("");
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
@@ -2013,8 +2033,34 @@
                             </div>
                         );
                     })}
-                    <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
+                    <div className="flex gap-2">
+                        <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="flex-1 p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
+                        <button onClick={() => { setImportTextValue(''); setActiveModal({ type: 'import', title: 'Import Buildings' }); }} className="flex-1 p-4 border-2 border-dashed border-blue-300 rounded-xl text-blue-400 font-bold uppercase text-[10px]">📋 Import</button>
+                    </div>
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    {activeModal?.type === 'import' && (
+                        <Modal title={activeModal.title} onCancel={() => { setActiveModal(null); setImportTextValue(''); }} onConfirm={() => {
+                            const newBuildings = parseImportText(importTextValue);
+                            if (newBuildings.length > 0) {
+                                setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), ...newBuildings] }));
+                                console.log(`✅ Imported ${newBuildings.length} building(s) into ${selectedYear}`);
+                            }
+                            setActiveModal(null);
+                            setImportTextValue('');
+                        }} confirmText="Import">
+                            <div className="space-y-3">
+                                <p className="text-xs text-gray-500">Paste building data. One building per line.</p>
+                                <p className="text-[10px] text-gray-400 font-mono bg-gray-50 p-2 rounded">Format: Name, Address, City<br/>or Name[TAB]Address[TAB]City</p>
+                                <textarea 
+                                    value={importTextValue} 
+                                    onChange={(e) => setImportTextValue(e.target.value)} 
+                                    placeholder="Example:\nChurch Name, 123 Main St, Town\nChurch 2, 456 Oak Ave, City" 
+                                    className="w-full h-48 p-3 border border-gray-300 rounded-xl text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <p className="text-[10px] text-gray-500">{importTextValue.trim().split('\n').filter(l => l.trim()).length} building(s) detected</p>
+                            </div>
+                        </Modal>
+                    )}
                 </div>
             );
 
