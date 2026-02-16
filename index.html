@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Fire Inspection App</title>
     
     <!-- PWA Meta Tags -->
@@ -71,6 +71,16 @@
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            touch-action: pan-y;
+        }
         body { 
             font-family: 'Inter', sans-serif; 
             background-color: #F2F2F7; 
@@ -80,11 +90,17 @@
             /* iOS smooth scrolling */
             -webkit-overflow-scrolling: touch;
             overflow-y: auto;
+            overflow-x: hidden;
             /* Fixed positioning for iOS */
             position: fixed;
             width: 100%;
             height: 100%;
+            margin: 0;
+            padding: 0;
             transition: background-color 0.3s ease;
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+            text-size-adjust: 100%;
         }
         
         /* Dark Mode Styles */

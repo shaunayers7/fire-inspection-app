@@ -62,3 +62,8 @@ These files were used for the now-removed import feature. Deleting them will red
 - **Dependencies:** All validated, zero bloat
 - **Performance:** Excellent (smart sync, local-first)
 - **Security:** Firebase rules enforced, auth working correctly
+
+## Phase 7: Testing Infrastructure (Planned)
+- [ ] make sure that the app doesn't zoom or go beyond the bounds of the mobile screen
+- [ ] Add device counts on the main building cards that indicate how many devices are completed out of the total devices
+- [ ] 
