@@ -650,6 +650,8 @@
             const [expandedSections, setExpandedSections] = useState({});
             const [activeModal, setActiveModal] = useState(null);
             const [yearInputValue, setYearInputValue] = useState("");
+            const [copyTargetYear, setCopyTargetYear] = useState("");
+            const [buildingToCopy, setBuildingToCopy] = useState(null);
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
@@ -1579,7 +1581,57 @@
                 }));
             };
 
+            // --- COPY BUILDING FUNCTION ---
+            const copyBuildingToYear = (building, targetYear) => {
+                // Create a deep copy of the building with reset statuses
+                const resetData = {};
+                Object.keys(building.data).forEach(sectionKey => {
+                    if (sectionKey === 'customDeficiencies') {
+                        // Copy custom deficiencies but mark them as pending/not fixed
+                        resetData[sectionKey] = building.data[sectionKey].map(def => ({
+                            ...def,
+                            status: 'pending',
+                            fixed: false,
+                            photo: null // Reset photos for new year
+                        }));
+                    } else {
+                        // Reset all inspection items to pending
+                        resetData[sectionKey] = building.data[sectionKey].map(item => ({
+                            ...item,
+                            status: 'pending',
+                            fixed: false,
+                            note: '', // Clear notes for new inspection
+                            photo: null // Clear photos
+                        }));
+                    }
+                });
 
+                const copiedBuilding = {
+                    ...building,
+                    id: `b-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    lastSynced: null,
+                    data: resetData
+                };
+
+                // Ensure target year exists in yearData
+                setYearData(prev => {
+                    const updatedData = { ...prev };
+                    if (!updatedData[targetYear]) {
+                        updatedData[targetYear] = [];
+                    }
+                    updatedData[targetYear] = [...updatedData[targetYear], copiedBuilding];
+                    return updatedData;
+                });
+
+                console.log(`✅ Copied "${building.name}" from ${selectedYear} to ${targetYear}`);
+                
+                // Log the change
+                logChange('copy_building', {
+                    buildingName: building.name,
+                    fromYear: selectedYear,
+                    toYear: targetYear
+                });
+            };
 
             // --- AUTHENTICATION FUNCTIONS ---
             const handleLogin = async (e) => {
@@ -2228,7 +2280,18 @@
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={(e) => { 
+                                <div className="flex items-center gap-1">
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setBuildingToCopy(b);
+                                            setCopyTargetYear('');
+                                            setActiveModal({ type: 'copy-building', title: `Copy "${b.name}" to Year` }); 
+                                        }} 
+                                        className="text-blue-400 p-2 text-lg hover:text-blue-600 transition-colors"
+                                        title="Copy to another year"
+                                    >📋</button>
+                                    <button onClick={(e) => { 
                                     e.stopPropagation(); 
                                     const buildingIdToDelete = b.id;
                                     setActiveModal({ 
@@ -2261,11 +2324,64 @@
                                         } 
                                     }); 
                                 }} className="text-red-200 p-2 text-xl">✕</button>
+                                </div>
                             </div>
                         );
                     })}
                     <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    {activeModal?.type === 'copy-building' && (
+                        <Modal 
+                            title={activeModal.title} 
+                            onCancel={() => { 
+                                setActiveModal(null); 
+                                setBuildingToCopy(null); 
+                                setCopyTargetYear(''); 
+                            }} 
+                            onConfirm={() => {
+                                if (copyTargetYear && buildingToCopy) {
+                                    copyBuildingToYear(buildingToCopy, copyTargetYear);
+                                    setActiveModal(null);
+                                    setBuildingToCopy(null);
+                                    setCopyTargetYear('');
+                                }
+                            }}
+                            confirmText="Copy Building"
+                        >
+                            <div className="space-y-3">
+                                <p className="text-xs text-gray-600">
+                                    This will create a copy of <strong>"{buildingToCopy?.name}"</strong> in the selected year.
+                                </p>
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <p className="text-[10px] text-blue-800 font-semibold mb-1">What gets copied:</p>
+                                    <ul className="text-[10px] text-blue-700 space-y-0.5 ml-4 list-disc">
+                                        <li>Building name and details</li>
+                                        <li>Panel information (manufacturer, model, etc.)</li>
+                                        <li>Device inventory structure</li>
+                                    </ul>
+                                </div>
+                                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                    <p className="text-[10px] text-orange-800 font-semibold mb-1">What gets reset:</p>
+                                    <ul className="text-[10px] text-orange-700 space-y-0.5 ml-4 list-disc">
+                                        <li>All inspection checkmarks (set to pending)</li>
+                                        <li>Notes and photos</li>
+                                        <li>Deficiency status</li>
+                                    </ul>
+                                </div>
+                                <div className="pt-2">
+                                    <label className="block text-xs font-semibold text-gray-700 mb-2">Copy to year:</label>
+                                    <input 
+                                        type="number" 
+                                        autoFocus 
+                                        value={copyTargetYear} 
+                                        onChange={(e) => setCopyTargetYear(e.target.value)} 
+                                        placeholder={`e.g. ${parseInt(selectedYear) + 1}`}
+                                        className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-center text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+                        </Modal>
+                    )}
                 </div>
             );
 
