@@ -304,6 +304,7 @@
         const APP_VERSION = '2.5.1'; // Updated: Feb 15, 2026 - Mobile responsive fixes (iPhone/iPad overflow fix)
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
+        const DRAFT_KEY = 'fire_inspection_drafts';
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
@@ -489,14 +490,81 @@
             const [localDraft, setLocalDraft] = useState(null);
             const [isEditingNote, setIsEditingNote] = useState(false);
             const fileInputRef = useRef(null);
+            const draftTimerRef = useRef(null);
+
+            // Restore draft on component mount
+            useEffect(() => {
+                try {
+                    const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                    if (drafts[item.id]) {
+                        console.log('📝 Restoring draft for item:', item.label);
+                        setLocalDraft(drafts[item.id]);
+                    }
+                } catch (e) {
+                    console.error('Error restoring draft:', e);
+                }
+            }, []);
+
+            // Auto-save draft to localStorage (debounced)
+            useEffect(() => {
+                if (localDraft) {
+                    // Clear existing timer
+                    if (draftTimerRef.current) {
+                        clearTimeout(draftTimerRef.current);
+                    }
+
+                    // Save draft after 500ms of inactivity
+                    draftTimerRef.current = setTimeout(() => {
+                        try {
+                            const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                            drafts[item.id] = localDraft;
+                            localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
+                            console.log('💾 Auto-saved draft for:', item.label);
+                        } catch (e) {
+                            console.error('Error saving draft:', e);
+                        }
+                    }, 500);
+                }
+
+                return () => {
+                    if (draftTimerRef.current) {
+                        clearTimeout(draftTimerRef.current);
+                    }
+                };
+            }, [localDraft]);
 
             const startEdit = () => setLocalDraft({ ...item });
-            const saveEdit = () => { onUpdateMeta(localDraft); setLocalDraft(null); };
+            
+            const saveEdit = () => { 
+                onUpdateMeta(localDraft); 
+                setLocalDraft(null);
+                // Clear draft from localStorage
+                try {
+                    const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                    delete drafts[item.id];
+                    localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
+                    console.log('🗑️ Cleared draft for:', item.label);
+                } catch (e) {
+                    console.error('Error clearing draft:', e);
+                }
+            };
+            
             const cancelEdit = () => { 
                 onTriggerModal({
                     title: "Discard Changes?",
                     type: 'confirm',
-                    onConfirm: () => { setLocalDraft(null); }
+                    onConfirm: () => { 
+                        setLocalDraft(null);
+                        // Clear draft from localStorage
+                        try {
+                            const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                            delete drafts[item.id];
+                            localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
+                            console.log('🗑️ Cleared draft for:', item.label);
+                        } catch (e) {
+                            console.error('Error clearing draft:', e);
+                        }
+                    }
                 });
             };
             const activeItem = localDraft || item;
@@ -530,9 +598,10 @@
                             </div>
                             
                             {localDraft ? (
-                                <div className="flex gap-2 pl-6">
+                                <div className="flex gap-2 pl-6 items-center">
                                     <button onClick={saveEdit} className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded font-bold uppercase shadow-sm">Save</button>
                                     <button onClick={cancelEdit} className="text-[10px] bg-gray-100 text-gray-400 px-3 py-1 rounded font-bold uppercase">Cancel</button>
+                                    <span className="text-[9px] text-gray-400 italic" title="Changes are auto-saved">💾 Draft saved</span>
                                 </div>
                             ) : (
                                 <div className="flex flex-wrap gap-4 pl-6 text-[10px] font-bold text-gray-400 uppercase">
@@ -1113,6 +1182,20 @@
                     console.log('✅ If sync is working properly, you can ignore this warning.');
                 } else {
                     console.log('✅ Running latest code with smart deletion sync');
+                }
+
+                // Clean up old drafts (older than 7 days)
+                try {
+                    const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                    const draftCount = Object.keys(drafts).length;
+                    if (draftCount > 0) {
+                        console.log(`📝 Found ${draftCount} draft(s) from previous session`);
+                        // Note: Drafts will be restored automatically when editing those items
+                        // They'll be cleaned up after 7 days of inactivity (future enhancement)
+                    }
+                } catch (e) {
+                    console.error('Error checking drafts:', e);
+                    localStorage.removeItem(DRAFT_KEY); // Clear corrupted draft data
                 }
             }, []);
 

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draft Auto-Save Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #1e40af;
+            font-size: 18px;
+        }
+        .status {
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .status.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+        }
+        .status.warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button.secondary {
+            background: #64748b;
+        }
+        button.secondary:hover {
+            background: #475569;
+        }
+        button.danger {
+            background: #dc2626;
+        }
+        button.danger:hover {
+            background: #b91c1c;
+        }
+        .draft-list {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            border: 1px solid #e2e8f0;
+        }
+        .draft-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #f1f5f9;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        code {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .instructions {
+            background: #fffbeb;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #fbbf24;
+            margin: 20px 0;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📝 Draft Auto-Save Test</h1>
+        <p>This page tests the draft auto-save functionality implemented in the Fire Inspection App.</p>
+
+        <div class="test-section">
+            <h2>📊 Current Draft Status</h2>
+            <div id="draft-status" class="status info">
+                Checking localStorage...
+            </div>
+            <div id="draft-list"></div>
+            <button onclick="checkDrafts()">🔄 Refresh Status</button>
+            <button class="danger" onclick="clearDrafts()">🗑️ Clear All Drafts</button>
+        </div>
+
+        <div class="test-section">
+            <h2>🧪 Manual Test Instructions</h2>
+            <div class="instructions">
+                <p><strong>To test draft persistence:</strong></p>
+                <ol>
+                    <li>Open the main app: <a href="../index.html" target="_blank">index.html</a></li>
+                    <li>Login and select a building</li>
+                    <li>Click on any inspection item to edit it</li>
+                    <li>Make some changes to the text</li>
+                    <li><strong>WITHOUT clicking "Save"</strong>, close the browser tab or navigate away</li>
+                    <li>Return to this test page and click "🔄 Refresh Status"</li>
+                    <li>You should see your draft listed below</li>
+                    <li>Reopen the app and click on the same item - your changes should be restored!</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔧 Developer Tools</h2>
+            <button class="secondary" onclick="viewLocalStorage()">👁️ View All localStorage</button>
+            <button class="secondary" onclick="simulateDraft()">✨ Create Test Draft</button>
+            <button class="secondary" onclick="clearMainData()">⚠️ Clear Main Data</button>
+            <div id="dev-output" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📖 How It Works</h2>
+            <p>The draft auto-save system uses the following localStorage key:</p>
+            <ul>
+                <li><code>fire_inspection_drafts</code> - Stores temporary drafts of items being edited</li>
+            </ul>
+            <p><strong>Draft Structure:</strong></p>
+            <pre style="background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 6px; overflow-x: auto;">{
+  "item-id-123": {
+    "id": "item-id-123",
+    "label": "Updated item label",
+    "note": "Work in progress notes",
+    "status": "pending"
+  }
+}</pre>
+        </div>
+    </div>
+
+    <script>
+        const DRAFT_KEY = 'fire_inspection_drafts';
+        const DATA_KEY = 'fire_inspection_v4_data';
+
+        function checkDrafts() {
+            const statusDiv = document.getElementById('draft-status');
+            const listDiv = document.getElementById('draft-list');
+            
+            try {
+                const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                const draftCount = Object.keys(drafts).length;
+                
+                if (draftCount === 0) {
+                    statusDiv.className = 'status info';
+                    statusDiv.innerHTML = '✓ No drafts found - all changes have been saved!';
+                    listDiv.innerHTML = '';
+                } else {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `✓ Found ${draftCount} draft(s) from previous editing session`;
+                    
+                    let html = '<div class="draft-list"><strong>Saved Drafts:</strong>';
+                    for (const [id, draft] of Object.entries(drafts)) {
+                        html += `
+                            <div class="draft-item">
+                                <strong>Item ID:</strong> ${id}<br>
+                                <strong>Label:</strong> ${draft.label || 'N/A'}<br>
+                                ${draft.note ? `<strong>Note:</strong> ${draft.note}<br>` : ''}
+                                <strong>Status:</strong> ${draft.status || 'N/A'}
+                            </div>
+                        `;
+                    }
+                    html += '</div>';
+                    listDiv.innerHTML = html;
+                }
+            } catch (e) {
+                statusDiv.className = 'status warning';
+                statusDiv.innerHTML = '⚠️ Error reading drafts: ' + e.message;
+                listDiv.innerHTML = '';
+            }
+        }
+
+        function clearDrafts() {
+            if (confirm('Are you sure you want to clear all drafts? This cannot be undone.')) {
+                localStorage.removeItem(DRAFT_KEY);
+                checkDrafts();
+                alert('✓ All drafts cleared!');
+            }
+        }
+
+        function viewLocalStorage() {
+            const output = document.getElementById('dev-output');
+            const mainData = localStorage.getItem(DATA_KEY);
+            const draftData = localStorage.getItem(DRAFT_KEY);
+            
+            output.innerHTML = `
+                <div style="background: white; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0; margin-top: 10px;">
+                    <strong>Main Data Size:</strong> ${mainData ? (mainData.length / 1024).toFixed(2) : 0} KB<br>
+                    <strong>Draft Data Size:</strong> ${draftData ? (draftData.length / 1024).toFixed(2) : 0} KB<br>
+                    <strong>Total localStorage Keys:</strong> ${Object.keys(localStorage).length}
+                </div>
+            `;
+        }
+
+        function simulateDraft() {
+            const testDraft = {
+                "test-item-" + Date.now(): {
+                    id: "test-item-" + Date.now(),
+                    label: "Test Draft Item",
+                    note: "This is a simulated draft created at " + new Date().toLocaleTimeString(),
+                    status: "pending"
+                }
+            };
+            
+            const existing = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+            const merged = { ...existing, ...testDraft };
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(merged));
+            
+            checkDrafts();
+            alert('✓ Test draft created!');
+        }
+
+        function clearMainData() {
+            if (confirm('⚠️ WARNING: This will delete all your inspection data!\n\nAre you absolutely sure?')) {
+                if (confirm('Last chance! This will delete EVERYTHING. Continue?')) {
+                    localStorage.removeItem(DATA_KEY);
+                    alert('✓ Main data cleared. The app will reinitialize with default buildings on next load.');
+                }
+            }
+        }
+
+        // Check drafts on page load
+        checkDrafts();
+    </script>
+</body>
+</html>

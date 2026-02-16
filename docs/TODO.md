@@ -66,4 +66,4 @@ These files were used for the now-removed import feature. Deleting them will red
 ## Phase 7: Testing Infrastructure (Planned)
 - [ ] make sure that the app doesn't zoom or go beyond the bounds of the mobile screen
 - [ ] Add device counts on the main building cards that indicate how many devices are completed out of the total devices
-- [ ] 
+- [ ] add multiple timers for batteries that can time seperate events during testing how long lights and exit signs stay on when enabled? 
