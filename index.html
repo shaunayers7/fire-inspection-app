@@ -580,6 +580,7 @@
             const [activeModal, setActiveModal] = useState(null);
             const [yearInputValue, setYearInputValue] = useState("");
             const [importTextValue, setImportTextValue] = useState("");
+            const [batchImportPreview, setBatchImportPreview] = useState([]);
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
@@ -1509,6 +1510,84 @@
                 }));
             };
 
+            // --- BATCH IMPORT FUNCTIONS ---
+            const handleBatchImportFiles = async (event) => {
+                const files = Array.from(event.target.files);
+                const preview = [];
+
+                for (const file of files) {
+                    try {
+                        const text = await file.text();
+                        
+                        // Extract building name from filename
+                        // Format: "2020_11_5034876_Cardston Temple_Fire Alarm System...txt"
+                        // Extract: "Cardston Temple"
+                        let filename = file.name;
+                        filename = filename.replace(/\.txt$/i, ''); // Remove .txt
+                        
+                        // Remove numbered prefix pattern (2020_11_5034876_)
+                        filename = filename.replace(/^\d{4}_\d+_\d+_/, ''); // Format: YYYY_NN_NNNNNNN_
+                        
+                        // Remove common suffixes
+                        filename = filename.replace(/_Fire Alarm System.*$/i, '');
+                        filename = filename.replace(/_Annual Emergency.*$/i, '');
+                        filename = filename.replace(/ copy$/i, '');
+                        filename = filename.replace(/\.+$/g, ''); // Remove trailing dots
+                        
+                        const buildingName = filename.trim() || file.name;
+                        
+                        // Try to parse with existing function
+                        const buildings = parseImportText(text);
+                        
+                        if (buildings.length > 0) {
+                            // Override name with filename-extracted name
+                            buildings[0].name = buildingName;
+                            buildings[0].details.buildingName = buildingName;
+                            
+                            preview.push({
+                                filename: file.name,
+                                buildingName,
+                                building: buildings[0],
+                                success: true
+                            });
+                        } else {
+                            preview.push({
+                                filename: file.name,
+                                buildingName,
+                                success: false,
+                                error: 'Could not parse file'
+                            });
+                        }
+                    } catch (error) {
+                        preview.push({
+                            filename: file.name,
+                            success: false,
+                            error: error.message
+                        });
+                    }
+                }
+
+                setBatchImportPreview(preview);
+                setActiveModal({ type: 'batch-import-preview', title: 'Batch Import Preview' });
+            };
+
+            const confirmBatchImport = () => {
+                const successfulBuildings = batchImportPreview
+                    .filter(item => item.success)
+                    .map(item => item.building);
+
+                if (successfulBuildings.length > 0) {
+                    setYearData(prev => ({
+                        ...prev,
+                        [selectedYear]: [...(prev[selectedYear] || []), ...successfulBuildings]
+                    }));
+                    console.log(`✅ Batch imported ${successfulBuildings.length} building(s) into ${selectedYear}`);
+                }
+
+                setBatchImportPreview([]);
+                setActiveModal(null);
+            };
+
             // --- AUTHENTICATION FUNCTIONS ---
             const handleLogin = async (e) => {
                 e.preventDefault();
@@ -2196,6 +2275,22 @@
                         <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="flex-1 p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                         <button onClick={() => { setImportTextValue(''); setActiveModal({ type: 'import', title: 'Import Buildings' }); }} className="flex-1 p-4 border-2 border-dashed border-blue-300 rounded-xl text-blue-400 font-bold uppercase text-[10px]">📋 Import</button>
                     </div>
+                    <div className="relative">
+                        <input 
+                            type="file" 
+                            multiple 
+                            accept=".txt" 
+                            onChange={handleBatchImportFiles}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            id="batch-import-input"
+                        />
+                        <label 
+                            htmlFor="batch-import-input"
+                            className="block w-full p-4 border-2 border-dashed border-green-300 rounded-xl text-green-600 font-bold uppercase text-[10px] text-center cursor-pointer hover:bg-green-50 transition-colors"
+                        >
+                            📁 Batch Import Files
+                        </label>
+                    </div>
                     {(yearData[selectedYear] || []).length > 0 && (
                         <button onClick={() => { 
                             setActiveModal({ 
@@ -2230,6 +2325,48 @@
                         }} className="w-full p-3 border-2 border-dashed border-red-300 rounded-xl text-red-400 font-bold uppercase text-[10px]">🗑️ Clear All {selectedYear} Buildings</button>
                     )}
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    {activeModal?.type === 'batch-import-preview' && (
+                        <Modal 
+                            title={activeModal.title} 
+                            onCancel={() => { setActiveModal(null); setBatchImportPreview([]); }} 
+                            onConfirm={confirmBatchImport}
+                            confirmText="Import All"
+                        >
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                <p className="text-xs text-gray-600 font-semibold">
+                                    {batchImportPreview.filter(item => item.success).length} of {batchImportPreview.length} files ready to import
+                                </p>
+                                {batchImportPreview.map((item, idx) => (
+                                    <div key={idx} className={`p-3 rounded-lg border ${
+                                        item.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                                    }`}>
+                                        <div className="flex items-start gap-2">
+                                            <span className="text-lg">{item.success ? '✅' : '❌'}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-bold text-sm text-gray-800 truncate">
+                                                    {item.buildingName || item.filename}
+                                                </p>
+                                                {item.success && item.building && (
+                                                    <p className="text-[10px] text-gray-500 mt-1">
+                                                        {item.building.details.city && `${item.building.details.city} • `}
+                                                        {item.building.details.manufacturer || 'No manufacturer'}
+                                                    </p>
+                                                )}
+                                                {!item.success && (
+                                                    <p className="text-[10px] text-red-600 mt-1">
+                                                        {item.error}
+                                                    </p>
+                                                )}
+                                                <p className="text-[9px] text-gray-400 mt-0.5 truncate">
+                                                    {item.filename}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </Modal>
+                    )}
                     {activeModal?.type === 'import' && (
                         <Modal title={activeModal.title} onCancel={() => { setActiveModal(null); setImportTextValue(''); }} onConfirm={() => {
                             const newBuildings = parseImportText(importTextValue);
