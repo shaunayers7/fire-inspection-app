@@ -35,7 +35,7 @@
 * **Source of Truth:** Cloud is ALWAYS the source of truth (no merging)
 * **Offline Support:** Works offline, pushes when internet available
 * **Protected Buildings:** Bellevue & Pincher Creek only restored on FIRST LOAD (new user)
-* **See:** SYNC-FEATURE.md for complete documentation
+* **See:** [technical/SYNC-FEATURE.md](technical/SYNC-FEATURE.md) for complete documentation
 
 ## 7. PROJECT MANAGEMENT
 * **Master Task List:** Located in `docs/TODO.md`.

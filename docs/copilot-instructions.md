@@ -16,20 +16,20 @@
 - Auto-sync: 5 seconds after last edit
 - Conflict resolution: Newer timestamp wins
 - Local-first: Data saves to localStorage immediately, then syncs to cloud
-- See `docs/SYNC-FEATURE.md` for complete sync documentation
+- See `docs/technical/SYNC-FEATURE.md` for complete sync documentation
 
 ## DATA ARCHITECTURE
 - **Building Data:** Embedded in code as `default2026Buildings` array
 - **Storage Key:** `fire_inspection_v4_data` (NEVER change)
-- **Historical Docs:** `.txt` files in `docs/` are for reference only, NOT parsed by app
-- **Protection Logic:** See `docs/DATA-PROTECTION.md` for recovery procedures
+- **Historical Docs:** `.txt` files in `docs/archive/` are for reference only, NOT parsed by app
+- **Protection Logic:** See `docs/security/DATA-PROTECTION.md` for recovery procedures
 
 ## DOCUMENTATION INDEX
 - `PRD.md` - Product requirements and structure rules
 - `TODO.md` - Feature roadmap and task checklist
-- `SYNC-FEATURE.md` - Cloud sync implementation details
-- `DATA-PROTECTION.md` - Data recovery and protection logic
-- `CODE-AUDIT.md` - Dependency and bloat analysis
+- `technical/SYNC-FEATURE.md` - Cloud sync implementation details
+- `security/DATA-PROTECTION.md` - Data recovery and protection logic
+- `audits/CODE-AUDIT.md` - Dependency and bloat analysis
 
 ## WORKFLOW
 1. Check `TODO.md` for next task
