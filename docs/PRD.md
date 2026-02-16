@@ -27,6 +27,53 @@
 * **Protected Buildings:** Bellevue and Pincher Creek (2026) are baseline buildings that must ALWAYS exist. The initialization logic automatically restores them if missing.
 * **Cloud Sync:** Firebase integration provides multi-user collaboration. Cloud data is merged with local data (newer timestamp wins), but protected buildings are always preserved locally first.
 
+## 6A. DATA INTEGRITY & STRUCTURE PRESERVATION (CRITICAL - DO NOT VIOLATE)
+
+### ABSOLUTE RULES - NO EXCEPTIONS:
+1. **NEVER modify building details structure without explicit user request**
+   - Building details field order is FIXED: `buildingName`, `address`, `city`, `panelLocation`, `manufacturer`, `panelModel`, `serialNumber`, `softwareVersion`, `dateManufactured`, `lastServiceDate`
+   - Do NOT add, remove, or reorder these fields unless user explicitly requests it
+   - All existing data must be preserved when making ANY changes
+
+2. **NEVER change field names in `details` object**
+   - Field names like `buildingName`, `panelModel`, etc. are database keys
+   - Changing these breaks existing saved data
+   - If a field name must change, create migration code to preserve data
+
+3. **NEVER remove fields from data structures**
+   - Removing fields = data loss
+   - If a field becomes obsolete, mark it deprecated but keep it
+   - Old data in cloud/localStorage must always load correctly
+
+4. **NEVER change the structure of `yearData` without explicit approval**
+   - Format: `{ [year]: [buildings...] }`
+   - Building structure: `{ id, name, lastSynced, details, sections, data }`
+   - Section structure: `{ id, title, color, isDev }`
+   - Any structural changes require user approval AND migration plan
+
+5. **ALL changes must be backwards compatible**
+   - New fields: Add with default values, never replace existing fields
+   - Code changes: Must work with data saved by previous versions
+   - Test with existing Bellevue/Pincher Creek data before confirming changes
+
+### BEFORE MAKING ANY CHANGES:
+- ✅ Ask: "Will this preserve all existing data?"
+- ✅ Ask: "Will data saved yesterday still load correctly?"
+- ✅ Ask: "Did the user explicitly request this structural change?"
+- ❌ If answer is NO to any question, DO NOT PROCEED without user approval
+
+### WHEN USER REQUESTS CHANGES:
+- If change affects data structure, warn user about potential data impact
+- Propose migration strategy if needed
+- Get explicit confirmation before implementing
+- Test with existing buildings (Bellevue, Pincher Creek) to verify data preservation
+
+### IMPORTANT DISTINCTION - UI vs DATA:
+- **UI Changes (SAFE):** Changing how fields are displayed, reordering UI elements, styling updates = NO data impact
+- **Data Changes (REQUIRES APPROVAL):** Adding/removing/renaming fields in the data structure = REQUIRES explicit user approval
+- Example: Displaying fields in specific order (UI change) ≠ Changing field names in database (data change)
+- Always preserve the underlying data structure even when improving UI/UX
+
 ## 7. CLOUD SYNC (UPDATED FEB 2026)
 * **Provider:** Firebase Firestore
 * **Auto-Push:** 5 seconds after last edit, changes push to cloud automatically

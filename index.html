@@ -210,18 +210,20 @@
                 let panelLocation = '';
                 
                 lines.forEach((line, idx) => {
-                    // Skip lines that are just labels without content
-                    if (line === 'Client:' || line === 'Building:' || line === 'Date:' || line === 'Comments:' || line === 'Address:' || line.length === 0) {
+                    // Skip empty lines
+                    if (line.length === 0) {
                         return;
                     }
                     
                     // Check if this is a line with only labels (Client: Building: Date: Comments:)
-                    if (/^(Client:|Building:|Date:|Comments:)+\s*$/.test(line)) {
+                    // This is common in forms where labels are on one line and data on the next
+                    if (/^(Client:|Building:|Date:|Comments:|Address:)+(\s+(Client:|Building:|Date:|Comments:|Address:)+)*\s*$/.test(line)) {
+                        // Skip this line, data will be on the next line
                         return;
                     }
                     
-                    // Extract building name from "Building:" label
-                    if (line.startsWith('Building:')) {
+                    // Extract building name from "Building:" label (when data is on same line)
+                    if (line.startsWith('Building:') && !line.match(/^Building:\s*$/)) {
                         const buildingText = line.replace('Building:', '').replace(/Date:/g, '').replace(/Comments:/g, '').trim();
                         if (buildingText && buildingText.length > 2) {
                             buildingName = buildingText;
@@ -275,7 +277,7 @@
                     }
                     // Handle case where data follows label line
                     // If previous line was "Client: Building: Date: Comments" and this line doesn't have colons
-                    else if (idx > 0 && /^(Client:|Building:|Date:|Comments:)+/.test(lines[idx - 1]) && !line.includes(':') && !buildingName) {
+                    else if (idx > 0 && /^(Client:|Building:|Date:|Comments:|Address:)/.test(lines[idx - 1]) && !line.includes(':') && !buildingName && line.length > 0) {
                         let clientText = line.trim();
                         // Remove common prefixes
                         clientText = clientText.replace(/^LDS Church\s*[-–]\s*/i, '').trim();
@@ -309,6 +311,7 @@
                                 buildingName = words.slice(0, addressStartIdx).join(' ');
                                 address = words.slice(addressStartIdx, words.length - 1).join(' ');
                             } else {
+                                // No street type found - just split between building name and city
                                 buildingName = words.slice(0, -1).join(' ');
                             }
                         } else {
@@ -1427,7 +1430,7 @@
                 doc.autoTable({
                     startY: currentY,
                     head: [['FIELD', 'INFORMATION']],
-                    body: Object.entries(activeBuilding.details).map(([k, v]) => [k.replace(/([A-Z])/g, ' $1').toUpperCase(), v || 'N/A']),
+                    body: ['buildingName', 'address', 'city', 'panelLocation', 'manufacturer', 'panelModel', 'serialNumber', 'softwareVersion', 'dateManufactured', 'lastServiceDate'].map(k => [k.replace(/([A-Z])/g, ' $1').toUpperCase(), activeBuilding.details[k] || 'N/A']),
                     theme: 'striped',
                     headStyles: { fillColor: [37, 99, 235] },
                     didDrawPage: (data) => { currentY = data.cursor.y + 15; }
@@ -2333,10 +2336,10 @@
                             </button>
                             {expandedSections['details'] && (
                                 <div className="bg-white p-4 grid grid-cols-1 gap-4">
-                                    {Object.keys(activeBuilding.details).map(k => (
+                                    {['buildingName', 'address', 'city', 'panelLocation', 'manufacturer', 'panelModel', 'serialNumber', 'softwareVersion', 'dateManufactured', 'lastServiceDate'].map(k => (
                                         <div key={k} className="space-y-1">
                                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{k.replace(/([A-Z])/g, ' $1')}</label>
-                                            <input value={activeBuilding.details[k]} onChange={(e) => updateBuildingDetail(k, e.target.value)} className="w-full border-b border-gray-100 py-1 font-semibold text-gray-700 focus:border-blue-500" />
+                                            <input value={activeBuilding.details[k] || ''} onChange={(e) => updateBuildingDetail(k, e.target.value)} className="w-full border-b border-gray-100 py-1 font-semibold text-gray-700 focus:border-blue-500" />
                                         </div>
                                     ))}
                                 </div>
