@@ -2,7 +2,46 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover, shrink-to-fit=no">
+    
+    <!-- Force viewport scale immediately -->
+    <script>
+        (function() {
+            // Force reset viewport scale on load
+            function resetViewport() {
+                const viewport = document.querySelector('meta[name=viewport]');
+                if (viewport) {
+                    viewport.setAttribute('content', 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover, shrink-to-fit=no');
+                }
+                // Force zoom to 1
+                if (document.body) {
+                    document.body.style.zoom = 1;
+                }
+            }
+            
+            // Run immediately
+            resetViewport();
+            
+            // Run on DOMContentLoaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', resetViewport);
+            }
+            
+            // Run on page show (handles back/forward cache)
+            window.addEventListener('pageshow', resetViewport);
+            
+            // Reset on orientation change
+            window.addEventListener('orientationchange', function() {
+                setTimeout(resetViewport, 100);
+            });
+            
+            // Reset on resize
+            window.addEventListener('resize', function() {
+                resetViewport();
+            });
+        })();
+    </script>
+    
     <title>Fire Inspection App</title>
     
     <!-- PWA Meta Tags -->
@@ -25,7 +64,7 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, serverTimestamp, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
         
         window.FirebaseSDK = { 
@@ -39,6 +78,8 @@
             getDocs, 
             addDoc,
             serverTimestamp,
+            onSnapshot,
+            query,
             getAuth, 
             onAuthStateChanged, 
             createUserWithEmailAndPassword,
@@ -175,8 +216,45 @@
     </style>
 </head>
 <body>
-    <!-- Prevent zoom on iOS Safari -->
+    <!-- Prevent zoom on iOS Safari and Brave Mobile -->
     <script>
+        // Aggressive zoom prevention for mobile browsers
+        (function() {
+            // Force zoom to 1 on the document
+            function forceZoomReset() {
+                if (document.body) {
+                    document.body.style.zoom = 1;
+                }
+                if (document.documentElement) {
+                    document.documentElement.style.zoom = 1;
+                }
+                
+                // Also check visual viewport API (modern browsers)
+                if (window.visualViewport) {
+                    const scale = window.visualViewport.scale;
+                    if (scale !== 1) {
+                        // Force a viewport reset
+                        const viewport = document.querySelector('meta[name=viewport]');
+                        if (viewport) {
+                            const content = viewport.getAttribute('content');
+                            viewport.setAttribute('content', 'width=1px');
+                            setTimeout(() => viewport.setAttribute('content', content), 1);
+                        }
+                    }
+                }
+            }
+            
+            // Run on various events
+            window.addEventListener('load', forceZoomReset);
+            window.addEventListener('resize', forceZoomReset);
+            
+            // Monitor visualViewport for scale changes
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', forceZoomReset);
+                window.visualViewport.addEventListener('scroll', forceZoomReset);
+            }
+        })();
+        
         // Prevent pinch-to-zoom
         document.addEventListener('gesturestart', function(e) {
             e.preventDefault();
@@ -544,6 +622,8 @@
             const [isAdmin, setIsAdmin] = useState(false);
             const viewRef = useRef('login');
             const [isLoadingData, setIsLoadingData] = useState(true);
+            const [realtimeSyncActive, setRealtimeSyncActive] = useState(false);
+            const realtimeUnsubscribe = useRef(null);
             const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
             const [darkMode, setDarkMode] = useState(() => {
                 const saved = localStorage.getItem(THEME_KEY);
@@ -921,6 +1001,101 @@
                 };
                 initFirebase();
             }, []);
+            
+            // Real-time sync with Page Visibility API (battery-friendly)
+            useEffect(() => {
+                if (!db || !user) return;
+                
+                const startRealtimeSync = () => {
+                    if (realtimeUnsubscribe.current) {
+                        console.log('🔄 Real-time sync already active');
+                        return;
+                    }
+                    
+                    try {
+                        const { collection, onSnapshot } = window.FirebaseSDK;
+                        const buildingsRef = collection(db, `apps/${APP_ID}/buildings`);
+                        
+                        console.log('👂 Real-time sync started (app is visible)');
+                        setRealtimeSyncActive(true);
+                        
+                        realtimeUnsubscribe.current = onSnapshot(buildingsRef, (snapshot) => {
+                            // Skip if this is the initial load
+                            if (isUpdatingFromSync.current) return;
+                            
+                            console.log('🔔 Real-time update detected from cloud');
+                            
+                            const cloudBuildings = {};
+                            snapshot.forEach(doc => {
+                                const data = doc.data();
+                                const year = data.year || 2026;
+                                if (!cloudBuildings[year]) cloudBuildings[year] = [];
+                                cloudBuildings[year].push(data);
+                            });
+                            
+                            // Update local state with cloud changes
+                            isUpdatingFromSync.current = true;
+                            setYearData(prev => {
+                                console.log('📲 Applying real-time cloud updates...');
+                                const result = { 2025: [], 2026: [], ...cloudBuildings };
+                                return result;
+                            });
+                            
+                            // Update sync time
+                            const latestSync = snapshot.docs.reduce((latest, doc) => {
+                                const syncTime = doc.data().lastSynced;
+                                return syncTime && (!latest || syncTime > latest) ? syncTime : latest;
+                            }, null);
+                            
+                            if (latestSync) setLastSyncTime(latestSync);
+                            
+                            setTimeout(() => {
+                                isUpdatingFromSync.current = false;
+                            }, 100);
+                        }, (error) => {
+                            console.error('❌ Real-time sync error:', error);
+                            setRealtimeSyncActive(false);
+                        });
+                    } catch (error) {
+                        console.error('Failed to start real-time sync:', error);
+                        setRealtimeSyncActive(false);
+                    }
+                };
+                
+                const stopRealtimeSync = () => {
+                    if (realtimeUnsubscribe.current) {
+                        console.log('💤 Real-time sync stopped (app in background)');
+                        realtimeUnsubscribe.current();
+                        realtimeUnsubscribe.current = null;
+                        setRealtimeSyncActive(false);
+                    }
+                };
+                
+                // Handle Page Visibility API (battery-friendly)
+                const handleVisibilityChange = () => {
+                    if (document.hidden) {
+                        // App went to background - stop listening to save battery
+                        stopRealtimeSync();
+                    } else {
+                        // App came to foreground - start listening
+                        startRealtimeSync();
+                    }
+                };
+                
+                // Start real-time sync if page is visible
+                if (!document.hidden) {
+                    startRealtimeSync();
+                }
+                
+                // Listen for visibility changes
+                document.addEventListener('visibilitychange', handleVisibilityChange);
+                
+                // Cleanup on unmount
+                return () => {
+                    stopRealtimeSync();
+                    document.removeEventListener('visibilitychange', handleVisibilityChange);
+                };
+            }, [db, user]);
             
             // Version logging and cache detection
             useEffect(() => {
@@ -2278,6 +2453,14 @@
                                 second: '2-digit',
                                 hour12: true
                             })} MST
+                            {realtimeSyncActive && (
+                                <span className="ml-2 text-green-500" title="Real-time sync active">● Live</span>
+                            )}
+                        </div>
+                    )}
+                    {!lastSyncTime && realtimeSyncActive && (
+                        <div className="text-[10px] text-green-500 text-center font-semibold">
+                            <span title="Real-time sync active">● Real-time sync active</span>
                         </div>
                     )}
                     {(!yearData[selectedYear] || yearData[selectedYear].length === 0) && (
