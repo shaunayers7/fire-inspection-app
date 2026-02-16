@@ -210,17 +210,112 @@
                 let panelLocation = '';
                 
                 lines.forEach((line, idx) => {
-                    // Extract building name from "Building:" line
+                    // Skip lines that are just labels without content
+                    if (line === 'Client:' || line === 'Building:' || line === 'Date:' || line === 'Comments:' || line === 'Address:' || line.length === 0) {
+                        return;
+                    }
+                    
+                    // Check if this is a line with only labels (Client: Building: Date: Comments:)
+                    if (/^(Client:|Building:|Date:|Comments:)+\s*$/.test(line)) {
+                        return;
+                    }
+                    
+                    // Extract building name from "Building:" label
                     if (line.startsWith('Building:')) {
-                        buildingName = line.replace('Building:', '').trim();
+                        const buildingText = line.replace('Building:', '').replace(/Date:/g, '').replace(/Comments:/g, '').trim();
+                        if (buildingText && buildingText.length > 2) {
+                            buildingName = buildingText;
+                        }
                     }
-                    // Alternative: Extract from "Client:" line if Building is empty
-                    else if (line.startsWith('Client:') && !buildingName) {
-                        const clientText = line.replace('Client:', '').trim();
-                        // Remove "LDS Church" prefix if present
-                        buildingName = clientText.replace(/^LDS Church\s*[-–]\s*/i, '').trim();
+                    // Extract from "Client:" line - common format: "Client: LDS Church – Building Name Address City"
+                    else if (line.startsWith('Client:')) {
+                        let clientText = line.replace('Client:', '').replace(/Building:/g, '').replace(/Date:/g, '').replace(/Comments:/g, '').trim();
+                        // Remove common prefixes
+                        clientText = clientText.replace(/^LDS Church\s*[-–]\s*/i, '').trim();
+                        
+                        // Try to split by common patterns
+                        // Pattern: "Name [Number] Street [Type] City" or "Name Street City"
+                        const words = clientText.split(/\s+/);
+                        if (words.length >= 2) {
+                            // Last word is likely the city
+                            city = words[words.length - 1];
+                            
+                            // Look for street type indicator (St, Ave, Rd, etc.)
+                            let streetTypeIdx = -1;
+                            for (let i = 0; i < words.length - 1; i++) {
+                                if (/^(St\.?|Ave\.?|Avenue|Street|Rd\.?|Road|Dr\.?|Drive|Blvd\.?|Boulevard|Lane|Way|Parkway|Court|Ct\.?)$/i.test(words[i])) {
+                                    streetTypeIdx = i;
+                                    break;
+                                }
+                            }
+                            
+                            if (streetTypeIdx > 0) {
+                                // Look backwards from street type to find start of address
+                                let addressStartIdx = streetTypeIdx - 1; // Default to word before street type
+                                
+                                // Check if there's a street number (starts with digit)
+                                for (let i = streetTypeIdx - 1; i >= 0; i--) {
+                                    if (/^\d+/.test(words[i])) {
+                                        addressStartIdx = i;
+                                        break;
+                                    }
+                                }
+                                
+                                // Building name is everything before address
+                                buildingName = words.slice(0, addressStartIdx).join(' ');
+                                // Address is from start to street type (not including city)
+                                address = words.slice(addressStartIdx, words.length - 1).join(' ');
+                            } else {
+                                // Fallback: treat first part as building name, last word as city
+                                buildingName = words.slice(0, -1).join(' ');
+                            }
+                        } else {
+                            buildingName = clientText;
+                        }
                     }
-                    // Extract address
+                    // Handle case where data follows label line
+                    // If previous line was "Client: Building: Date: Comments" and this line doesn't have colons
+                    else if (idx > 0 && /^(Client:|Building:|Date:|Comments:)+/.test(lines[idx - 1]) && !line.includes(':') && !buildingName) {
+                        let clientText = line.trim();
+                        // Remove common prefixes
+                        clientText = clientText.replace(/^LDS Church\s*[-–]\s*/i, '').trim();
+                        
+                        // Try to split by common patterns
+                        const words = clientText.split(/\s+/);
+                        if (words.length >= 2) {
+                            // Last word is likely the city
+                            city = words[words.length - 1];
+                            
+                            // Look for street type indicator
+                            let streetTypeIdx = -1;
+                            for (let i = 0; i < words.length - 1; i++) {
+                                if (/^(St\.?|Ave\.?|Avenue|Street|Rd\.?|Road|Dr\.?|Drive|Blvd\.?|Boulevard|Lane|Way|Parkway|Court|Ct\.?)$/i.test(words[i])) {
+                                    streetTypeIdx = i;
+                                    break;
+                                }
+                            }
+                            
+                            if (streetTypeIdx > 0) {
+                                let addressStartIdx = streetTypeIdx - 1;
+                                
+                                // Check for street number
+                                for (let i = streetTypeIdx - 1; i >= 0; i--) {
+                                    if (/^\d+/.test(words[i])) {
+                                        addressStartIdx = i;
+                                        break;
+                                    }
+                                }
+                                
+                                buildingName = words.slice(0, addressStartIdx).join(' ');
+                                address = words.slice(addressStartIdx, words.length - 1).join(' ');
+                            } else {
+                                buildingName = words.slice(0, -1).join(' ');
+                            }
+                        } else {
+                            buildingName = clientText;
+                        }
+                    }
+                    // Extract address from "Address:" line (might be on next line)
                     else if (line.startsWith('Address:')) {
                         const addressText = line.replace('Address:', '').trim();
                         if (addressText) {
@@ -229,12 +324,16 @@
                             address = lines[idx + 1];
                         }
                     }
-                    // Extract manufacturer and model
+                    // Extract manufacturer and model from same line
                     else if (line.includes('Manufacturer:')) {
-                        const match = line.match(/Manufacturer:\s*([^\s]+)/i);
-                        if (match) manufacturer = match[1];
-                        const modelMatch = line.match(/Model\s*#?:\s*([^\s]+(?:\s+\w+)?)/i);
-                        if (modelMatch) panelModel = modelMatch[1];
+                        const mfgMatch = line.match(/Manufacturer:\s*([^\s]+)/i);
+                        if (mfgMatch) manufacturer = mfgMatch[1];
+                        
+                        // Match everything after "Model #:" or "Model:" until end of line or next field
+                        const modelMatch = line.match(/Model\s*#?:\s*(.+?)(?=\s+Panel Located|$)/i);
+                        if (modelMatch) {
+                            panelModel = modelMatch[1].trim();
+                        }
                     }
                     // Extract panel location
                     else if (line.startsWith('Panel Located')) {
