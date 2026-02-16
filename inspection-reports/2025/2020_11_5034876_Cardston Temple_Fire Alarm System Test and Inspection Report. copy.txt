@@ -1,0 +1,376 @@
+Annual Fire Alarm Inspection Report
+ Client: Building: Date:
+Location of manual alarm and audible and visual devices operated with main AC power off
+a) As listed below
+b) ______________________________________________________________________
+c) ______________________________________________________________________
+d) ______________________________________________________________________
+e) ______________________________________________________________________
+Fire Alarm system functioned properly under above test Overall
+Each manual alarm initiating device has been individually tested. (As indicated belowO)verall
+LDS Church, Welling FM Group
+Fire Alarm panel Manufacturer: Model #:
+Edwards 2280
+Key in South Mech room
+  Cardston
+AC Pwr CCT:
+AC Panel Location
+YES
+B-23
+Stage Stairwell
+  1 2
+3 4 5 6
+1 2 3 4
+Each automatic alarm initiating device has been tested. (As indicated below) Each audible and visual signalling device has been tested.
+Correct annunciation has be confirmed for each device tested.
+Summary
+The Fire Alarm System is now fully functional
+The Fire Alarm System is operational with minor deficiencies as noted below. The Fire Alarm System has major deficiencies noted below.
+A copy of this Report has been given to: Welling FM Group
+Overall Overall
+No of devices
+No of devices No of devices No of devices
+Test Results
+(Every line must the appropriate marking in the space provided) The fire alarm system functioned correctly under GENERAL ALARM CONDITIONS
+NO
+   97
+ 15
+ 71
+11
+     Note*
+This is to certify the Fire Alarm system has been tested in accordance with Section 5, Periodic Inspections and Tests, of CAN/ULC-S536-M86, and these records document the results of testing performed.
+Test and maintenance code require this record be maintained by the Owner for a period of two years.
+ Electric Boyes
+403 634 7762
+Signature of Approved Person Conducting Test Company Name Telephone Number
+Pre-Test CheckList
+1 Do you have auxiliary functions that can impair building functions such as an elevator capture fan shutdown, door holders, etc.?
+2 Have building occupants been informed of impending testing?
+3 Has a predetermined time been established for testing signalling devices?
+4 Have previsions been made for acquiring access to the secured areas of the building and are spare reset and panel keys available?
+5 Has a alternate plan been established to alert occupants and local Fire Depts. Should an actual fire condition occur during testing?
+CONTROL EQUIPMENT TEST RECORD
+EVERY LINE MUST HAVE THE APPROPRIATE MARKING IN THE BOX PROVIDED
+Control Panel Test
+YES
+NO
+Power on Indicator
+Temple St Address:
+YES
+NO N/A
+Tested Correctly
+
+  Common Trouble Lamp
+Common Trouble Signal
+AC Power Failure Trouble
+Ground Detection Lamp
+Ground Detection Trouble
+General Alarm Operation
+Alarm Silence Operation
+Alarm Silence Lamp
+Alarm Silence Inhibit 1 Minute
+Alarm Initiating Circuit Individually Tested For Alarm Alarm Lamp Operation (Individually Tested)
+Alarm Lamp Designation Checked
+All Audible Alarm Signals Operated on AC Power Are Glass and Door(s) Cleaned.
+Control Panel General Condition, Clean & c/w Keys
+BATTERY TESTS
+Battery Type
+Battery Voltage (AC Power On) #1 Battery Voltage (AC Power On) #2 Battery Charging Current #1 Battery Charging Current #2
+Battery Voltage (AC Power Off – Supervisory Condition) #1 Battery Voltage (AC Power Off – Supervisory Condition) #2 Battery Voltage (AC Power Off – Alarm Condition) Full Load #1 Battery Voltage (AC Power Off – Alarm Condition) Full Load #2
+Battery Terminals Cleaned and Lubricated Battery Terminals Tight
+12 V 7.2 Ah (#1) X 2
+VDC
+VDC Amps DC Amps DC
+VDC
+VDC VDC VDC
+12 V 5 Ah (#2) X 2
+  Device Testing – Legend
+Device
+Description Type
+Model#
+Device
+Description Type
+Model#
+H
+Manual Pull Station
+B
+Bell
+HT
+Heat Detector Fixed Temp
+K
+Horn
+RHT
+Heat Detector Rate of Rise
+C
+Chime
+S
+Smoke Detector
+V
+Visual
+Alarm Appliance
+DS
+Duct Smoke Detector
+SP
+Loud Speaker
+FS
+Springler Flow Switch
+HSP
+Horn
+Loud Speaker
+TS
+Sprinkler Tamper Switch
+ET
+Emergenc y Telephon e
+SA
+Smoke Alarm Single Stat Type
+AD
+Ancillary Devices
+  ANNUAL TEST AND INSPECTION RECORD
+
+ Location
+Device
+Correctly Installed
+Missing
+Requires Service
+Alarm Operation Confirmed
+ZONE
+SE Bishop Exit (14)
+H
+H
+2
+E Ent (1)
+1
+Library Closet (5)
+HT
+2
+Library (4)
+HT
+2
+5 Ward Bishop (7)
+HT
+2
+105 Closet (8)
+HT
+2
+SE Ent (3)
+H
+2
+107 Closet (9)
+HT
+2
+N Mech 201 (28)
+HT
+9
+RS N1 Closet (15)
+HT
+2
+RS N2 Closet (16)
+HT
+2
+S RS Closet 1 (12)
+HT
+2
+S RS Closet 2 (13)
+HT
+2
+RS (11)
+H
+2
+S Hall Center (2)
+H
+2
+S Hall Custodial (10)
+HT
+2
+SW Ent (13)
+H
+2
+RM 104 (12)
+H
+2
+103 Closet 1 (17)
+HT
+2
+104 Closet 2 (18)
+HT
+2
+104 Closet 3 (19)
+HT
+2
+Sacrament Prep (21)
+HT
+2
+Custodial By Library (20)
+HT
+2
+Sound Closet (22)
+HT
+1
+Gym B-6 Rm (39)
+RHT
+1
+S Gym (10)
+H
+1
+N Gym (9)
+H
+1
+Kitchen (23)
+RHT
+1
+N ent (8)
+H
+1
+Downstairs (7)
+H
+4
+Dn Strg Rm 2 (36)
+HT
+4
+DN ST A-1 Closet (37)
+HT
+4
+N Stair Well (26)
+S
+6
+N Stairwell up (6)
+H
+9
+201 C-11 (27)
+HT
+9
+Up Video (30)
+HT
+9
+Up hallway Mech (32)
+HT
+9
+Up Custodial (34)
+HT
+8
+Middle Hall Up (4)
+H
+8
+Rm 214 closet (31)
+HT
+8
+214 Mech (33)
+HT
+8
+Rm 214 (34A)
+HT
+8
+C Stairwell (24)
+S
+7
+S Attic (15)
+H
+11
+C ATTIC (3)
+RHT
+11
+W ATTIC (6)
+RHT
+11
+S Attic N (2)
+RHT
+11
+N ATTIC (11)
+RHT
+11
+NW ATTIC (14)
+RHT
+11
+S Stairwell (25)
+S
+10
+CRAWL SP #1 (38)
+RHT
+5
+Crawl Space #2 (40)
+RHT
+5
+Crawl Space #3 (41)
+RHT
+5
+Boiler (14)
+H
+3
+Boiler Rm (43)
+HT
+3
+S ATTIC S (1)
+RHT
+11
+Crawl Space #4 (42)
+RHT
+5
+Upstairs Hall (5)
+H
+8
+BOILER RM (45)
+HT
+3
+Rm 108 Mech (44)
+HT
+2
+Crawl Space #6 (47)
+RHT
+5
+Buzz/Str 1
+V
+N/A
+Buzz/Str 2
+V
+N/A
+Buzz/Str 3
+V
+N/A
+Buzz/Str 4
+V
+N/A
+Buzz/Str 5
+V
+N/A
+Buzz/Str 6
+V
+N/A
+Buzz/Str 7
+V
+N/A
+Buzz/Str 8
+V
+N/A
+Buzz/Str 9
+V
+N/A
+Buzz/Str 10
+V
+N/A
+ Elavator Maintance room
+HT
+Annual Emergency Lights Test
+Lamp Test Pass
+12
+Mainteance Required Yes No
+ EM-1
+EM-2
+EM-3
+EM-4
+EM-5
+EM-6
+EM-7 L-5
+EM-8 EM-9
+H-11 L-11
+CCT# Yes N-1
+No
+Location
+South Hallway
+South Hallway
+South womans washroom Above Panel B
+N Womens Bathroom
+N Basement
+Handi Lift 11ststFflolorr built into light Handi Lift 22nnddFFloloorr Built into light
+G-12 H-11 B-9 K-10 K-24
+
+Panel 'L' is located in material center Panel 'K' is located o/s kitchen door

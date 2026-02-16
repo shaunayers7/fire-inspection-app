@@ -1,0 +1,235 @@
+Test Results
+Annual Fire Alarm Inspection Report
+ Client: Building: Date:
+Comments
+LDS Church – Welling FM Group
+Raymond
+Fire Alarm panel Manufacturer: Edwards Model #: 2280
+F/A panel located in Custodial Closet.
+A/C Pwr bkr located in main CDP
+  Knight St. Chapel Address:
+(Every line must the appropriate marking in the space provided)
+1 The fire alarm system functioned correctly under GENERAL ALARM CONDITIONS
+2 Location of manual alarm and audible and visual devices operated with main AC power off
+a) AS NOTED BELOW
+b) ______________________________________________________________________
+c) ______________________________________________________________________
+d) ______________________________________________________________________
+e) ______________________________________________________________________
+Fire Alarm system functioned properly under above test
+3 Each manual alarm initiating device has been individually tested. (As indicated below)
+4 Each automatic alarm initiating device has been tested. (As indicated below)
+5 Each audible and visual signalling device has been tested.
+6 Correct annunciation has be confirmed for each device tested.
+Summary
+1 The Fire Alarm System is now fully functional
+2 The Fire Alarm System is operational with minor deficiencies as noted below.
+3 The Fire Alarm System has major deficiencies noted below.
+4 A copy of this Report has been given to: Welling Fm Group
+YES NO
+SLC Monitoring must be contacted before starting verification 1 800 537 5944 (option 1) and request site put in test
+Customer ID: 5232864
+    28
+Overall No of devices
+Overall No of devices Overall No of devices Overall No of devices
+ 6
+ 16
+6
+     Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.
+This is to certify the Fire Alarm system has been tested in accordance with Section 5, Periodic Inspections and Tests, of CAN/ULC-S536-M86, and these records document the results of testing performed.
+ Electric Boyes
+403 634 7762
+Signature of Approved Person Conducting Test Company Name Telephone Number
+Pre-Test CheckList
+1 Do you have auxiliary functions that can impair building functions such as an elevator capture fan shutdown, door holders, etc.?
+2 Have building occupants been informed of impending testing?
+3 Has a predetermined time been established for testing signalling devices?
+4 Have previsions been made for acquiring access to the secured areas of the building and
+are spare reset and panel keys available?
+5 Has a alternate plan been established to alert occupants and local Fire Depts. Should an actual fire condition occur during testing?
+CONTROL EQUIPMENT TEST RECORD
+EVERY LINE MUST HAVE THE APPROPRIATE MARKING IN THE BOX PROVIDED
+Control Panel Test
+Power on Indicator Common Trouble Lamp Common Trouble Signal AC Power Failure Trouble Ground Detection Lamp
+YES
+NO
+YES
+NO N/A
+Tested Correctly
+
+  Ground Detection Trouble
+General Alarm Operation
+Alarm Silence Operation
+Alarm Silence Lamp
+Alarm Silence Inhibit 1 Minute
+Alarm Initiating Circuit Individually Tested For Alarm Alarm Lamp Operation (Individually Tested)
+Alarm Lamp Designation Checked
+All Audible Alarm Signals Operated on AC Power Are Glass and Door(s) Cleaned.
+Control Panel General Condition, Clean & c/w Keys
+BATTERY TESTS
+Battery Type
+Battery Voltage (AC Power On) Battery Charging Current
+Battery Voltage (AC Power Off – Supervisory Condition) Battery Voltage (AC Power Off – Alarm Condition) Full Load
+Battery Terminals Cleaned and Lubricated Battery Terminals Tight
+VDC Amps DC VDC VDC
+ YES
+NO
+ Device Testing – Legend
+Device
+Description
+Type
+Model#
+Device
+Description
+Type
+Model#
+H
+Manual Pull Station
+B
+Bell
+HT
+Heat Detector Fixed Temp
+K
+Horn
+RHT
+Heat Detector Rate of Rise
+C
+Chime
+S
+Smoke Detector
+V
+Visual Alarm Appliance
+DS
+Duct Smoke Detector
+SP
+Loud Speaker
+FS
+Springler Flow Switch
+HSP
+Horn Loud Speaker
+TS
+Sprinkler Tamper Switch
+ET
+Emergency Telephone
+SA
+Smoke Alarm Single Stat Type
+AD
+Ancillary Devices
+  ANNUAL TEST AND INSPECTION RECORD
+West Exit
+Primary Rm
+Rm 20 (3)
+Rm 22 (5)
+Kitchen (10)
+Rm 10 (11)
+R.S. Rm
+Rm C-3 (17)
+Rm C-4 (2)
+Location
+N Exit o/s Chapel
+Library (4)
+N Coat Rm (6)
+Sac Prep (7)
+Rm C-1 (8)
+S Coat Rm (9)
+S Exit o/s Chapel
+Kitchen
+Cust Closet (1)
+Gym Mech 1 (13)
+Gym Mech 2 (14)
+Gym C-5 Strg (16)
+RM D-1 (12)
+Buzzer 1
+Buzzer 2
+Buzzer 3
+Buzzer 4
+Buzzer 5
+Buzzer 6
+Device
+H
+H
+HT
+H
+HT
+HT
+HT
+HT
+HT
+HT
+H
+H
+HT
+HT
+H
+RH
+HT
+HT
+HT
+HT
+HT
+HT
+B
+B
+B
+B
+B
+B
+Correctly Installed
+Missing
+Requires Service
+Alarm Operation Confirmed
+Zone
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+N/A
+N/A
+N/A
+N/A
+N/A
+N/A
+ Chapel Buzzer very low volume
+
+  PAK #
+EM-1
+EM-2
+EM-3
+Annual Emergency Lights Test
+CCT #
+Cct # C-32
+Cct #A-33
+Cct #A-1
+Panel Location
+Gym Closet
+Sac Prep Mec Rm
+Sac Prep Mec Rm
+Lamp Test Pass
+Yes
+No
+PACK LOCATION
+MEMBER CLOSET
+RM #10
+RM #22
+Mainteance Required
+Yes
+No
+  
