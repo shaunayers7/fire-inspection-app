@@ -1150,7 +1150,7 @@
 
             const getBuildingStatus = (building) => {
                 if (!building || !building.data) {
-                    return { text: 'No Data', class: 'text-gray-400' };
+                    return { text: 'No Data', class: 'text-gray-400', deficiencyText: '', deficiencyClass: '' };
                 }
                 let pending = 0;
                 let unfixed = 0;
@@ -1166,8 +1166,34 @@
                         });
                     }
                 });
-                if (pending === 0 && unfixed === 0) return { text: 'Complete', class: 'text-green-500' };
-                return { text: 'In Progress', class: 'text-orange-400' };
+                
+                // Inspection status (based on whether all items are checked)
+                if (pending > 0) {
+                    return { 
+                        text: 'In Progress', 
+                        class: 'text-orange-400',
+                        deficiencyText: unfixed > 0 ? `${unfixed} to fix` : '',
+                        deficiencyClass: 'text-red-500'
+                    };
+                }
+                
+                // All items checked - inspection complete
+                if (unfixed === 0) {
+                    return { 
+                        text: 'Inspection Complete', 
+                        class: 'text-green-500',
+                        deficiencyText: 'All Clear',
+                        deficiencyClass: 'text-green-500'
+                    };
+                }
+                
+                // Inspection complete but has deficiencies to fix
+                return { 
+                    text: 'Inspection Complete', 
+                    class: 'text-blue-500',
+                    deficiencyText: `${unfixed} Deficiencies to Fix`,
+                    deficiencyClass: 'text-red-500'
+                };
             };
 
             const handleExport = async () => {
@@ -1944,7 +1970,12 @@
                             <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); viewRef.current = 'form'; }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
                                 <div>
                                     <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
-                                    <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
+                                        {status.deficiencyText && (
+                                            <span className={`text-[9px] font-bold ${status.deficiencyClass}`}>{status.deficiencyText}</span>
+                                        )}
+                                    </div>
                                 </div>
                                 <button onClick={(e) => { 
                                     e.stopPropagation(); 
