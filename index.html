@@ -526,11 +526,13 @@
                 e.stopPropagation();
                 if (status === 'pending') onToggle('passed');
                 else if (status === 'passed') onToggle('failed');
+                else if (status === 'failed') onToggle('n/a');
                 else onToggle('pending');
             };
             const baseClass = "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0 transition-all active:scale-95";
             if (status === 'passed') return <button onClick={handleClick} className={`${baseClass} bg-green-500 text-white font-bold`}>✓</button>;
             if (status === 'failed') return <button onClick={handleClick} className={`${baseClass} bg-red-500 text-white font-bold`}>✕</button>;
+            if (status === 'n/a') return <button onClick={handleClick} className={`${baseClass} bg-gray-400 text-white font-bold text-[10px]`}>N/A</button>;
             return <button onClick={handleClick} className={`${baseClass} bg-gray-200 text-gray-400`}>○</button>;
         };
 
@@ -1590,15 +1592,15 @@
                         // Copy custom deficiencies but mark them as pending/not fixed
                         resetData[sectionKey] = building.data[sectionKey].map(def => ({
                             ...def,
-                            status: 'pending',
+                            status: def.status === 'n/a' ? 'n/a' : 'pending', // Preserve N/A status
                             fixed: false,
                             photo: null // Reset photos for new year
                         }));
                     } else {
-                        // Reset all inspection items to pending
+                        // Reset all inspection items to pending, but preserve N/A status
                         resetData[sectionKey] = building.data[sectionKey].map(item => ({
                             ...item,
-                            status: 'pending',
+                            status: item.status === 'n/a' ? 'n/a' : 'pending', // Preserve N/A status
                             fixed: false,
                             note: '', // Clear notes for new inspection
                             photo: null // Clear photos
@@ -2358,12 +2360,13 @@
                                         <li>Building name and details</li>
                                         <li>Panel information (manufacturer, model, etc.)</li>
                                         <li>Device inventory structure</li>
+                                        <li>N/A status (items marked as Not Applicable)</li>
                                     </ul>
                                 </div>
                                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                                     <p className="text-[10px] text-orange-800 font-semibold mb-1">What gets reset:</p>
                                     <ul className="text-[10px] text-orange-700 space-y-0.5 ml-4 list-disc">
-                                        <li>All inspection checkmarks (set to pending)</li>
+                                        <li>All inspection checkmarks (set to pending, except N/A)</li>
                                         <li>Notes and photos</li>
                                         <li>Deficiency status</li>
                                     </ul>
