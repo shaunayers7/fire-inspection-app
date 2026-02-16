@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Fire Inspection App</title>
     
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Annual fire alarm and emergency light inspection management system">
+    <meta name="theme-color" content="#dc2626">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fire Inspect">
+    <link rel="manifest" href="/manifest.json">
+    
     <!-- Cache Control: Prevent aggressive caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -216,207 +224,6 @@
                 customDeficiencies: []
             }
         });
-
-        const parseImportText = (text) => {
-            const fullText = text.trim();
-            if (!fullText) return [];
-            
-            const lines = fullText.split('\n').map(l => l.trim());
-            const buildings = [];
-            
-            // Detect format: Check if this is a detailed inspection report or simple list
-            const isDetailedReport = fullText.includes('Fire Alarm panel') || 
-                                    fullText.includes('Annual Fire Alarm Inspection Report') ||
-                                    fullText.includes('FIRE INSPECTION REPORT') ||
-                                    (fullText.includes('Client:') && fullText.includes('Building:')) ||
-                                    fullText.includes('Manufacturer:') ||
-                                    fullText.includes('MANUFACTURER');
-            
-            if (isDetailedReport) {
-                // DETAILED FORMAT: Parse the entire text as ONE building
-                let buildingName = '';
-                let address = '';
-                let city = '';
-                let manufacturer = '';
-                let panelModel = '';
-                let panelLocation = '';
-                let serialNumber = '';
-                let softwareVersion = '';
-                let dateManufactured = '';
-                let lastServiceDate = '';
-                
-                // Helper to get value from next line (for table format)
-                const getNextLineValue = (idx) => {
-                    if (idx + 1 < lines.length) {
-                        const nextLine = lines[idx + 1].trim();
-                        // Skip if next line is also a label
-                        if (!nextLine.match(/^(BUILDING NAME|ADDRESS|CITY|PANEL LOCATION|MANUFACTURER|PANEL MODEL|SERIAL NUMBER|SOFTWARE VERSION|DATE MANUFACTURED|LAST SERVICE DATE)$/i)) {
-                            return nextLine;
-                        }
-                    }
-                    return '';
-                };
-                
-                lines.forEach((line, idx) => {
-                    // Skip empty lines
-                    if (line.length === 0) {
-                        return;
-                    }
-                    
-                    // TABLE FORMAT (Bellevue/Pincher Creek style)
-                    // Extract building details from structured table format
-                    if (line.match(/^BUILDING NAME$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value && !buildingName) buildingName = value;
-                    }
-                    if (line.match(/^ADDRESS$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value && !address) address = value;
-                    }
-                    if (line.match(/^CITY$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value && !city) city = value;
-                    }
-                    if (line.match(/^PANEL LOCATION$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) panelLocation = value;
-                    }
-                    if (line.match(/^MANUFACTURER$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) manufacturer = value;
-                    }
-                    if (line.match(/^PANEL MODEL$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) panelModel = value;
-                    }
-                    if (line.match(/^SERIAL NUMBER$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) serialNumber = value;
-                    }
-                    if (line.match(/^SOFTWARE VERSION$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) softwareVersion = value;
-                    }
-                    if (line.match(/^DATE MANUFACTURED$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) dateManufactured = value;
-                    }
-                    if (line.match(/^LAST SERVICE DATE$/i)) {
-                        const value = getNextLineValue(idx);
-                        if (value) lastServiceDate = value;
-                    }
-                    
-                    // INLINE FORMAT (Old inspection reports)
-                    // Extract manufacturer and model from same line
-                    if (line.includes('Manufacturer:')) {
-                        const mfgMatch = line.match(/Manufacturer:\s*([A-Za-z0-9]+)/i);
-                        if (mfgMatch && !manufacturer) manufacturer = mfgMatch[1];
-                        
-                        // Extract model - everything after "Model #:" or "Model:" up to next field or end
-                        const modelMatch = line.match(/Model\s*#?:\s*(.+?)(?=\s*Panel\s+Located|\s*$)/i);
-                        if (modelMatch && !panelModel) {
-                            panelModel = modelMatch[1].trim();
-                        }
-                    }
-                    
-                    // Extract panel location (inline format)
-                    if (line.match(/^Panel\s+Located/i)) {
-                        const locValue = line.replace(/^Panel\s+Located\s*/i, '').trim();
-                        if (locValue && !panelLocation) panelLocation = locValue;
-                    }
-                    
-                    // Skip lines that are only form labels
-                    if (/^(Client:|Building:|Date:|Comments?:?|Address:)(\s+(Client:|Building:|Date:|Comments?:?|Address:))*\s*$/i.test(line)) {
-                        return;
-                    }
-                    
-                    // Handle line after label-only line - this is the actual building data (old format)
-                    if (idx > 0 && !buildingName && !line.includes('Manufacturer:') && !line.includes('Panel Located')) {
-                        const prevLine = lines[idx - 1];
-                        // Check if previous line was labels only
-                        if (/^(Client:|Building:|Date:|Comments?:?|Address:)/i.test(prevLine)) {
-                            // This line contains the building data
-                            let cleanText = line.trim();
-                            
-                            // Remove "LDS Church –" or similar prefixes
-                            cleanText = cleanText.replace(/^LDS Church\s*[-–—]\s*/i, '').trim();
-                            
-                            // Split into words to parse
-                            const words = cleanText.split(/\s+/).filter(w => w.length > 0);
-                            
-                            if (words.length >= 1) {
-                                // Find street type indicator (St, Ave, etc.)
-                                let streetIdx = -1;
-                                for (let i = 0; i < words.length; i++) {
-                                    if (/^(St\.?|Ave\.?|Avenue|Street|Rd\.?|Road|Dr\.?|Drive|Blvd\.?|Boulevard|Lane|Way|Parkway|Court|Ct\.?)$/i.test(words[i])) {
-                                        streetIdx = i;
-                                        break;
-                                    }
-                                }
-                                
-                                if (streetIdx > 0) {
-                                    // Found street type - last word is city, before that is address, rest is building name
-                                    city = words[words.length - 1];
-                                    
-                                    // Find where address starts (look for street name before street type)
-                                    // Typically: [Building Name Words] [Street Name] [Street Type] [City]
-                                    // For "Welling FM Group Taylor St. Raymond": Building=Welling FM Group, Address=Taylor St., City=Raymond
-                                    let addressStart = streetIdx - 1; // Default to word before street type
-                                    
-                                    // Check if there's a street number (starts with digit)
-                                    for (let i = streetIdx - 1; i >= 0; i--) {
-                                        if (/^\d/.test(words[i])) {
-                                            addressStart = i;
-                                            break;
-                                        }
-                                    }
-                                    
-                                    buildingName = words.slice(0, addressStart).join(' ');
-                                    address = words.slice(addressStart, streetIdx + 1).join(' ');
-                                } else {
-                                    // No street type found - use last word as city, rest as building name
-                                    city = words[words.length - 1];
-                                    buildingName = words.slice(0, -1).join(' ');
-                                }
-                            }
-                        }
-                    }
-                });
-                
-                // Create ONE building from the entire report
-                // Mark as 'passed' since this is a completed inspection report
-                if (buildingName) {
-                    const building = getNewBuildingTemplate(buildingName, address, city, 'passed');
-                    
-                    // Populate all available panel/building details
-                    if (manufacturer) building.details.manufacturer = manufacturer;
-                    if (panelModel) building.details.panelModel = panelModel;
-                    if (panelLocation) building.details.panelLocation = panelLocation;
-                    if (serialNumber && serialNumber !== 'N/A') building.details.serialNumber = serialNumber;
-                    if (softwareVersion && softwareVersion !== 'N/A') building.details.softwareVersion = softwareVersion;
-                    if (dateManufactured && dateManufactured !== 'N/A') building.details.dateManufactured = dateManufactured;
-                    if (lastServiceDate && lastServiceDate !== 'N/A') building.details.lastServiceDate = lastServiceDate;
-                    
-                    buildings.push(building);
-                    console.log(`📥 Parsed building: ${buildingName} | Panel: ${manufacturer} ${panelModel} @ ${panelLocation}`);
-                }
-            } else {
-                // SIMPLE FORMAT: Parse as multiple buildings (one per line)
-                // Format: Name, Address, City or Name[TAB]Address[TAB]City
-                lines.filter(line => line.length > 0).forEach(line => {
-                    const parts = line.includes('\t') ? line.split('\t') : line.split(',');
-                    const name = parts[0]?.trim() || '';
-                    const address = parts[1]?.trim() || '';
-                    const city = parts[2]?.trim() || '';
-                    
-                    if (name && name.length > 0) {
-                        buildings.push(getNewBuildingTemplate(name, address, city));
-                    }
-                });
-            }
-            
-            return buildings;
-        };
 
         // --- HOOK: Long Press Drag & Drop ---
         const useDragAndDrop = (items, onReorder) => {
@@ -678,6 +485,9 @@
                 const saved = localStorage.getItem(THEME_KEY);
                 return saved ? saved === 'dark' : false;
             });
+            
+            // Lazy loading state - show 20 buildings initially, load more on demand
+            const [buildingsToShow, setBuildingsToShow] = useState(20);
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -1147,6 +957,11 @@
                     localStorage.setItem(THEME_KEY, 'light');
                 }
             }, [darkMode]);
+
+            // Reset lazy loading when year changes
+            useEffect(() => {
+                setBuildingsToShow(20);
+            }, [selectedYear]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -2268,7 +2083,7 @@
                             <p className="text-xs mt-2">Add a building below to get started</p>
                         </div>
                     )}
-                    {(yearData[selectedYear] || []).map(b => {
+                    {(yearData[selectedYear] || []).slice(0, buildingsToShow).map(b => {
                         if (!b || !b.id) return null; // Safety check
                         const status = getBuildingStatus(b);
                         return (
@@ -2330,6 +2145,17 @@
                             </div>
                         );
                     })}
+                    
+                    {/* Load More Button - Progressive Loading */}
+                    {(yearData[selectedYear] || []).length > buildingsToShow && (
+                        <button 
+                            onClick={() => setBuildingsToShow(prev => prev + 20)} 
+                            className="w-full p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-600 font-semibold text-sm hover:bg-blue-100 transition-colors"
+                        >
+                            Load More ({(yearData[selectedYear] || []).length - buildingsToShow} remaining)
+                        </button>
+                    )}
+                    
                     <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
                     {activeModal?.type === 'copy-building' && (
@@ -2582,6 +2408,48 @@
         console.log('  • window.forceRestoreBuildings() - Reset to default buildings');
 
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+
+    <!-- Service Worker Registration -->
+    <script>
+        // Register service worker for PWA offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('✅ Service Worker registered:', registration.scope);
+                        
+                        // Check for updates periodically
+                        setInterval(() => {
+                            registration.update();
+                        }, 60000); // Check every minute
+                        
+                        // Listen for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New service worker available
+                                    console.log('🔄 New version available! Reload to update.');
+                                    // Auto-reload after 3 seconds
+                                    setTimeout(() => {
+                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        window.location.reload();
+                                    }, 3000);
+                                }
+                            });
+                        });
+                    })
+                    .catch(error => {
+                        console.warn('⚠️ Service Worker registration failed:', error);
+                    });
+                
+                // Reload page when new service worker takes control
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    window.location.reload();
+                });
+            });
+        }
     </script>
 </body>
 </html>

@@ -1,0 +1,18 @@
+{
+  "name": "fire-inspection-app",
+  "version": "1.0.0",
+  "description": "Annual fire alarm and emergency light inspection management system",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:report": "playwright show-report"
+  },
+  "keywords": ["fire-inspection", "pwa", "react"],
+  "author": "Electric Boyes",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
