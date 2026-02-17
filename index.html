@@ -827,6 +827,7 @@
             const [linkCopied, setLinkCopied] = useState(false);
             const [iosCopied, setIosCopied] = useState(false);
             const [androidCopied, setAndroidCopied] = useState(false);
+            const [allCopied, setAllCopied] = useState(false);
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -2705,6 +2706,33 @@
                         <div>
                             <h2 className="text-lg font-bold text-gray-800 mb-2">📱 Share App</h2>
                             <p className="text-sm text-gray-600">Invite team members and show them how to install.</p>
+                        </div>
+                        
+                        {/* Copy Everything Button */}
+                        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-4 border-2 border-purple-300">
+                            <div className="flex items-center justify-between mb-2">
+                                <div>
+                                    <h3 className="text-sm font-bold text-purple-900">🚀 Complete Setup Guide</h3>
+                                    <p className="text-xs text-purple-700 mt-1">Copy everything: link + signup + iOS + Android</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const url = window.location.href.split('?')[0];
+                                        const text = `🔥 FIRE INSPECTION APP - Complete Setup Guide\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🔗 APP LINK:\n${url}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n📝 HOW TO SIGN UP:\n\n1. Open the app link above on your device\n2. Click "Need an account? Sign up"\n3. Enter your name, email, and password\n4. Note: Your email must be on the allowed list first\n5. Once signed up, you can log in on any device\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🍎 iPHONE/iPAD INSTALLATION:\n\n1. Open the app link in Safari (not Chrome)\n2. Tap the Share button (📤) at the bottom of Safari\n3. Scroll down and tap "Add to Home Screen"\n4. Tap "Add" in the top right corner\n5. The app icon will appear on your home screen 🎉\n\n💡 Tip: Once installed, the app works offline and feels like a native app!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🤖 ANDROID INSTALLATION:\n\n1. Open the app link in Chrome\n2. Tap the three dots menu (⋮) in the top right\n3. Tap "Add to Home screen" or "Install app"\n4. Tap "Add" or "Install" to confirm\n5. The app icon will appear on your home screen 🎉\n\n✅ Note: Some Android devices may show an automatic "Install" banner at the bottom of the screen.\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nQuestions? Contact your team admin!`;
+                                        navigator.clipboard.writeText(text).then(() => {
+                                            setAllCopied(true);
+                                            setTimeout(() => setAllCopied(false), 2000);
+                                        });
+                                    }}
+                                    className={`px-4 py-3 rounded-lg font-bold text-sm transition-all whitespace-nowrap shadow-md ${
+                                        allCopied
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 active:scale-95'
+                                    }`}
+                                >
+                                    {allCopied ? '✓ Copied Everything!' : '📋 Copy Everything'}
+                                </button>
+                            </div>
                         </div>
                         
                         {/* App URL */}
