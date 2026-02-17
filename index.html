@@ -825,6 +825,8 @@
             
             // Share app state
             const [linkCopied, setLinkCopied] = useState(false);
+            const [iosCopied, setIosCopied] = useState(false);
+            const [androidCopied, setAndroidCopied] = useState(false);
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -2749,9 +2751,28 @@
                         
                         {/* iOS Installation */}
                         <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border-2 border-gray-200">
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="text-2xl">🍎</span>
-                                <h3 className="text-sm font-bold text-gray-800">iPhone/iPad Installation</h3>
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">🍎</span>
+                                    <h3 className="text-sm font-bold text-gray-800">iPhone/iPad Installation</h3>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const url = window.location.href.split('?')[0];
+                                        const text = `🍎 Fire Inspection App - iPhone/iPad Installation\n\n🔗 App Link:\n${url}\n\n📱 Installation Steps:\n1. Open the app link in Safari (not Chrome)\n2. Tap the Share button (📤) at the bottom of Safari\n3. Scroll down and tap "Add to Home Screen"\n4. Tap "Add" in the top right corner\n5. The app icon will appear on your home screen 🎉\n\n📝 Sign Up:\n1. Open the app link above\n2. Click "Need an account? Sign up"\n3. Enter your name, email, and password\n4. Note: Your email must be on the allowed list first\n\n💡 Once installed, the app works offline and feels like a native app!`;
+                                        navigator.clipboard.writeText(text).then(() => {
+                                            setIosCopied(true);
+                                            setTimeout(() => setIosCopied(false), 2000);
+                                        });
+                                    }}
+                                    className={`px-3 py-2 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${
+                                        iosCopied
+                                        ? 'bg-green-500 text-white'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+                                    }`}
+                                >
+                                    {iosCopied ? '✓ Copied!' : '📋 Copy All'}
+                                </button>
                             </div>
                             <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside leading-relaxed">
                                 <li>Open the app link in <strong>Safari</strong> (not Chrome)</li>
@@ -2769,9 +2790,28 @@
                         
                         {/* Android Installation */}
                         <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border-2 border-green-200">
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className="text-2xl">🤖</span>
-                                <h3 className="text-sm font-bold text-gray-800">Android Installation</h3>
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">🤖</span>
+                                    <h3 className="text-sm font-bold text-gray-800">Android Installation</h3>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        const url = window.location.href.split('?')[0];
+                                        const text = `🤖 Fire Inspection App - Android Installation\n\n🔗 App Link:\n${url}\n\n📱 Installation Steps:\n1. Open the app link in Chrome\n2. Tap the three dots menu (⋮) in the top right\n3. Tap "Add to Home screen" or "Install app"\n4. Tap "Add" or "Install" to confirm\n5. The app icon will appear on your home screen 🎉\n\n📝 Sign Up:\n1. Open the app link above\n2. Click "Need an account? Sign up"\n3. Enter your name, email, and password\n4. Note: Your email must be on the allowed list first\n\n✅ Some Android devices may show an automatic "Install" banner at the bottom of the screen.`;
+                                        navigator.clipboard.writeText(text).then(() => {
+                                            setAndroidCopied(true);
+                                            setTimeout(() => setAndroidCopied(false), 2000);
+                                        });
+                                    }}
+                                    className={`px-3 py-2 rounded-lg font-bold text-xs transition-all whitespace-nowrap ${
+                                        androidCopied
+                                        ? 'bg-green-500 text-white'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+                                    }`}
+                                >
+                                    {androidCopied ? '✓ Copied!' : '📋 Copy All'}
+                                </button>
                             </div>
                             <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside leading-relaxed">
                                 <li>Open the app link in <strong>Chrome</strong></li>
