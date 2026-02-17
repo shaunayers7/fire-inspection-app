@@ -2,14 +2,16 @@
 
 ## 1. STABLE LAYOUT (The Foundation)
 * **Core Style:** Tailwind-based "System Gray" (#F2F2F7) with Inter font.
-* **Component Memory:** The `TriStateButton` (Pending/Passed/Failed) and `Long Press Drag` logic are core features. 
-* **The "N" Logic:** Section 1 is always 'Building Details'. Sections 2 through N are dynamic inspection categories.
+* **Component Memory:** The `TriStateButton` (Pending/Passed/Failed/N/A) and `Long Press Drag` logic are core features. 
+* **The "N+1" Logic:** Section 0 is always 'Inspection Details' (date, time, inspector). Section 1 is always 'Building Details'. Sections 2 through N are dynamic inspection categories.
+* **Protected Sections:** Inspection Details and Building Details sections cannot be deleted or reordered. They are always displayed first.
 
 ## 2. MODIFIABLE STRUCTURE (The Flexible Parts)
 * **This section is intended to change as the app evolves.**
-* **Current Sections:** `checklist`, `control`, `devices`, `battery`, `lights`.
+* **Current Protected Sections:** `inspectionDetails` (Section 0), then dynamic inspection sections: `checklist`, `control`, `devices`, `battery`, `lights`.
 * **Current Device Types:** Manual Pull, Heat/Smoke Detectors, Horns, etc.
 * **Structural Rule:** New sections can be added to the `PROTECTED_SECTIONS` array in the code to prevent accidental deletion.
+* **Inspection Details Fields:** Date (auto-populated with current date), Time (auto-populated with current time), Inspector Name (manual entry).
 
 ## 3. PHOTO & MEDIA HANDLING
 * **Current State:** Base64 local storage (Temporary).
@@ -30,13 +32,14 @@
 ## 6A. DATA INTEGRITY & STRUCTURE PRESERVATION (CRITICAL - DO NOT VIOLATE)
 
 ### ABSOLUTE RULES - NO EXCEPTIONS:
-1. **NEVER modify building details structure without explicit user request**
+1. **NEVER modify building structure without explicit user request**
+   - Inspection details field order is FIXED: `date`, `time`, `inspector`
    - Building details field order is FIXED: `buildingName`, `address`, `city`, `panelLocation`, `manufacturer`, `panelModel`, `serialNumber`, `softwareVersion`, `dateManufactured`, `lastServiceDate`
    - Do NOT add, remove, or reorder these fields unless user explicitly requests it
    - All existing data must be preserved when making ANY changes
 
-2. **NEVER change field names in `details` object**
-   - Field names like `buildingName`, `panelModel`, etc. are database keys
+2. **NEVER change field names in data objects**
+   - Field names like `buildingName`, `panelModel`, `date`, `inspector`, etc. are database keys
    - Changing these breaks existing saved data
    - If a field name must change, create migration code to preserve data
 
@@ -47,7 +50,7 @@
 
 4. **NEVER change the structure of `yearData` without explicit approval**
    - Format: `{ [year]: [buildings...] }`
-   - Building structure: `{ id, name, lastSynced, details, sections, data }`
+   - Building structure: `{ id, name, lastSynced, inspectionDetails, details, sections, data }`
    - Section structure: `{ id, title, color, isDev }`
    - Any structural changes require user approval AND migration plan
 
