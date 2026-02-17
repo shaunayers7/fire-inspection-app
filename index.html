@@ -2936,6 +2936,7 @@
                             )}
                             <div className="text-right">
                                 <p className="text-[10px] sm:text-xs font-semibold text-gray-700 truncate max-w-[80px] sm:max-w-none">{user?.displayName || 'User'}</p>
+                                <p className="text-[8px] sm:text-[9px] text-gray-500 font-medium truncate max-w-[120px] sm:max-w-none">{user?.email}</p>
                                 <button onClick={handleLogout} className="text-[9px] sm:text-[10px] text-red-500 font-bold uppercase">Logout</button>
                             </div>
                         </div>
@@ -3017,7 +3018,11 @@
                                  syncStatus === 'error' ? '✕' :
                                  '☁'}
                             </button>
-                            <button onClick={handleLogout} className="text-[9px] sm:text-[10px] text-red-500 font-bold uppercase whitespace-nowrap">Logout</button>
+                            <div className="text-right">
+                                <p className="text-[9px] sm:text-[10px] font-semibold text-gray-700 truncate max-w-[80px] sm:max-w-none hidden sm:block">{user?.displayName || 'User'}</p>
+                                <p className="text-[8px] sm:text-[9px] text-gray-500 font-medium truncate max-w-[100px] sm:max-w-none">{user?.email}</p>
+                                <button onClick={handleLogout} className="text-[9px] sm:text-[10px] text-red-500 font-bold uppercase whitespace-nowrap">Logout</button>
+                            </div>
                         </div>
                     </div>
                     {lastSyncTime && (

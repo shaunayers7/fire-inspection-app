@@ -5,6 +5,7 @@
 * **Component Memory:** The `TriStateButton` (Pending/Passed/Failed/N/A) and `Long Press Drag` logic are core features. 
 * **The "N+1" Logic:** Section 0 is always 'Inspection Details' (date, time, inspector). Section 1 is always 'Building Details'. Sections 2 through N are dynamic inspection categories.
 * **Protected Sections:** Inspection Details and Building Details sections cannot be deleted or reordered. They are always displayed first.
+* **User Account Display:** The logged-in user's display name AND email address must be visible in the header on all main views (year-select, building-select, settings) so users always know which account they're signed in with. This is a critical accountability feature.
 
 ## 2. MODIFIABLE STRUCTURE (The Flexible Parts)
 * **This section is intended to change as the app evolves.**
