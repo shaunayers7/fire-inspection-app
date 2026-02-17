@@ -1339,27 +1339,27 @@
             
             // Helper: Save and navigate (triggers immediate sync before navigation)
             const saveAndNavigate = async (targetView) => {
-                console.log(`💾 Navigating to ${targetView} - syncing changes first...`);
+                console.log(`💾 Navigating to ${targetView} - sync will happen in background...`);
                 
-                // Trigger immediate sync if online (blocking - wait for completion)
+                // Navigate immediately for instant UI response
+                setView(targetView);
+                viewRef.current = targetView;
+                
+                // Trigger background sync if online (non-blocking - don't await)
                 if (db && user) {
-                    try {
-                        setSyncStatus('syncing');
-                        await syncToCloud();
-                        console.log(`✅ Sync complete before navigating to ${targetView}`);
-                    } catch (err) {
-                        console.warn('Sync on navigate failed (changes saved locally):', err);
-                        setSyncStatus('error');
-                        // Continue navigation even if sync fails (data is safe locally)
-                        setTimeout(() => setSyncStatus('idle'), 2000);
-                    }
+                    setSyncStatus('syncing');
+                    syncToCloud()
+                        .then(() => {
+                            console.log(`✅ Background sync complete after navigating to ${targetView}`);
+                        })
+                        .catch((err) => {
+                            console.warn('Background sync failed (changes saved locally):', err);
+                            setSyncStatus('error');
+                            setTimeout(() => setSyncStatus('idle'), 2000);
+                        });
                 } else {
                     console.log('📴 Offline - changes saved locally only');
                 }
-                
-                // Navigate after sync completes (or immediately if offline/error)
-                setView(targetView);
-                viewRef.current = targetView;
             };
             
             // Manual sync: Push local changes to cloud with conflict detection
