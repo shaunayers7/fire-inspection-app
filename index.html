@@ -742,6 +742,9 @@
             const pullStartY = useRef(0);
             const pullThreshold = 80; // Distance needed to trigger refresh
             
+            // Share app state
+            const [linkCopied, setLinkCopied] = useState(false);
+            
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
                 const storedVersion = localStorage.getItem(VERSION_CHECK_KEY);
@@ -2552,6 +2555,96 @@
                             <li>• <strong>Delete Users in Firebase:</strong> Go to Firebase Console → Authentication → Users to delete accounts</li>
                             <li>• <strong>Anonymous Users:</strong> Can be safely deleted from Firebase - app only uses email/password</li>
                         </ul>
+                    </div>
+                    
+                    {/* Share App Section */}
+                    <div className="bg-white rounded-2xl p-6 shadow-sm space-y-6">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800 mb-2">📱 Share App</h2>
+                            <p className="text-sm text-gray-600">Invite team members and show them how to install.</p>
+                        </div>
+                        
+                        {/* App URL */}
+                        <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                            <label className="block text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">🔗 App Link</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="text"
+                                    value={window.location.href.split('?')[0]}
+                                    readOnly
+                                    className="flex-1 p-3 bg-white border border-gray-300 rounded-lg text-sm font-mono text-blue-600 select-all"
+                                    onClick={(e) => e.target.select()}
+                                />
+                                <button 
+                                    onClick={() => {
+                                        const url = window.location.href.split('?')[0];
+                                        navigator.clipboard.writeText(url).then(() => {
+                                            setLinkCopied(true);
+                                            setTimeout(() => setLinkCopied(false), 2000);
+                                        });
+                                    }}
+                                    className={`px-4 py-3 rounded-lg font-bold text-sm transition-all ${
+                                        linkCopied 
+                                        ? 'bg-green-500 text-white' 
+                                        : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+                                    }`}
+                                >
+                                    {linkCopied ? '✓ Copied' : 'Copy'}
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Sign Up Instructions */}
+                        <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200">
+                            <h3 className="text-sm font-bold text-blue-800 mb-3">👥 How to Sign Up</h3>
+                            <ol className="text-xs text-blue-900 space-y-2 list-decimal list-inside">
+                                <li>Open the app link (above) on your device</li>
+                                <li>Click <strong>"Need an account? Sign up"</strong></li>
+                                <li>Enter your name, email, and password</li>
+                                <li><strong>Note:</strong> Your email must be added to the "Allowed Emails" list first</li>
+                                <li>Once signed up, you can log in on any device</li>
+                            </ol>
+                        </div>
+                        
+                        {/* iOS Installation */}
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border-2 border-gray-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-2xl">🍎</span>
+                                <h3 className="text-sm font-bold text-gray-800">iPhone/iPad Installation</h3>
+                            </div>
+                            <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside">
+                                <li>Open the app link in <strong>Safari</strong> (not Chrome)</li>
+                                <li>Tap the <strong>Share</strong> button (📤) at the bottom of Safari</li>
+                                <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+                                <li>Tap <strong>"Add"</strong> in the top right corner</li>
+                                <li>The app icon will appear on your home screen 🎉</li>
+                            </ol>
+                            <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-lg">
+                                <p className="text-xs text-yellow-800">
+                                    <strong>💡 Tip:</strong> Once installed, the app works offline and feels like a native app!
+                                </p>
+                            </div>
+                        </div>
+                        
+                        {/* Android Installation */}
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border-2 border-green-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <span className="text-2xl">🤖</span>
+                                <h3 className="text-sm font-bold text-gray-800">Android Installation</h3>
+                            </div>
+                            <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside">
+                                <li>Open the app link in <strong>Chrome</strong></li>
+                                <li>Tap the <strong>three dots menu</strong> (⋮) in the top right</li>
+                                <li>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></li>
+                                <li>Tap <strong>"Add"</strong> or <strong>"Install"</strong> to confirm</li>
+                                <li>The app icon will appear on your home screen 🎉</li>
+                            </ol>
+                            <div className="mt-3 p-3 bg-green-50 border-2 border-green-300 rounded-lg">
+                                <p className="text-xs text-green-800">
+                                    <strong>✅ Note:</strong> Some Android devices may show an automatic "Install" banner at the bottom of the screen.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
