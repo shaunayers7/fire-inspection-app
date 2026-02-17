@@ -2575,7 +2575,13 @@
                         ) : null}
                     </div>
                     
-                    <div className="p-4 space-y-4">
+                    <div 
+                        className="p-4 space-y-4"
+                        style={{
+                            transform: `translateY(${pullDistance}px)`,
+                            transition: isPulling ? 'none' : 'transform 0.3s ease'
+                        }}
+                    >
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                         <h1 className="text-lg sm:text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
                         <div className="flex items-center gap-1 sm:gap-2">
@@ -2642,7 +2648,13 @@
                         ) : null}
                     </div>
                     
-                    <div className="p-4 space-y-4">
+                    <div 
+                        className="p-4 space-y-4"
+                        style={{
+                            transform: `translateY(${pullDistance}px)`,
+                            transition: isPulling ? 'none' : 'transform 0.3s ease'
+                        }}
+                    >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1 sm:gap-2">
                             <button onClick={() => saveAndNavigate('year-select')} className="text-blue-600 font-bold p-1">←</button>
