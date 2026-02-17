@@ -7,6 +7,12 @@
 - [x] N/A status preservation during building copy
 - [x] Comprehensive code audit
 - [x] Remove parseImportText dead code (199 line reduction)
+- [x] Light/Dark mode toggle (sun/moon icon in header)
+- [x] App version display (v1.5.0)
+- [x] Background sync on navigation (non-blocking for faster UI)
+- [x] iOS-style pull-to-refresh with content movement
+- [x] Share app section with iOS/Android installation instructions
+- [x] Fix settings page overflow on mobile devices
 
 ## Manual Cleanup Required 🧹
 **Action needed:** Delete the following 4 unused utility files from project root:
@@ -36,8 +42,8 @@ These files were used for the now-removed import feature. Deleting them will red
 - [ ] 2. Add a section to add a name of who is doing the inspection from Electric Boyes
 - [ ] 3. Add further descriptions to all sections if pressed on an information icon so that it explains further what the category or heading means, and these are also editable and saved, also will copy to the next years building
 - [x] 4. Make sure the firebase is working correctly
-- [ ] 5. Light/Dark Mode with a single toggle icon
-- [ ] 6. Display the app version number on the app
+- [x] 5. Light/Dark Mode with a single toggle icon
+- [x] 6. Display the app version number on the app
 
 ## Phase 4: Progressive Web App (Planned)
 - [ ] Add service worker for offline support
@@ -46,9 +52,10 @@ These files were used for the now-removed import feature. Deleting them will red
 - [ ] Background sync for offline data changes
 
 ## Phase 5: Performance Optimization (Planned)
-- [ ] Implement lazy loading for large building lists
+- [x] Implement lazy loading for large building lists
 - [ ] Virtualize long lists for better scroll performance
 - [ ] Defer PDF generation until needed
+- [x] Background sync on navigation (non-blocking)
 
 ## Phase 6: Testing Infrastructure (Planned)
 - [ ] Set up E2E testing framework (Playwright/Cypress)
@@ -63,7 +70,9 @@ These files were used for the now-removed import feature. Deleting them will red
 - **Performance:** Excellent (smart sync, local-first)
 - **Security:** Firebase rules enforced, auth working correctly
 
-## Phase 7: Testing Infrastructure (Planned)
-- [ ] make sure that the app doesn't zoom or go beyond the bounds of the mobile screen
+## Phase 7: UI/UX Improvements
+- [x] Make sure that the app doesn't zoom or go beyond the bounds of the mobile screen
+- [x] iOS-style pull-to-refresh functionality with visual feedback
+- [x] Share app feature with installation instructions (iOS/Android)
 - [ ] Add device counts on the main building cards that indicate how many devices are completed out of the total devices
-- [ ] add multiple timers for batteries that can time seperate events during testing how long lights and exit signs stay on when enabled? 
+- [ ] Add multiple timers for batteries that can time seperate events during testing how long lights and exit signs stay on when enabled? 
