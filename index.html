@@ -213,6 +213,39 @@
             background: #f8fafc;
             border-radius: 0.75rem;
         }
+        
+        /* Pull-to-Refresh iOS Style */
+        .pull-to-refresh-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transform: translateY(-60px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        .pull-to-refresh-indicator.visible {
+            transform: translateY(0);
+        }
+        
+        .pull-spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -701,6 +734,13 @@
             
             // Lazy loading state - show 20 buildings initially, load more on demand
             const [buildingsToShow, setBuildingsToShow] = useState(20);
+            
+            // Pull-to-refresh state
+            const [pullDistance, setPullDistance] = useState(0);
+            const [isPulling, setIsPulling] = useState(false);
+            const [isRefreshing, setIsRefreshing] = useState(false);
+            const pullStartY = useRef(0);
+            const pullThreshold = 80; // Distance needed to trigger refresh
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -1280,6 +1320,79 @@
             useEffect(() => {
                 setBuildingsToShow(20);
             }, [selectedYear]);
+            
+            // Pull-to-refresh functionality
+            useEffect(() => {
+                const handleTouchStart = (e) => {
+                    // Only enable on year-select and building-select views
+                    if (view !== 'year-select' && view !== 'building-select') return;
+                    
+                    // Check if we're at the top of the scroll container
+                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                    if (scrollTop === 0) {
+                        pullStartY.current = e.touches[0].clientY;
+                        setIsPulling(true);
+                    }
+                };
+                
+                const handleTouchMove = (e) => {
+                    if (!isPulling || isRefreshing) return;
+                    
+                    const currentY = e.touches[0].clientY;
+                    const distance = currentY - pullStartY.current;
+                    
+                    // Only track downward pulls
+                    if (distance > 0) {
+                        // Prevent native pull-to-refresh in some browsers
+                        if (distance > 10) {
+                            e.preventDefault();
+                        }
+                        
+                        // Apply diminishing returns for distance (feels more natural)
+                        const dampedDistance = Math.min(distance * 0.5, pullThreshold * 1.5);
+                        setPullDistance(dampedDistance);
+                    }
+                };
+                
+                const handleTouchEnd = async () => {
+                    if (!isPulling) return;
+                    
+                    setIsPulling(false);
+                    
+                    // Trigger refresh if pulled far enough
+                    if (pullDistance >= pullThreshold && !isRefreshing && db && user) {
+                        setIsRefreshing(true);
+                        console.log('🔄 Pull-to-refresh triggered');
+                        
+                        try {
+                            // Trigger bidirectional sync
+                            await syncBidirectional();
+                            console.log('✅ Pull-to-refresh complete');
+                        } catch (error) {
+                            console.error('❌ Pull-to-refresh error:', error);
+                        } finally {
+                            setTimeout(() => {
+                                setIsRefreshing(false);
+                                setPullDistance(0);
+                            }, 500);
+                        }
+                    } else {
+                        // Reset without refreshing
+                        setPullDistance(0);
+                    }
+                };
+                
+                // Add event listeners with passive: false to allow preventDefault
+                document.addEventListener('touchstart', handleTouchStart, { passive: true });
+                document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                document.addEventListener('touchend', handleTouchEnd, { passive: true });
+                
+                return () => {
+                    document.removeEventListener('touchstart', handleTouchStart);
+                    document.removeEventListener('touchmove', handleTouchMove);
+                    document.removeEventListener('touchend', handleTouchEnd);
+                };
+            }, [isPulling, pullDistance, isRefreshing, view, db, user]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -2444,7 +2557,25 @@
             );
 
             if (view === 'year-select') return (
-                <div className="p-4 space-y-4">
+                <>
+                    {/* Pull-to-Refresh Indicator */}
+                    <div 
+                        className={`pull-to-refresh-indicator ${pullDistance > 0 || isRefreshing ? 'visible' : ''}`}
+                        style={{ 
+                            opacity: Math.min(pullDistance / pullThreshold, 1),
+                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.95), transparent)'
+                        }}
+                    >
+                        {isRefreshing ? (
+                            <div className="pull-spinner"></div>
+                        ) : pullDistance >= pullThreshold ? (
+                            <div className="text-blue-600 font-semibold text-sm">Release to refresh</div>
+                        ) : pullDistance > 0 ? (
+                            <div className="text-gray-400 text-sm">Pull down to refresh</div>
+                        ) : null}
+                    </div>
+                    
+                    <div className="p-4 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                         <h1 className="text-lg sm:text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
                         <div className="flex items-center gap-1 sm:gap-2">
@@ -2488,11 +2619,30 @@
                             <input type="number" autoFocus value={yearInputValue} onChange={(e) => setYearInputValue(e.target.value)} placeholder="e.g. 2026" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-center text-xl font-bold" />
                         </Modal>
                     )}
-                </div>
+                    </div>
+                </>
             );
 
             if (view === 'building-select') return (
-                <div className="p-4 space-y-4">
+                <>
+                    {/* Pull-to-Refresh Indicator */}
+                    <div 
+                        className={`pull-to-refresh-indicator ${pullDistance > 0 || isRefreshing ? 'visible' : ''}`}
+                        style={{ 
+                            opacity: Math.min(pullDistance / pullThreshold, 1),
+                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.95), transparent)'
+                        }}
+                    >
+                        {isRefreshing ? (
+                            <div className="pull-spinner"></div>
+                        ) : pullDistance >= pullThreshold ? (
+                            <div className="text-blue-600 font-semibold text-sm">Release to refresh</div>
+                        ) : pullDistance > 0 ? (
+                            <div className="text-gray-400 text-sm">Pull down to refresh</div>
+                        ) : null}
+                    </div>
+                    
+                    <div className="p-4 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1 sm:gap-2">
                             <button onClick={() => saveAndNavigate('year-select')} className="text-blue-600 font-bold p-1">←</button>
@@ -2680,7 +2830,8 @@
                             </div>
                         </Modal>
                     )}
-                </div>
+                    </div>
+                </>
             );
 
             const allDeficiencies = [];
