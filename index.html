@@ -211,39 +211,6 @@
             background: #f8fafc;
             border-radius: 0.75rem;
         }
-        
-        /* Pull-to-Refresh iOS Style */
-        .pull-to-refresh-indicator {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transform: translateY(-60px);
-            transition: transform 0.3s ease;
-            z-index: 1000;
-            pointer-events: none;
-        }
-        
-        .pull-to-refresh-indicator.visible {
-            transform: translateY(0);
-        }
-        
-        .pull-spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid rgba(59, 130, 246, 0.3);
-            border-radius: 50%;
-            border-top-color: #3b82f6;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
@@ -815,13 +782,6 @@
             
             // Lazy loading state - show 20 buildings initially, load more on demand
             const [buildingsToShow, setBuildingsToShow] = useState(20);
-            
-            // Pull-to-refresh state
-            const [pullDistance, setPullDistance] = useState(0);
-            const [isPulling, setIsPulling] = useState(false);
-            const [isRefreshing, setIsRefreshing] = useState(false);
-            const pullStartY = useRef(0);
-            const pullThreshold = 80; // Distance needed to trigger refresh
             
             // Share app state
             const [linkCopied, setLinkCopied] = useState(false);
@@ -1466,79 +1426,6 @@
             useEffect(() => {
                 setBuildingsToShow(20);
             }, [selectedYear]);
-            
-            // Pull-to-refresh functionality
-            useEffect(() => {
-                const handleTouchStart = (e) => {
-                    // Only enable on year-select and building-select views
-                    if (view !== 'year-select' && view !== 'building-select') return;
-                    
-                    // Check if we're at the top of the scroll container
-                    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-                    if (scrollTop === 0) {
-                        pullStartY.current = e.touches[0].clientY;
-                        setIsPulling(true);
-                    }
-                };
-                
-                const handleTouchMove = (e) => {
-                    if (!isPulling || isRefreshing) return;
-                    
-                    const currentY = e.touches[0].clientY;
-                    const distance = currentY - pullStartY.current;
-                    
-                    // Only track downward pulls
-                    if (distance > 0) {
-                        // Prevent native pull-to-refresh in some browsers
-                        if (distance > 10) {
-                            e.preventDefault();
-                        }
-                        
-                        // Apply diminishing returns for distance (feels more natural)
-                        const dampedDistance = Math.min(distance * 0.5, pullThreshold * 1.5);
-                        setPullDistance(dampedDistance);
-                    }
-                };
-                
-                const handleTouchEnd = async () => {
-                    if (!isPulling) return;
-                    
-                    setIsPulling(false);
-                    
-                    // Trigger refresh if pulled far enough
-                    if (pullDistance >= pullThreshold && !isRefreshing && db && user) {
-                        setIsRefreshing(true);
-                        console.log('🔄 Pull-to-refresh triggered');
-                        
-                        try {
-                            // Trigger bidirectional sync
-                            await syncBidirectional();
-                            console.log('✅ Pull-to-refresh complete');
-                        } catch (error) {
-                            console.error('❌ Pull-to-refresh error:', error);
-                        } finally {
-                            setTimeout(() => {
-                                setIsRefreshing(false);
-                                setPullDistance(0);
-                            }, 500);
-                        }
-                    } else {
-                        // Reset without refreshing
-                        setPullDistance(0);
-                    }
-                };
-                
-                // Add event listeners with passive: false to allow preventDefault
-                document.addEventListener('touchstart', handleTouchStart, { passive: true });
-                document.addEventListener('touchmove', handleTouchMove, { passive: false });
-                document.addEventListener('touchend', handleTouchEnd, { passive: true });
-                
-                return () => {
-                    document.removeEventListener('touchstart', handleTouchStart);
-                    document.removeEventListener('touchmove', handleTouchMove);
-                    document.removeEventListener('touchend', handleTouchEnd);
-                };
-            }, [isPulling, pullDistance, isRefreshing, view, db, user]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
 
@@ -1596,29 +1483,14 @@
                 }
             };
             
-            // Helper: Save and navigate (triggers immediate sync before navigation)
-            const saveAndNavigate = async (targetView) => {
-                console.log(`💾 Navigating to ${targetView} - sync will happen in background...`);
+            // Helper: Navigate back (saves to local storage only - NO CLOUD SYNC)
+            const saveAndNavigate = (targetView) => {
+                console.log(`💾 Navigating to ${targetView} - saving to local storage only`);
                 
-                // Navigate immediately for instant UI response
+                // Data is automatically saved to localStorage via the yearData useEffect
+                // Just navigate - no cloud sync
                 setView(targetView);
                 viewRef.current = targetView;
-                
-                // Trigger background sync if online (non-blocking - don't await)
-                if (db && user) {
-                    setSyncStatus('syncing');
-                    syncToCloud()
-                        .then(() => {
-                            console.log(`✅ Background sync complete after navigating to ${targetView}`);
-                        })
-                        .catch((err) => {
-                            console.warn('Background sync failed (changes saved locally):', err);
-                            setSyncStatus('error');
-                            setTimeout(() => setSyncStatus('idle'), 2000);
-                        });
-                } else {
-                    console.log('📴 Offline - changes saved locally only');
-                }
             };
             
             // Manual sync: Push local changes to cloud with conflict detection
@@ -2094,6 +1966,38 @@
                 }
 
                 doc.save(`${activeBuilding.name}_Report_${selectedYear}.pdf`);
+            };
+
+            // Export PDF, save to cloud, and exit
+            const exportAndSave = async () => {
+                if (!activeBuilding) return;
+                
+                try {
+                    // Step 1: Export PDF
+                    console.log('📄 Exporting PDF report...');
+                    await handleExport();
+                    
+                    // Step 2: Sync to cloud
+                    console.log('☁️ Saving to cloud...');
+                    setSyncStatus('syncing');
+                    await syncToCloud();
+                    setSyncStatus('success');
+                    setTimeout(() => setSyncStatus('idle'), 2000);
+                    
+                    // Step 3: Navigate back (local storage saves automatically via useEffect)
+                    console.log('✅ Export & Save complete!');
+                    setView('building-select');
+                    viewRef.current = 'building-select';
+                } catch (error) {
+                    console.error('❌ Export & Save error:', error);
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                    
+                    // Even if sync failed, still navigate back (data is saved locally)
+                    alert('⚠️ PDF exported but cloud sync failed. Changes saved locally. Try syncing later.');
+                    setView('building-select');
+                    viewRef.current = 'building-select';
+                }
             };
 
             const updateItem = (sect, id, meta) => {
@@ -2892,30 +2796,7 @@
 
             if (view === 'year-select') return (
                 <>
-                    {/* Pull-to-Refresh Indicator */}
-                    <div 
-                        className={`pull-to-refresh-indicator ${pullDistance > 0 || isRefreshing ? 'visible' : ''}`}
-                        style={{ 
-                            opacity: Math.min(pullDistance / pullThreshold, 1),
-                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.95), transparent)'
-                        }}
-                    >
-                        {isRefreshing ? (
-                            <div className="pull-spinner"></div>
-                        ) : pullDistance >= pullThreshold ? (
-                            <div className="text-blue-600 font-semibold text-sm">Release to refresh</div>
-                        ) : pullDistance > 0 ? (
-                            <div className="text-gray-400 text-sm">Pull down to refresh</div>
-                        ) : null}
-                    </div>
-                    
-                    <div 
-                        className="p-4 space-y-4"
-                        style={{
-                            transform: `translateY(${pullDistance}px)`,
-                            transition: isPulling ? 'none' : 'transform 0.3s ease'
-                        }}
-                    >
+                    <div className="p-4 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                         <h1 className="text-lg sm:text-xl font-black uppercase tracking-tighter text-gray-800">Annual Inspections</h1>
                         <div className="flex items-center gap-1 sm:gap-2">
@@ -2966,30 +2847,7 @@
 
             if (view === 'building-select') return (
                 <>
-                    {/* Pull-to-Refresh Indicator */}
-                    <div 
-                        className={`pull-to-refresh-indicator ${pullDistance > 0 || isRefreshing ? 'visible' : ''}`}
-                        style={{ 
-                            opacity: Math.min(pullDistance / pullThreshold, 1),
-                            background: 'linear-gradient(to bottom, rgba(255,255,255,0.95), transparent)'
-                        }}
-                    >
-                        {isRefreshing ? (
-                            <div className="pull-spinner"></div>
-                        ) : pullDistance >= pullThreshold ? (
-                            <div className="text-blue-600 font-semibold text-sm">Release to refresh</div>
-                        ) : pullDistance > 0 ? (
-                            <div className="text-gray-400 text-sm">Pull down to refresh</div>
-                        ) : null}
-                    </div>
-                    
-                    <div 
-                        className="p-4 space-y-4"
-                        style={{
-                            transform: `translateY(${pullDistance}px)`,
-                            transition: isPulling ? 'none' : 'transform 0.3s ease'
-                        }}
-                    >
+                    <div className="p-4 space-y-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1 sm:gap-2">
                             <button onClick={() => saveAndNavigate('year-select')} className="text-blue-600 font-bold p-1">←</button>
@@ -3003,21 +2861,29 @@
                             >
                                 {darkMode ? '☀️' : '🌙'}
                             </button>
-                            <button 
-                                onClick={() => syncBidirectional()} 
-                                disabled={syncStatus === 'syncing'}
-                                className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all ${
-                                    syncStatus === 'syncing' ? 'bg-blue-100 text-blue-400' :
-                                    syncStatus === 'success' ? 'bg-green-500 text-white' :
-                                    syncStatus === 'error' ? 'bg-red-500 text-white' :
-                                    'bg-blue-600 text-white active:scale-95'
-                                }`}
-                            >
-                                {syncStatus === 'syncing' ? '⟳' :
-                                 syncStatus === 'success' ? '✓' :
-                                 syncStatus === 'error' ? '✕' :
-                                 '☁'}
-                            </button>
+                            <div className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold bg-gray-100 text-gray-600">
+                                {lastSyncTime ? (
+                                    <span title={`Last synced: ${new Date(lastSyncTime).toLocaleString('en-US', { 
+                                        timeZone: 'America/Denver',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: 'numeric',
+                                        minute: '2-digit',
+                                        hour12: true
+                                    })} MST`}>
+                                        ☁️ {new Date(lastSyncTime).toLocaleString('en-US', { 
+                                            timeZone: 'America/Denver',
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: 'numeric',
+                                            minute: '2-digit',
+                                            hour12: true
+                                        })}
+                                    </span>
+                                ) : (
+                                    <span>Not Synced</span>
+                                )}
+                            </div>
                             <div className="text-right">
                                 <p className="text-[9px] sm:text-[10px] font-semibold text-gray-700 truncate max-w-[80px] sm:max-w-none hidden sm:block">{user?.displayName || 'User'}</p>
                                 <p className="text-[8px] sm:text-[9px] text-gray-500 font-medium truncate max-w-[100px] sm:max-w-none">{user?.email}</p>
@@ -3441,8 +3307,8 @@
                     </div>
 
                     <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50">
-                        <button onClick={() => saveAndNavigate('building-select')} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
-                            Save & Exit
+                        <button onClick={exportAndSave} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
+                            📄 Export & Save
                         </button>
                     </div>
 
