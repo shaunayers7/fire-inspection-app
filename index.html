@@ -548,7 +548,11 @@
                     style={modalStyle}
                 >
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={isProcessing ? undefined : onCancel}></div>
-                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200" style={{ maxHeight: keyboardHeight > 0 ? `calc(100vh - ${keyboardHeight + 40}px)` : '90vh', overflowY: 'auto' }}>
+                    <div 
+                        onClick={(e) => e.stopPropagation()} 
+                        className="bg-white w-full max-w-sm rounded-3xl shadow-2xl relative z-10 overflow-hidden animate-in fade-in zoom-in duration-200" 
+                        style={{ maxHeight: keyboardHeight > 0 ? `calc(100vh - ${keyboardHeight + 40}px)` : '90vh', overflowY: 'auto' }}
+                    >
                         <div className="p-6">
                             <h3 className="text-lg font-black uppercase text-gray-800 mb-4">{title}</h3>
                             {children}
