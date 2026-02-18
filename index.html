@@ -2407,10 +2407,23 @@
             };
 
             // --- TIMER FUNCTIONS ---
+            // Create AudioContext once (reusable)
+            const audioContextRef = useRef(null);
+            
             // Play alert sound using Web Audio API
-            const playTimerSound = () => {
+            const playTimerSound = async () => {
                 try {
-                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    // Create AudioContext if it doesn't exist
+                    if (!audioContextRef.current) {
+                        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    const audioContext = audioContextRef.current;
+                    
+                    // Resume AudioContext if it's suspended (required for many browsers)
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
                     
                     // Create a sequence of 3 beeps
                     for (let i = 0; i < 3; i++) {
@@ -2430,8 +2443,10 @@
                         oscillator.start(startTime);
                         oscillator.stop(startTime + 0.2);
                     }
+                    
+                    console.log('🔊 Timer sound played');
                 } catch (error) {
-                    console.log('Audio not supported:', error);
+                    console.log('⚠️ Audio not supported or blocked:', error);
                 }
             };
             
