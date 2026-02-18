@@ -1199,131 +1199,16 @@
                 initFirebase();
             }, []);
             
-            // Real-time sync with Page Visibility API (battery-friendly)
+            // REAL-TIME SYNC DISABLED - Manual sync only via "Export & Save" button
+            // This prevents automatic background syncing and duplicate building issues
             useEffect(() => {
                 if (!db || !user) return;
                 
-                const startRealtimeSync = () => {
-                    if (realtimeUnsubscribe.current) {
-                        console.log('🔄 Real-time sync already active');
-                        return;
-                    }
-                    
-                    try {
-                        const { collection, onSnapshot } = window.FirebaseSDK;
-                        const buildingsRef = collection(db, `apps/${APP_ID}/buildings`);
-                        
-                        console.log('👂 Real-time sync started (app is visible)');
-                        setRealtimeSyncActive(true);
-                        
-                        realtimeUnsubscribe.current = onSnapshot(buildingsRef, (snapshot) => {
-                            // Skip if this is the initial load
-                            if (isUpdatingFromSync.current) return;
-                            
-                            console.log('🔔 Real-time update detected from cloud');
-                            
-                            const cloudBuildings = {};
-                            snapshot.forEach(doc => {
-                                const data = doc.data();
-                                const year = data.year || 2026;
-                                if (!cloudBuildings[year]) cloudBuildings[year] = [];
-                                cloudBuildings[year].push(data);
-                            });
-                            
-                            // MERGE local and cloud changes (don't replace!)
-                            isUpdatingFromSync.current = true;
-                            setYearData(prev => {
-                                console.log('📲 Merging real-time cloud updates with local state...');
-                                const result = { ...prev }; // Start with local state
-                                
-                                // Only update buildings that exist in cloud
-                                // This preserves unsaved local changes for buildings not yet synced
-                                for (const [year, cloudBldgs] of Object.entries(cloudBuildings)) {
-                                    if (!result[year]) result[year] = [];
-                                    
-                                    // Build a map of cloud buildings by ID
-                                    const cloudMap = {};
-                                    cloudBldgs.forEach(cb => cloudMap[cb.id] = cb);
-                                    
-                                    // Merge: Keep local unsaved buildings, update synced ones
-                                    result[year] = result[year].map(localBldg => {
-                                        // If this building exists in cloud and hasn't been modified locally since last sync
-                                        if (cloudMap[localBldg.id]) {
-                                            const cloudBldg = cloudMap[localBldg.id];
-                                            // Only update if cloud version is newer
-                                            if (!localBldg.lastSynced || cloudBldg.lastSynced > localBldg.lastSynced) {
-                                                console.log(`  ↓ Updating ${localBldg.name} from cloud`);
-                                                delete cloudMap[localBldg.id]; // Mark as processed
-                                                return cloudBldg;
-                                            }
-                                        }
-                                        return localBldg; // Keep local version
-                                    });
-                                    
-                                    // Add new buildings from cloud that don't exist locally
-                                    for (const cloudBldg of Object.values(cloudMap)) {
-                                        console.log(`  + Adding new building ${cloudBldg.name} from cloud`);
-                                        result[year].push(cloudBldg);
-                                    }
-                                }
-                                
-                                return result;
-                            });
-                            
-                            // Update sync time
-                            const latestSync = snapshot.docs.reduce((latest, doc) => {
-                                const syncTime = doc.data().lastSynced;
-                                return syncTime && (!latest || syncTime > latest) ? syncTime : latest;
-                            }, null);
-                            
-                            if (latestSync) setLastSyncTime(latestSync);
-                            
-                            setTimeout(() => {
-                                isUpdatingFromSync.current = false;
-                            }, 100);
-                        }, (error) => {
-                            console.error('❌ Real-time sync error:', error);
-                            setRealtimeSyncActive(false);
-                        });
-                    } catch (error) {
-                        console.error('Failed to start real-time sync:', error);
-                        setRealtimeSyncActive(false);
-                    }
-                };
+                console.log('📴 Real-time sync is DISABLED - manual sync only');
+                setRealtimeSyncActive(false);
                 
-                const stopRealtimeSync = () => {
-                    if (realtimeUnsubscribe.current) {
-                        console.log('💤 Real-time sync stopped (app in background)');
-                        realtimeUnsubscribe.current();
-                        realtimeUnsubscribe.current = null;
-                        setRealtimeSyncActive(false);
-                    }
-                };
-                
-                // Handle Page Visibility API (battery-friendly)
-                const handleVisibilityChange = () => {
-                    if (document.hidden) {
-                        // App went to background - stop listening to save battery
-                        stopRealtimeSync();
-                    } else {
-                        // App came to foreground - start listening
-                        startRealtimeSync();
-                    }
-                };
-                
-                // Start real-time sync if page is visible
-                if (!document.hidden) {
-                    startRealtimeSync();
-                }
-                
-                // Listen for visibility changes
-                document.addEventListener('visibilitychange', handleVisibilityChange);
-                
-                // Cleanup on unmount
-                return () => {
-                    stopRealtimeSync();
-                    document.removeEventListener('visibilitychange', handleVisibilityChange);
-                };
+                // No cleanup needed since we're not starting any listeners
+                return () => {};
             }, [db, user]);
             
             // Version logging and cache detection
@@ -2917,14 +2802,6 @@
                                 second: '2-digit',
                                 hour12: true
                             })} MST
-                            {realtimeSyncActive && (
-                                <span className="ml-2 text-green-500" title="Real-time sync active">● Live</span>
-                            )}
-                        </div>
-                    )}
-                    {!lastSyncTime && realtimeSyncActive && (
-                        <div className="text-[10px] text-green-500 text-center font-semibold">
-                            <span title="Real-time sync active">● Real-time sync active</span>
                         </div>
                     )}
                     {(!yearData[selectedYear] || yearData[selectedYear].length === 0) && (
