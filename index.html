@@ -66,6 +66,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, serverTimestamp, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-storage.js";
         
         window.FirebaseSDK = { 
             initializeApp, 
@@ -86,7 +87,12 @@
             signInWithEmailAndPassword,
             sendPasswordResetEmail,
             signOut,
-            updateProfile
+            updateProfile,
+            getStorage,
+            ref,
+            uploadBytes,
+            getDownloadURL,
+            deleteObject
         };
     </script>
 
@@ -592,6 +598,48 @@
             const draftTimerRef = useRef(null);
             const labelTextareaRef = useRef(null);
             
+            // Thumbnail generation helper - creates compressed thumbnail for local display
+            const createThumbnail = (file, maxSize = 200, quality = 0.8) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            let width = img.width;
+                            let height = img.height;
+                            
+                            // Calculate scaled dimensions
+                            if (width > height) {
+                                if (width > maxSize) {
+                                    height = (height * maxSize) / width;
+                                    width = maxSize;
+                                }
+                            } else {
+                                if (height > maxSize) {
+                                    width = (width * maxSize) / height;
+                                    height = maxSize;
+                                }
+                            }
+                            
+                            canvas.width = width;
+                            canvas.height = height;
+                            
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            
+                            // Convert to base64 with compression
+                            const thumbnailDataURL = canvas.toDataURL('image/jpeg', quality);
+                            resolve(thumbnailDataURL);
+                        };
+                        img.onerror = () => reject(new Error('Failed to load image'));
+                        img.src = e.target.result;
+                    };
+                    reader.onerror = () => reject(new Error('Failed to read file'));
+                    reader.readAsDataURL(file);
+                });
+            };
+            
             // Timer functions for emergency lights
             const getTimerDisplay = () => {
                 if (!item.timer) return '00:00';
@@ -848,38 +896,77 @@
                                             onConfirm: onDelete
                                         });
                                     }} className="text-red-300 ml-auto">Delete</button>}
-                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => {
+                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={async (e) => {
                                         const file = e.target.files[0];
-                                        if (file) {
-                                            // Check file size (limit to 5MB for photos, 10MB for videos)
-                                            const maxSize = file.type.startsWith('video') ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
-                                            if (file.size > maxSize) {
-                                                alert(`⚠️ File too large! Maximum size: ${file.type.startsWith('video') ? '10MB' : '5MB'}\nYour file: ${(file.size / 1024 / 1024).toFixed(1)}MB\n\nPlease compress or resize the file.`);
-                                                e.target.value = ''; // Reset input
-                                                return;
-                                            }
+                                        if (!file) return;
+                                        
+                                        // Check file size (limit to 20MB for photos, 50MB for videos)
+                                        const maxSize = file.type.startsWith('video') ? 50 * 1024 * 1024 : 20 * 1024 * 1024;
+                                        if (file.size > maxSize) {
+                                            alert(`⚠️ File too large! Maximum size: ${file.type.startsWith('video') ? '50MB' : '20MB'}\nYour file: ${(file.size / 1024 / 1024).toFixed(1)}MB\n\nPlease compress or resize the file.`);
+                                            e.target.value = '';
+                                            return;
+                                        }
+                                        
+                                        // Show loading indicator
+                                        onUpdateMeta({ _uploading: true });
+                                        
+                                        try {
+                                            const isVideo = file.type.startsWith('video');
+                                            const mediaType = isVideo ? 'video' : 'image';
                                             
-                                            // Show loading indicator
-                                            onUpdateMeta({ _uploading: true });
-                                            
-                                            const reader = new FileReader();
-                                            
-                                            reader.onloadend = () => {
-                                                onUpdateMeta({ 
-                                                    photo: reader.result, 
-                                                    mediaType: file.type.startsWith('video') ? 'video' : 'image',
+                                            // Option 1: Upload to Firebase Storage (if available)
+                                            if (window.firebaseStorage && window.FirebaseSDK) {
+                                                const { ref, uploadBytes, getDownloadURL } = window.FirebaseSDK;
+                                                
+                                                // Create unique file path: inspections/{itemId}/{timestamp}_{filename}
+                                                const timestamp = Date.now();
+                                                const fileName = `${timestamp}_${file.name}`;
+                                                const storageRef = ref(window.firebaseStorage, `inspections/${item.id}/${fileName}`);
+                                                
+                                                // Upload full resolution to Firebase Storage
+                                                await uploadBytes(storageRef, file);
+                                                const photoURL = await getDownloadURL(storageRef);
+                                                
+                                                console.log('✅ Uploaded to Firebase Storage:', photoURL);
+                                                
+                                                // Generate thumbnail for local display (images only)
+                                                let thumbnail = null;
+                                                if (!isVideo) {
+                                                    thumbnail = await createThumbnail(file, 200, 0.7);
+                                                }
+                                                
+                                                onUpdateMeta({
+                                                    photo: thumbnail, // Compressed thumbnail for display
+                                                    photoURL: photoURL, // Full resolution URL in cloud
+                                                    storagePath: `inspections/${item.id}/${fileName}`, // Storage path for deletion
+                                                    mediaType: mediaType,
                                                     _uploading: false
                                                 });
-                                            };
-                                            
-                                            reader.onerror = () => {
-                                                alert('❌ Failed to read file. Please try again.');
-                                                onUpdateMeta({ _uploading: false });
-                                                e.target.value = ''; // Reset input
-                                            };
-                                            
-                                            reader.readAsDataURL(file);
+                                            } else {
+                                                // Fallback: Use base64 (localStorage) if Firebase Storage not available
+                                                console.warn('⚠️ Firebase Storage not available, using localStorage');
+                                                
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => {
+                                                    onUpdateMeta({
+                                                        photo: reader.result,
+                                                        photoURL: null,
+                                                        mediaType: mediaType,
+                                                        _uploading: false
+                                                    });
+                                                };
+                                                reader.onerror = () => {
+                                                    throw new Error('Failed to read file');
+                                                };
+                                                reader.readAsDataURL(file);
+                                            }
+                                        } catch (error) {
+                                            console.error('Upload error:', error);
+                                            alert('❌ Failed to upload file. Please try again.');
+                                            onUpdateMeta({ _uploading: false });
                                         }
+                                        
                                         e.target.value = ''; // Reset input for reuse
                                     }} />
                                 </div>
@@ -901,11 +988,55 @@
                             {item.photo && (
                                 <div className="mt-2 relative group w-24 h-24">
                                     {item.mediaType === 'video' ? (
-                                        <video src={item.photo} className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                                        <video 
+                                            src={item.photoURL || item.photo} 
+                                            className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer" 
+                                            onClick={() => {
+                                                if (item.photoURL || item.photo) {
+                                                    onTriggerModal({
+                                                        title: "Media Viewer",
+                                                        type: 'media',
+                                                        mediaURL: item.photoURL || item.photo,
+                                                        mediaType: item.mediaType
+                                                    });
+                                                }
+                                            }}
+                                        />
                                     ) : (
-                                        <img src={item.photo} className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                                        <div className="relative w-full h-full">
+                                            <img 
+                                                src={item.photo} 
+                                                className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
+                                                onClick={() => {
+                                                    if (item.photoURL || item.photo) {
+                                                        onTriggerModal({
+                                                            title: "Media Viewer",
+                                                            type: 'media',
+                                                            mediaURL: item.photoURL || item.photo,
+                                                            mediaType: item.mediaType
+                                                        });
+                                                    }
+                                                }}
+                                            />
+                                            {item.photoURL && (
+                                                <div className="absolute bottom-1 right-1 bg-blue-500 text-white text-[8px] px-1 rounded font-bold">☁</div>
+                                            )}
+                                        </div>
                                     )}
-                                    <button onClick={() => onUpdateMeta({ photo: null, mediaType: null })} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">×</button>
+                                    <button onClick={async () => {
+                                        // Delete from Firebase Storage if storage path exists
+                                        if (item.storagePath && window.firebaseStorage && window.FirebaseSDK) {
+                                            try {
+                                                const { ref, deleteObject } = window.FirebaseSDK;
+                                                const storageRef = ref(window.firebaseStorage, item.storagePath);
+                                                await deleteObject(storageRef);
+                                                console.log('✅ Deleted from Firebase Storage');
+                                            } catch (error) {
+                                                console.warn('⚠️ Could not delete from Storage (may not exist):', error);
+                                            }
+                                        }
+                                        onUpdateMeta({ photo: null, photoURL: null, storagePath: null, mediaType: null });
+                                    }} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold opacity-70 group-hover:opacity-100 transition-opacity">×</button>
                                 </div>
                             )}
                             
@@ -1345,7 +1476,7 @@
                             return;
                         }
 
-                        const { initializeApp, getFirestore, getAuth, onAuthStateChanged } = window.FirebaseSDK;
+                        const { initializeApp, getFirestore, getAuth, getStorage, onAuthStateChanged } = window.FirebaseSDK;
                         const config = JSON.parse(window.__firebase_config);
                         
                         // Check if config has placeholder values
@@ -1358,8 +1489,10 @@
                         const app = initializeApp(config);
                         const auth = getAuth(app);
                         const firestore = getFirestore(app);
+                        const storage = getStorage(app);
                         setDb(firestore);
                         window.firebaseAuth = auth; // Make available globally for login
+                        window.firebaseStorage = storage; // Make available globally for media uploads
                         
                         // Load allowed emails list
                         const loadAllowedEmails = async () => {
@@ -3491,6 +3624,45 @@
                     })()}
                     
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    {activeModal?.type === 'media' && (
+                        <Modal 
+                            title={activeModal.title} 
+                            onCancel={() => setActiveModal(null)}
+                            hideButtons={true}
+                        >
+                            <div className="relative -mx-6 -mb-6 mt-4">
+                                {activeModal.mediaType === 'video' ? (
+                                    <video 
+                                        src={activeModal.mediaURL} 
+                                        controls 
+                                        className="w-full max-h-[70vh] object-contain bg-black"
+                                        autoPlay
+                                    />
+                                ) : (
+                                    <img 
+                                        src={activeModal.mediaURL} 
+                                        className="w-full max-h-[70vh] object-contain bg-black"
+                                        alt="Full resolution"
+                                    />
+                                )}
+                                <div className="p-4 bg-gray-50 flex gap-2">
+                                    <a 
+                                        href={activeModal.mediaURL} 
+                                        download 
+                                        className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-lg text-sm text-center hover:bg-blue-700 transition-colors"
+                                    >
+                                        📥 Download
+                                    </a>
+                                    <button 
+                                        onClick={() => setActiveModal(null)}
+                                        className="px-6 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg text-sm hover:bg-gray-300 transition-colors"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </Modal>
+                    )}
                     {activeModal?.type === 'copy-building' && (
                         <Modal 
                             title={activeModal.title} 
