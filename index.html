@@ -860,6 +860,9 @@
                                                 <div className="text-3xl font-mono font-bold text-yellow-900">
                                                     {getTimerDisplay()}
                                                 </div>
+                                                <div className="text-[10px] text-yellow-700 font-medium mt-0.5">
+                                                    MM:SS
+                                                </div>
                                             </div>
                                             
                                             <div className="flex gap-2">
@@ -2452,33 +2455,59 @@
                     timerIntervalRef.current = setInterval(() => {
                         setTimerRefresh(prev => prev + 1); // Force re-render
                         
-                        // Check for completed countdown timers
+                        // Check for completed timers (both countdown and count-up)
                         const lightsSection = activeBuilding?.data?.lights || [];
                         lightsSection.forEach(item => {
-                            if (item.timer?.isRunning && item.timer.mode === 'down') {
+                            if (item.timer?.isRunning) {
                                 const elapsed = Math.floor((Date.now() - item.timer.startTime) / 1000);
-                                const remaining = item.timer.duration - elapsed;
                                 
-                                // Alert when timer reaches zero (only once per timer)
-                                if (remaining <= 0 && !alertedTimersRef.current.has(item.id)) {
-                                    alertedTimersRef.current.add(item.id);
+                                // Countdown timer - check if reached zero
+                                if (item.timer.mode === 'down') {
+                                    const remaining = item.timer.duration - elapsed;
                                     
-                                    // Play sound notification
-                                    playTimerSound();
-                                    
-                                    // Show alert
-                                    setTimeout(() => {
-                                        alert(`⏰ Timer Complete!\n\n"${item.label}" battery test has finished.\n\nPlease check the emergency light now.`);
-                                    }, 100);
-                                    
-                                    // Auto-pause the timer
-                                    updateItem('lights', item.id, {
-                                        timer: {
-                                            ...item.timer,
-                                            isRunning: false,
-                                            pausedTime: item.timer.duration
-                                        }
-                                    });
+                                    if (remaining <= 0 && !alertedTimersRef.current.has(item.id)) {
+                                        alertedTimersRef.current.add(item.id);
+                                        
+                                        // Play sound notification
+                                        playTimerSound();
+                                        
+                                        // Show alert
+                                        setTimeout(() => {
+                                            alert(`⏰ Timer Complete!\n\n"${item.label}" battery test has finished.\n\nPlease check the emergency light now.`);
+                                        }, 100);
+                                        
+                                        // Auto-pause the timer
+                                        updateItem('lights', item.id, {
+                                            timer: {
+                                                ...item.timer,
+                                                isRunning: false,
+                                                pausedTime: item.timer.duration
+                                            }
+                                        });
+                                    }
+                                }
+                                // Count-up timer - auto-stop at 30 minutes (1800 seconds)
+                                else if (item.timer.mode === 'up') {
+                                    if (elapsed >= 1800 && !alertedTimersRef.current.has(item.id)) {
+                                        alertedTimersRef.current.add(item.id);
+                                        
+                                        // Play sound notification
+                                        playTimerSound();
+                                        
+                                        // Show alert
+                                        setTimeout(() => {
+                                            alert(`⏰ Timer Reached 30 Minutes!\n\n"${item.label}" battery test has reached the maximum time.\n\nTimer has been stopped.`);
+                                        }, 100);
+                                        
+                                        // Auto-pause the timer at 30 minutes
+                                        updateItem('lights', item.id, {
+                                            timer: {
+                                                ...item.timer,
+                                                isRunning: false,
+                                                pausedTime: 1800
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         });
