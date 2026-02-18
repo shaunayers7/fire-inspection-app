@@ -377,7 +377,7 @@
                     { id: `c15-${Date.now()}`, label: 'Panel condition and keys', status: initialStatus, note: '', photo: null, fixed: false },
                     { id: `c16-${Date.now()}`, label: 'Signal check with salt lake', status: initialStatus, note: '', photo: null, fixed: false }
                 ],
-                devices: Array(28).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i+1).toString(), label: `Device ${i+1}`, type: 'Smoke Detector', status: initialStatus, note: '', photo: null, fixed: false })),
+                devices: Array(1).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i+1).toString(), label: `Device ${i+1}`, type: 'Smoke Detector', status: initialStatus, note: '', photo: null, fixed: false })),
                 battery: [
                     { id: `b0-${Date.now()}`, label: 'Battery AC on', status: initialStatus, note: '', photo: null, fixed: false },
                     { id: `b1-${Date.now()}`, label: 'Battery AC off', status: initialStatus, note: '', photo: null, fixed: false },
@@ -586,7 +586,7 @@
             return <button onClick={handleClick} className={`${baseClass} bg-gray-200 text-gray-400`}>○</button>;
         };
 
-        const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false, onTriggerModal, isDragging, dragHandlers, isEmergencyLight = false }) => {
+        const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false, onTriggerModal, isDragging, dragHandlers, isEmergencyLight = false, onMoveUp, onMoveDown, isFirst = false, isLast = false }) => {
             const [localDraft, setLocalDraft] = useState(null);
             const [isEditingNote, setIsEditingNote] = useState(false);
             const fileInputRef = useRef(null);
@@ -719,7 +719,13 @@
                 };
             }, [localDraft]);
 
-            const startEdit = () => setLocalDraft({ ...item });
+            const startEdit = () => {
+                // Only create a new draft if one doesn't exist
+                // This prevents resetting the input when clicking back into it
+                if (!localDraft) {
+                    setLocalDraft({ ...item });
+                }
+            };
             
             const saveEdit = () => { 
                 onUpdateMeta(localDraft); 
@@ -764,7 +770,29 @@
                     <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
                             <div className="flex items-start gap-2">
-                                <span className="text-[10px] font-black text-gray-300 mt-1">{index}.</span>
+                                <div className="flex flex-col gap-0.5 mr-1">
+                                    <span className="text-[10px] font-black text-gray-300">{index}.</span>
+                                    {(onMoveUp || onMoveDown) && (
+                                        <div className="flex flex-col gap-0.5">
+                                            <button 
+                                                onClick={onMoveUp}
+                                                disabled={isFirst}
+                                                className={`text-[10px] leading-none ${isFirst ? 'text-gray-200 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700'}`}
+                                                title="Move up"
+                                            >
+                                                ▲
+                                            </button>
+                                            <button 
+                                                onClick={onMoveDown}
+                                                disabled={isLast}
+                                                className={`text-[10px] leading-none ${isLast ? 'text-gray-200 cursor-not-allowed' : 'text-blue-500 hover:text-blue-700'}`}
+                                                title="Move down"
+                                            >
+                                                ▼
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="flex-1 space-y-1">
                                     <textarea 
                                         ref={labelTextareaRef}
@@ -1891,6 +1919,53 @@
             };
 
             const sectionDrag = useDragAndDrop(activeBuilding?.sections || [], moveSection);
+
+            // --- ITEM REORDERING ---
+            const moveItemUp = (sectionId, itemId) => {
+                setYearData(prev => {
+                    const currentYearBuildings = prev[selectedYear];
+                    const bIdx = currentYearBuildings.findIndex(b => b.id === selectedBuildingId);
+                    const building = currentYearBuildings[bIdx];
+                    const items = [...building.data[sectionId]];
+                    const itemIndex = items.findIndex(i => i.id === itemId);
+                    
+                    if (itemIndex > 0) {
+                        // Swap with previous item
+                        [items[itemIndex - 1], items[itemIndex]] = [items[itemIndex], items[itemIndex - 1]];
+                        
+                        const updatedBuildings = [...currentYearBuildings];
+                        updatedBuildings[bIdx] = { 
+                            ...building, 
+                            data: { ...building.data, [sectionId]: items } 
+                        };
+                        return { ...prev, [selectedYear]: updatedBuildings };
+                    }
+                    return prev;
+                });
+            };
+
+            const moveItemDown = (sectionId, itemId) => {
+                setYearData(prev => {
+                    const currentYearBuildings = prev[selectedYear];
+                    const bIdx = currentYearBuildings.findIndex(b => b.id === selectedBuildingId);
+                    const building = currentYearBuildings[bIdx];
+                    const items = [...building.data[sectionId]];
+                    const itemIndex = items.findIndex(i => i.id === itemId);
+                    
+                    if (itemIndex < items.length - 1) {
+                        // Swap with next item
+                        [items[itemIndex], items[itemIndex + 1]] = [items[itemIndex + 1], items[itemIndex]];
+                        
+                        const updatedBuildings = [...currentYearBuildings];
+                        updatedBuildings[bIdx] = { 
+                            ...building, 
+                            data: { ...building.data, [sectionId]: items } 
+                        };
+                        return { ...prev, [selectedYear]: updatedBuildings };
+                    }
+                    return prev;
+                });
+            };
 
             const getBuildingStatus = (building) => {
                 if (!building || !building.data) {
@@ -3492,19 +3567,28 @@
                                     </div>
                                     {expandedSections[s.id] && (
                                         <div className="bg-white">
-                                            {activeBuilding.data[s.id]?.map((item, i) => (
+                                            {activeBuilding.data[s.id]?.map((item, i, arr) => (
                                                 <InspectionRow 
                                                     key={item.id} index={i+1} item={item} isDevice={s.isDev} 
                                                     isEmergencyLight={s.id === 'lights'}
                                                     onUpdateMeta={(m) => updateItem(s.id, item.id, m)}
                                                     onTriggerModal={setActiveModal}
+                                                    onMoveUp={() => moveItemUp(s.id, item.id)}
+                                                    onMoveDown={() => moveItemDown(s.id, item.id)}
+                                                    isFirst={i === 0}
+                                                    isLast={i === arr.length - 1}
                                                     onDelete={() => {
                                                         setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) } } : b) }));
                                                         setActiveModal(null);
                                                     }}
                                                 />
                                             ))}
-                                            <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...(b.data[s.id] || []), { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false }] } } : b) }))} className="w-full p-3 text-[10px] font-black text-gray-300 uppercase tracking-widest">+ Add Item</button>
+                                            <button onClick={() => {
+                                                const newItem = s.isDev 
+                                                    ? { id: Date.now(), deviceNo: (activeBuilding.data[s.id].length + 1).toString(), label: `Device ${activeBuilding.data[s.id].length + 1}`, type: 'Smoke Detector', status: "pending", note: "", photo: null, fixed: false }
+                                                    : { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false };
+                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...(b.data[s.id] || []), newItem] } } : b) }));
+                                            }} className="w-full p-3 text-[10px] font-black text-gray-300 uppercase tracking-widest">+ Add Item</button>
                                         </div>
                                     )}
                                 </div>
