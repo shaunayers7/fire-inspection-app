@@ -847,11 +847,43 @@
                                     <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={(e) => {
                                         const file = e.target.files[0];
                                         if (file) {
+                                            // Check file size (limit to 5MB for photos, 10MB for videos)
+                                            const maxSize = file.type.startsWith('video') ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+                                            if (file.size > maxSize) {
+                                                alert(`⚠️ File too large! Maximum size: ${file.type.startsWith('video') ? '10MB' : '5MB'}\nYour file: ${(file.size / 1024 / 1024).toFixed(1)}MB\n\nPlease compress or resize the file.`);
+                                                e.target.value = ''; // Reset input
+                                                return;
+                                            }
+                                            
+                                            // Show loading indicator
+                                            onUpdateMeta({ _uploading: true });
+                                            
                                             const reader = new FileReader();
-                                            reader.onloadend = () => onUpdateMeta({ photo: reader.result, mediaType: file.type.startsWith('video') ? 'video' : 'image' });
+                                            
+                                            reader.onloadend = () => {
+                                                onUpdateMeta({ 
+                                                    photo: reader.result, 
+                                                    mediaType: file.type.startsWith('video') ? 'video' : 'image',
+                                                    _uploading: false
+                                                });
+                                            };
+                                            
+                                            reader.onerror = () => {
+                                                alert('❌ Failed to read file. Please try again.');
+                                                onUpdateMeta({ _uploading: false });
+                                                e.target.value = ''; // Reset input
+                                            };
+                                            
                                             reader.readAsDataURL(file);
                                         }
+                                        e.target.value = ''; // Reset input for reuse
                                     }} />
+                                </div>
+                            )}
+                            {item._uploading && (
+                                <div className="mt-2 text-xs text-blue-600 flex items-center gap-2">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                    <span>Uploading...</span>
                                 </div>
                             )}
                             {(isEditingNote || item.note) && (
@@ -1464,7 +1496,25 @@
 
             useEffect(() => {
                 // Always save to localStorage for offline capability
-                localStorage.setItem('fire_inspection_v4_data', JSON.stringify(yearData));
+                try {
+                    const dataString = JSON.stringify(yearData);
+                    const dataSizeMB = (dataString.length / 1024 / 1024).toFixed(2);
+                    
+                    // Warn if approaching localStorage limit (typically 5-10MB)
+                    if (dataString.length > 8 * 1024 * 1024) {
+                        console.warn(`⚠️ Data size is large (${dataSizeMB}MB). Consider removing old photos/videos.`);
+                    }
+                    
+                    localStorage.setItem('fire_inspection_v4_data', dataString);
+                } catch (error) {
+                    if (error.name === 'QuotaExceededError' || error.code === 22) {
+                        console.error('❌ Storage quota exceeded! Your device storage is full.');
+                        alert('⚠️ STORAGE FULL\n\nYour device storage is full. The app cannot save more data.\n\nPlease:\n1. Delete old photos/videos from inspections\n2. Export & Save to cloud\n3. Or use a device with more storage');
+                    } else {
+                        console.error('❌ Failed to save to localStorage:', error);
+                        alert('⚠️ Failed to save data locally. Changes may be lost. Please Export & Save to cloud.');
+                    }
+                }
                 
                 // Skip auto-sync flag reset (prevents loop)
                 if (isUpdatingFromSync.current) {
@@ -1728,8 +1778,18 @@
                     
                     for (const [year, buildings] of Object.entries(updatedYearData)) {
                         for (const building of buildings) {
+                            // Clean building data: remove temporary internal states
+                            const cleanedData = {};
+                            Object.keys(building.data).forEach(sectionKey => {
+                                cleanedData[sectionKey] = building.data[sectionKey].map(item => {
+                                    const { _uploading, ...cleanItem } = item; // Remove _uploading state
+                                    return cleanItem;
+                                });
+                            });
+                            
                             const buildingWithSync = {
                                 ...building,
+                                data: cleanedData, // Use cleaned data
                                 lastSynced: syncTime,
                                 lastSyncedBy: user?.email || user?.displayName || 'Unknown',
                                 lastSyncedById: user?.uid,
@@ -2169,13 +2229,19 @@
                 const timestamp = new Date().toISOString();
                 const userName = user?.email || user?.displayName || 'Unknown';
                 
-                // Log the change
+                // Log the change (exclude large photo/video data from logs)
                 const item = activeBuilding?.data[sect]?.find(i => i.id === id);
                 if (item) {
+                    // Create sanitized version of changes (exclude base64 photos/videos)
+                    const sanitizedChanges = { ...meta };
+                    if (sanitizedChanges.photo) {
+                        sanitizedChanges.photo = '[PHOTO_DATA]'; // Don't log massive base64 strings
+                    }
+                    
                     logChange('update_item', { 
                         section: sect, 
                         itemLabel: item.label,
-                        changes: meta,
+                        changes: sanitizedChanges,
                         building: activeBuilding?.name
                     });
                 }
