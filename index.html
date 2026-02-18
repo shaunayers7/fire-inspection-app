@@ -225,11 +225,6 @@
         .safe-bottom {
             padding-bottom: max(1rem, env(safe-area-inset-bottom));
         }
-        
-        /* Fixed button container that respects safe areas and adds extra spacing */
-        .button-container-bottom {
-            bottom: max(2.5rem, calc(env(safe-area-inset-bottom) + 1.5rem));
-        }
     </style>
 </head>
 <body>
@@ -385,7 +380,7 @@
                     { id: `b3-${Date.now()}`, label: 'Battery clean tight terminals', status: initialStatus, note: '', photo: null, fixed: false },
                     { id: `b4-${Date.now()}`, label: 'Battery type', status: initialStatus, note: '', photo: null, fixed: false }
                 ],
-                lights: Array(5).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `Emergency Light ${i+1}`, status: initialStatus, note: '', photo: null, fixed: false })),
+                lights: Array(3).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `EM-${i+1}`, status: initialStatus, note: '', photo: null, fixed: false })),
                 customDeficiencies: []
             }
         });
@@ -3626,12 +3621,13 @@
                                 </div>
                             )}
                         </div>
-                    </div>
 
-                    <div className="fixed left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50 button-container-bottom">
-                        <button onClick={exportAndSave} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
-                            📄 Export & Save
-                        </button>
+                        {/* Export & Save Button */}
+                        <div className="pt-4 pb-6">
+                            <button onClick={exportAndSave} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
+                                📄 Export & Save
+                            </button>
+                        </div>
                     </div>
 
                     {activeModal && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
