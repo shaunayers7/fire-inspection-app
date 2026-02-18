@@ -223,7 +223,12 @@
         }
         
         .safe-bottom {
-            padding-bottom: max(2.5rem, calc(env(safe-area-inset-bottom) + 1.5rem));
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+        
+        /* Fixed button container that respects safe areas and adds extra spacing */
+        .button-container-bottom {
+            bottom: max(2.5rem, calc(env(safe-area-inset-bottom) + 1.5rem));
         }
     </style>
 </head>
@@ -3196,7 +3201,7 @@
                         </div>
                     </div>
 
-                    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50 safe-bottom">
+                    <div className="fixed left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t flex flex-col gap-2 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-50 button-container-bottom">
                         <button onClick={exportAndSave} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform">
                             📄 Export & Save
                         </button>
