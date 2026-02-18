@@ -875,15 +875,22 @@
                                                 
                                                 {item.timer.mode === 'down' && (
                                                     <select
-                                                        value={item.timer.duration / 60}
-                                                        onChange={(e) => updateTimerDuration(parseInt(e.target.value))}
+                                                        value={item.timer.duration}
+                                                        onChange={(e) => onUpdateMeta({ timer: { ...item.timer, duration: parseInt(e.target.value) } })}
                                                         disabled={item.timer.isRunning}
                                                         className="text-xs px-2 py-1 border rounded flex-1 bg-white"
                                                     >
-                                                        <option value="25">25 min</option>
-                                                        <option value="30">30 min</option>
-                                                        <option value="60">60 min</option>
-                                                        <option value="90">90 min</option>
+                                                        <option value="10">10 sec</option>
+                                                        <option value="20">20 sec</option>
+                                                        <option value="30">30 sec</option>
+                                                        <option value="60">1 min</option>
+                                                        <option value="120">2 min</option>
+                                                        <option value="300">5 min</option>
+                                                        <option value="600">10 min</option>
+                                                        <option value="900">15 min</option>
+                                                        <option value="1200">20 min</option>
+                                                        <option value="1500">25 min</option>
+                                                        <option value="1800">30 min</option>
                                                     </select>
                                                 )}
                                             </div>
