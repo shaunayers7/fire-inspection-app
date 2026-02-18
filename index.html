@@ -3334,6 +3334,20 @@
                         </div>
                     )}
                     
+                    {/* Add Building Button */}
+                    <button 
+                        onClick={() => setYearData(prev => ({ 
+                            ...prev, 
+                            [selectedYear]: [
+                                getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`),
+                                ...(prev[selectedYear] || [])
+                            ] 
+                        }))} 
+                        className="w-full p-4 border-2 border-dashed border-blue-300 rounded-xl text-blue-500 font-bold uppercase text-sm hover:bg-blue-50 hover:border-blue-400 transition-all"
+                    >
+                        + Add New Building
+                    </button>
+                    
                     {(!yearData[selectedYear] || yearData[selectedYear].length === 0) && (
                         <div className="text-center py-12 text-gray-400">
                             <p className="font-semibold">No buildings for {selectedYear}</p>
@@ -3460,7 +3474,6 @@
                         );
                     })()}
                     
-                    <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
                     {activeModal?.type === 'copy-building' && (
                         <Modal 
