@@ -230,6 +230,54 @@
         .button-container-bottom {
             bottom: max(2.5rem, calc(env(safe-area-inset-bottom) + 1.5rem));
         }
+        
+        /* Timer Panel Styles */
+        .timer-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 320px;
+            max-height: 500px;
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            z-index: 999;
+            backdrop-filter: blur(20px);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .timer-panel.minimized {
+            width: 60px;
+            height: 60px;
+            border-radius: 30px;
+        }
+        .timer-item {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            transition: background-color 0.2s;
+        }
+        .timer-item:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        .timer-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ef4444;
+            color: white;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .dark-mode .timer-panel {
+            background: rgba(45, 45, 45, 0.98);
+        }
     </style>
 </head>
 <body>
@@ -807,6 +855,12 @@
             const [iosCopied, setIosCopied] = useState(false);
             const [androidCopied, setAndroidCopied] = useState(false);
             const [allCopied, setAllCopied] = useState(false);
+            
+            // Timer state for battery pack testing
+            const [timers, setTimers] = useState([]);
+            const [isTimerPanelOpen, setIsTimerPanelOpen] = useState(false);
+            const [timerCounter, setTimerCounter] = useState(0);
+            const timerIntervalRef = useRef(null);
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -2232,6 +2286,111 @@
                 }
             };
 
+            // --- TIMER FUNCTIONS ---
+            const addTimer = () => {
+                const newTimer = {
+                    id: Date.now(),
+                    label: `Battery Pack ${timers.length + 1}`,
+                    mode: 'up', // 'up' or 'down'
+                    duration: 1800, // 30 minutes in seconds (for countdown mode)
+                    startTime: null,
+                    pausedTime: 0,
+                    isRunning: false
+                };
+                setTimers(prev => [...prev, newTimer]);
+                if (!isTimerPanelOpen) setIsTimerPanelOpen(true);
+            };
+            
+            const removeTimer = (id) => {
+                setTimers(prev => prev.filter(t => t.id !== id));
+            };
+            
+            const updateTimerLabel = (id, label) => {
+                setTimers(prev => prev.map(t => t.id === id ? { ...t, label } : t));
+            };
+            
+            const updateTimerMode = (id, mode) => {
+                setTimers(prev => prev.map(t => t.id === id ? { ...t, mode, pausedTime: 0, startTime: null, isRunning: false } : t));
+            };
+            
+            const updateTimerDuration = (id, duration) => {
+                setTimers(prev => prev.map(t => t.id === id ? { ...t, duration: duration * 60 } : t));
+            };
+            
+            const startTimer = (id) => {
+                setTimers(prev => prev.map(t => {
+                    if (t.id === id) {
+                        return {
+                            ...t,
+                            isRunning: true,
+                            startTime: Date.now() - (t.pausedTime * 1000)
+                        };
+                    }
+                    return t;
+                }));
+            };
+            
+            const pauseTimer = (id) => {
+                setTimers(prev => prev.map(t => {
+                    if (t.id === id && t.isRunning) {
+                        const elapsed = Math.floor((Date.now() - t.startTime) / 1000);
+                        return {
+                            ...t,
+                            isRunning: false,
+                            pausedTime: elapsed
+                        };
+                    }
+                    return t;
+                }));
+            };
+            
+            const resetTimer = (id) => {
+                setTimers(prev => prev.map(t => t.id === id ? { ...t, startTime: null, pausedTime: 0, isRunning: false } : t));
+            };
+            
+            const getTimerDisplay = (timer) => {
+                let seconds = 0;
+                
+                if (timer.isRunning) {
+                    seconds = Math.floor((Date.now() - timer.startTime) / 1000);
+                } else {
+                    seconds = timer.pausedTime;
+                }
+                
+                if (timer.mode === 'down') {
+                    seconds = Math.max(0, timer.duration - seconds);
+                }
+                
+                const hours = Math.floor(seconds / 3600);
+                const mins = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+                
+                if (hours > 0) {
+                    return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            };
+            
+            // Update timer displays every 100ms when timers are running
+            useEffect(() => {
+                const hasRunning = timers.some(t => t.isRunning);
+                
+                if (hasRunning) {
+                    timerIntervalRef.current = setInterval(() => {
+                        setTimerCounter(prev => prev + 1); // Force re-render
+                    }, 100);
+                } else if (timerIntervalRef.current) {
+                    clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = null;
+                }
+                
+                return () => {
+                    if (timerIntervalRef.current) {
+                        clearInterval(timerIntervalRef.current);
+                    }
+                };
+            }, [timers]);
+            
             // Log changes to Firestore
             const logChange = async (action, details) => {
                 if (!db || !user) return;
@@ -3208,6 +3367,134 @@
                     </div>
 
                     {activeModal && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    
+                    {/* Timer Panel */}
+                    {view === 'form' && (
+                        <div className={`timer-panel ${!isTimerPanelOpen ? 'minimized' : ''}`}>
+                            {!isTimerPanelOpen ? (
+                                <button 
+                                    onClick={() => setIsTimerPanelOpen(true)}
+                                    className="w-full h-full flex items-center justify-center text-2xl relative"
+                                >
+                                    ⏱️
+                                    {timers.length > 0 && (
+                                        <span className="timer-badge">{timers.length}</span>
+                                    )}
+                                </button>
+                            ) : (
+                                <>
+                                    <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-blue-500 to-blue-600">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">⏱️</span>
+                                            <span className="font-black text-white text-sm uppercase tracking-wide">Battery Timers</span>
+                                            {timers.length > 0 && (
+                                                <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full">{timers.length}</span>
+                                            )}
+                                        </div>
+                                        <button 
+                                            onClick={() => setIsTimerPanelOpen(false)}
+                                            className="text-white hover:bg-white/20 rounded-lg p-1 transition-colors"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="max-h-[350px] overflow-y-auto">
+                                        {timers.length === 0 ? (
+                                            <div className="p-8 text-center text-gray-400">
+                                                <div className="text-4xl mb-2">⏱️</div>
+                                                <p className="text-sm">No timers active</p>
+                                                <p className="text-xs mt-1">Add a timer to track battery tests</p>
+                                            </div>
+                                        ) : (
+                                            timers.map((timer) => (
+                                                <div key={timer.id} className="timer-item p-3">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <input
+                                                            type="text"
+                                                            value={timer.label}
+                                                            onChange={(e) => updateTimerLabel(timer.id, e.target.value)}
+                                                            className="text-xs font-bold text-gray-700 bg-transparent border-none p-0 focus:bg-gray-50 rounded px-1"
+                                                            style={{ width: '140px' }}
+                                                        />
+                                                        <button
+                                                            onClick={() => removeTimer(timer.id)}
+                                                            className="text-red-400 hover:text-red-600 text-xs font-bold"
+                                                        >
+                                                            🗑️
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    <div className="timer-display text-center mb-2 text-blue-600">
+                                                        {getTimerDisplay(timer)}
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-1 mb-2">
+                                                        <select
+                                                            value={timer.mode}
+                                                            onChange={(e) => updateTimerMode(timer.id, e.target.value)}
+                                                            disabled={timer.isRunning}
+                                                            className="text-xs px-2 py-1 border rounded flex-1"
+                                                        >
+                                                            <option value="up">Count Up</option>
+                                                            <option value="down">Count Down</option>
+                                                        </select>
+                                                        
+                                                        {timer.mode === 'down' && (
+                                                            <select
+                                                                value={timer.duration / 60}
+                                                                onChange={(e) => updateTimerDuration(timer.id, parseInt(e.target.value))}
+                                                                disabled={timer.isRunning}
+                                                                className="text-xs px-2 py-1 border rounded flex-1"
+                                                            >
+                                                                <option value="25">25 min</option>
+                                                                <option value="30">30 min</option>
+                                                                <option value="60">60 min</option>
+                                                                <option value="90">90 min</option>
+                                                            </select>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-1">
+                                                        {!timer.isRunning ? (
+                                                            <button
+                                                                onClick={() => startTimer(timer.id)}
+                                                                className="flex-1 bg-green-500 text-white text-xs font-bold py-1.5 rounded hover:bg-green-600 transition-colors"
+                                                            >
+                                                                ▶️ Start
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => pauseTimer(timer.id)}
+                                                                className="flex-1 bg-yellow-500 text-white text-xs font-bold py-1.5 rounded hover:bg-yellow-600 transition-colors"
+                                                            >
+                                                                ⏸️ Pause
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => resetTimer(timer.id)}
+                                                            className="flex-1 bg-gray-400 text-white text-xs font-bold py-1.5 rounded hover:bg-gray-500 transition-colors"
+                                                        >
+                                                            🔄 Reset
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    
+                                    <div className="p-3 border-t">
+                                        <button
+                                            onClick={addTimer}
+                                            className="w-full bg-blue-500 text-white text-xs font-bold py-2.5 rounded-lg hover:bg-blue-600 transition-colors uppercase tracking-wide"
+                                        >
+                                            + Add Timer
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
                     
                     {/* Conflict Resolution Modal */}
                     {syncConflicts && syncConflicts.length > 0 && (
