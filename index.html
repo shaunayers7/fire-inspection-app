@@ -3391,11 +3391,23 @@
                         return filteredBuildings.slice(0, buildingsToShow).map(b => {
                         if (!b || !b.id) return null; // Safety check
                         const status = getBuildingStatus(b);
+                        const isSynced = b.lastSynced && b.lastSynced !== null;
                         return (
                             <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); viewRef.current = 'form'; }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
-                                <div>
-                                    <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
-                                    <div className="flex flex-col gap-0.5">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
+                                        {isSynced ? (
+                                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded-full flex items-center gap-1" title={`Synced: ${new Date(b.lastSynced).toLocaleString()}`}>
+                                                ☁️ Saved
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full flex items-center gap-1" title="Not synced to cloud - click Export & Save to backup">
+                                                📱 Local Only
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col gap-0.5 mt-1">
                                         <span className={`text-[10px] font-black uppercase tracking-wide ${status.class}`}>{status.text}</span>
                                         {status.deficiencyText && (
                                             <span className={`text-[9px] font-bold ${status.deficiencyClass}`}>{status.deficiencyText}</span>
