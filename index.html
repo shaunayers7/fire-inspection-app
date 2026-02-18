@@ -1042,6 +1042,10 @@
             // Lazy loading state - show 20 buildings initially, load more on demand
             const [buildingsToShow, setBuildingsToShow] = useState(20);
             
+            // Search and sort state for building list
+            const [searchQuery, setSearchQuery] = useState('');
+            const [sortBy, setSortBy] = useState('name'); // 'name' or 'date'
+            
             // Share app state
             const [linkCopied, setLinkCopied] = useState(false);
             const [iosCopied, setIosCopied] = useState(false);
@@ -1592,6 +1596,7 @@
             // Reset lazy loading when year changes
             useEffect(() => {
                 setBuildingsToShow(20);
+                setSearchQuery(''); // Clear search when switching years
             }, [selectedYear]);
 
             const activeBuilding = (yearData[selectedYear] || []).find(b => b.id === selectedBuildingId);
@@ -3282,13 +3287,94 @@
                             })} MST
                         </div>
                     )}
+                    
+                    {/* Search and Sort Controls */}
+                    {(yearData[selectedYear] || []).length > 0 && (
+                        <div className="space-y-3">
+                            {/* Search Bar */}
+                            <div className="relative">
+                                <input 
+                                    type="text" 
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="🔍 Search buildings..."
+                                    className="w-full p-3 pl-4 pr-10 bg-white border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                                {searchQuery && (
+                                    <button 
+                                        onClick={() => setSearchQuery('')}
+                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xl"
+                                    >×</button>
+                                )}
+                            </div>
+                            
+                            {/* Sort Buttons */}
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setSortBy('name')}
+                                    className={`flex-1 p-2.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                                        sortBy === 'name' 
+                                            ? 'bg-blue-500 text-white shadow-md' 
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    📝 Sort by Name
+                                </button>
+                                <button 
+                                    onClick={() => setSortBy('date')}
+                                    className={`flex-1 p-2.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                                        sortBy === 'date' 
+                                            ? 'bg-blue-500 text-white shadow-md' 
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    📅 Sort by Date
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    
                     {(!yearData[selectedYear] || yearData[selectedYear].length === 0) && (
                         <div className="text-center py-12 text-gray-400">
                             <p className="font-semibold">No buildings for {selectedYear}</p>
                             <p className="text-xs mt-2">Add a building below to get started</p>
                         </div>
                     )}
-                    {(yearData[selectedYear] || []).slice(0, buildingsToShow).map(b => {
+                    {(() => {
+                        // Filter buildings by search query
+                        let filteredBuildings = (yearData[selectedYear] || []).filter(b => {
+                            if (!searchQuery.trim()) return true;
+                            const query = searchQuery.toLowerCase();
+                            const name = (b.name || '').toLowerCase();
+                            const address = (b.details?.address || '').toLowerCase();
+                            const city = (b.details?.city || '').toLowerCase();
+                            return name.includes(query) || address.includes(query) || city.includes(query);
+                        });
+                        
+                        // Sort buildings
+                        if (sortBy === 'name') {
+                            filteredBuildings = [...filteredBuildings].sort((a, b) => 
+                                (a.name || '').localeCompare(b.name || '')
+                            );
+                        } else if (sortBy === 'date') {
+                            filteredBuildings = [...filteredBuildings].sort((a, b) => {
+                                const dateA = a.inspectionDetails?.date || a.details?.lastServiceDate || '';
+                                const dateB = b.inspectionDetails?.date || b.details?.lastServiceDate || '';
+                                return dateB.localeCompare(dateA); // Newest first
+                            });
+                        }
+                        
+                        // Show "no results" message if search has no matches
+                        if (filteredBuildings.length === 0 && searchQuery.trim()) {
+                            return (
+                                <div className="text-center py-12 text-gray-400">
+                                    <p className="font-semibold">No buildings found</p>
+                                    <p className="text-xs mt-2">Try a different search term</p>
+                                </div>
+                            );
+                        }
+                        
+                        return filteredBuildings.slice(0, buildingsToShow).map(b => {
                         if (!b || !b.id) return null; // Safety check
                         const status = getBuildingStatus(b);
                         return (
@@ -3349,17 +3435,30 @@
                                 </div>
                             </div>
                         );
-                    })}
+                    });
+                })()}
                     
                     {/* Load More Button - Progressive Loading */}
-                    {(yearData[selectedYear] || []).length > buildingsToShow && (
-                        <button 
-                            onClick={() => setBuildingsToShow(prev => prev + 20)} 
-                            className="w-full p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-600 font-semibold text-sm hover:bg-blue-100 transition-colors"
-                        >
-                            Load More ({(yearData[selectedYear] || []).length - buildingsToShow} remaining)
-                        </button>
-                    )}
+                    {(() => {
+                        // Calculate filtered count for "Load More" button
+                        let filteredBuildings = (yearData[selectedYear] || []).filter(b => {
+                            if (!searchQuery.trim()) return true;
+                            const query = searchQuery.toLowerCase();
+                            const name = (b.name || '').toLowerCase();
+                            const address = (b.details?.address || '').toLowerCase();
+                            const city = (b.details?.city || '').toLowerCase();
+                            return name.includes(query) || address.includes(query) || city.includes(query);
+                        });
+                        
+                        return filteredBuildings.length > buildingsToShow && (
+                            <button 
+                                onClick={() => setBuildingsToShow(prev => prev + 20)} 
+                                className="w-full p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-600 font-semibold text-sm hover:bg-blue-100 transition-colors"
+                            >
+                                Load More ({filteredBuildings.length - buildingsToShow} remaining)
+                            </button>
+                        );
+                    })()}
                     
                     <button onClick={() => setYearData(prev => ({ ...prev, [selectedYear]: [...(prev[selectedYear] || []), getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`)] }))} className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add Building</button>
                     {activeModal?.type === 'confirm' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
