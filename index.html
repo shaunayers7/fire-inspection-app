@@ -1209,6 +1209,7 @@
             // Search and sort state for building list
             const [searchQuery, setSearchQuery] = useState('');
             const [sortBy, setSortBy] = useState('name'); // 'name' or 'date'
+            const [dateSortOrder, setDateSortOrder] = useState('newest'); // 'newest' or 'oldest'
             
             // Share app state
             const [linkCopied, setLinkCopied] = useState(false);
@@ -3499,14 +3500,22 @@
                                     📝 Sort by Name
                                 </button>
                                 <button 
-                                    onClick={() => setSortBy('date')}
+                                    onClick={() => {
+                                        if (sortBy === 'date') {
+                                            // Toggle order if already sorting by date
+                                            setDateSortOrder(dateSortOrder === 'newest' ? 'oldest' : 'newest');
+                                        } else {
+                                            // Switch to date sorting
+                                            setSortBy('date');
+                                        }
+                                    }}
                                     className={`flex-1 p-2.5 rounded-xl text-xs font-bold uppercase transition-all ${
                                         sortBy === 'date' 
                                             ? 'bg-blue-500 text-white shadow-md' 
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
                                 >
-                                    📅 Sort by Date
+                                    📅 Sort by Date {sortBy === 'date' && (dateSortOrder === 'newest' ? '↓' : '↑')}
                                 </button>
                             </div>
                         </div>
@@ -3566,7 +3575,9 @@
                             filteredBuildings = [...filteredBuildings].sort((a, b) => {
                                 const dateA = a.inspectionDetails?.date || a.details?.lastServiceDate || '';
                                 const dateB = b.inspectionDetails?.date || b.details?.lastServiceDate || '';
-                                return dateB.localeCompare(dateA); // Newest first
+                                return dateSortOrder === 'newest' 
+                                    ? dateB.localeCompare(dateA) // Newest first
+                                    : dateA.localeCompare(dateB); // Oldest first
                             });
                         }
                         
