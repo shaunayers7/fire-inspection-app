@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Populate 2025 Inspection Data</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <h1>Populating 2025 Inspection Data...</h1>
+  <div id="status"></div>
+  <pre id="log"></pre>
+  
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAKC3te8kUzGQCJvPdLRJlEpH_qbm0Ys4s",
+      authDomain: "fire-inspection-7d90b.firebaseapp.com",
+      projectId: "fire-inspection-7d90b",
+      storageBucket: "fire-inspection-7d90b.firebasestorage.app",
+      messagingSenderId: "645032950544",
+      appId: "1:645032950544:web:52835da11e1ed4f9e5f3bc"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const APP_ID = 'welling-fm';
+    
+    const log = (msg) => {
+      console.log(msg);
+      document.getElementById('log').textContent += msg + '\n';
+    };
+    
+    const status = (msg) => {
+      document.getElementById('status').innerHTML = '<h2>' + msg + '</h2>';
+    };
+    
+    const buildingsData = {
+  "Cardston Temple": {
+    "buildingName": "Cardston Temple",
+    "fileName": "2020_11_5034876_Cardston Temple_Fire Alarm System Test and Inspection Report. copy.txt",
+    "fireAlarmDevices": [
+      {
+        "location": "CRAWL",
+        "type": "SP",
+        "typeName": "Loud Speaker",
+        "zone": "",
+        "status": "Pass"
+      },
+      {
+        "location": "S ATTIC",
+        "type": "S",
+        "typeName": "Smoke Detector",
+        "zone": "",
+        "status": "Pass"
+      }
+    ],
+    "emergencyLights": [
+      {
+        "device": "EM-7",
+        "circuit": "L-5",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "EM-8",
+        "circuit": "",
+        "location": "EM-9",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "The Fire Alarm System is operational with minor deficiencies as noted below. The Fire Alarm System has major deficiencies noted below. A copy of this Report has been given to: Welling FM Group Overall Overall",
+      "Test and maintenance code require this record be maintained by the Owner for a period of two years. Electric Boyes 403 634 7762",
+      "Requires Service Alarm Operation Confirmed ZONE",
+      "Mainteance Required Yes No EM-1 EM-2"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "Edwards 2280",
+      "acPower": "AC",
+      "location": "Welling FM Group",
+      "keyLocation": "AC Panel Location"
+    },
+    "testInfo": {}
+  },
+  "Waterton Chapel": {
+    "buildingName": "Waterton Chapel",
+    "fileName": "waterton opps bld fire alarm copy copy.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "",
+        "location": "EM-2 EM-3 EM-4 EM-5",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to:",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No"
+    ],
+    "panelInfo": {
+      "manufacturer": "compound",
+      "model": "Test Results",
+      "acPower": "",
+      "location": "YES",
+      "keyLocation": "NO"
+    },
+    "testInfo": {}
+  },
+  "Magrath Stake Center": {
+    "buildingName": "Magrath Stake Center",
+    "fileName": "2020_20_5036828_Magrath SC_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [
+      {
+        "location": "TBL ST",
+        "type": "S",
+        "typeName": "Smoke Detector",
+        "zone": "",
+        "status": "Pass"
+      }
+    ],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "A-23",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "EM-2",
+        "circuit": "D-39",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "EM-3",
+        "circuit": "C-27",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "EM-4",
+        "circuit": "C-13",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "EM-5",
+        "circuit": "B-11",
+        "location": "",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling FM Group",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling FM Group Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed ZONE",
+      "REPLACE Function Properly Yes No",
+      "Bell broken replace ASAP Mainteance Required",
+      "Mainteance Required"
+    ],
+    "panelInfo": {
+      "manufacturer": "Edwards",
+      "model": "2280",
+      "keyLocation": "X"
+    },
+    "testInfo": {
+      "customerId": "5036828"
+    }
+  },
+  "Raymond Taylor Street": {
+    "buildingName": "Raymond Taylor Street",
+    "fileName": "2020_32_5427320_Raymond Tay_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone 1 3"
+    ],
+    "panelInfo": {
+      "manufacturer": "Edwards",
+      "model": "Fireshield Plus",
+      "location": "5427320",
+      "keyLocation": "WELLING FM GROUP"
+    },
+    "testInfo": {
+      "customerId": "5427320"
+    }
+  },
+  "Fort Macleod Stake Center": {
+    "buildingName": "Fort Macleod Stake Center",
+    "fileName": "2020_40_5036550_Fort Macleod SC_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "AC Pwr cct E-32"
+    },
+    "testInfo": {}
+  },
+  "Champion": {
+    "buildingName": "Champion",
+    "fileName": "2020_42_5233208_Champion_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below.",
+      "3 The Fire Alarm System has major deficiencies noted below.",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed S. Ent PS"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "YES"
+    },
+    "testInfo": {}
+  },
+  "Claresholm": {
+    "buildingName": "Claresholm",
+    "fileName": "2020_43_5035600_Claresholm_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [
+      {
+        "location": "HT",
+        "type": "HT",
+        "typeName": "Heat Detector (Fixed Temp)",
+        "zone": "",
+        "status": "Pass"
+      }
+    ],
+    "emergencyLights": [
+      {
+        "device": "Em-1",
+        "circuit": "D-26",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "Em-2",
+        "circuit": "D-13",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "Em-3",
+        "circuit": "A-7",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "Em-4",
+        "circuit": "D-23",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "Em-5",
+        "circuit": "D-5",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "Em-6",
+        "circuit": "C-5",
+        "location": "",
+        "status": "Pass"
+      },
+      {
+        "device": "Em-7",
+        "circuit": "D-24",
+        "location": "",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below.",
+      "3 The Fire Alarm System has major deficiencies noted below.",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed ZONE",
+      "Mainteance Required Yes No Pack CCT# Em-1 D-26",
+      "Deficiencies"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "Edwards 2260"
+    },
+    "testInfo": {}
+  },
+  "Park Lake": {
+    "buildingName": "Park Lake",
+    "fileName": "2020_44_5255112_Park Lake_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below.",
+      "3 The Fire Alarm System has major deficiencies noted below.",
+      "Note* When initiating some devices, alarm panel does not always stay in alarm mode. Needs investigation Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed B"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "Edwards 1527"
+    },
+    "testInfo": {}
+  },
+  "Cardston East Stake": {
+    "buildingName": "Cardston East Stake",
+    "fileName": "2021_1_5255430_Cardston ESC_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "A-21",
+        "location": "EM-2 B-21 EM-3 C-13 EM-4 C-27 EM-5 D-14 EXIT LITES C-29",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No 12V 72W Pack in custodial needs replaced dificiencies:",
+      "12V 72W Pack in custodial needs replaced dificiencies: exit sign by rm 17 DC bulb need replaced emergency packs only lasted 25 min",
+      "exit sign by rm 17 DC bulb need replaced emergency packs only lasted 25 min rm B2 key wont open door un able to test"
+    ],
+    "panelInfo": {
+      "acPower": "C 31",
+      "location": "NE Storage Rm",
+      "keyLocation": "C-3 Key Box"
+    },
+    "testInfo": {
+      "customerId": "5255430"
+    }
+  },
+  "Cardston Spring Hill": {
+    "buildingName": "Cardston Spring Hill",
+    "fileName": "2021_2_5115485_Cardston S.Hill_Fire Alarm System Test and Inspection Report..txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Fire Alarm panel Manufacturer: Model #:",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirme d SE Exit (1)",
+      "Note: All EM Packs are ran outa of CDP breaker furance room # A-2 furance room # A-2 furance room # A-2 Annual Emergency Lights Test",
+      "Mainteance Required"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "AC PWR CCT: C 1 Panel Location: East Hall KEY LOCATION",
+      "acPower": "C 1",
+      "location": "East Hall KEY LOCATION",
+      "keyLocation": "All EM Packs are ran outa of CDP breaker furance room # A-2"
+    },
+    "testInfo": {}
+  },
+  "Raymond Knights": {
+    "buildingName": "Raymond Knights",
+    "fileName": "2021_31_5232864_Raymond Kni_Fire Alarm System Test and Inspection Report. copy.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling Fm Group",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling Fm Group YES NO",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No"
+    ],
+    "panelInfo": {
+      "manufacturer": "Edwards",
+      "model": "2280",
+      "location": "(Every line must the appropriate marking in the space provided)"
+    },
+    "testInfo": {
+      "customerId": "5232864"
+    }
+  },
+  "Spring Coulee": {
+    "buildingName": "Spring Coulee",
+    "fileName": "2023 spring coulee.txt",
+    "fireAlarmDevices": [
+      {
+        "location": "Prim",
+        "type": "S",
+        "typeName": "Smoke Detector",
+        "zone": "",
+        "status": "Pass"
+      }
+    ],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "A-9",
+        "location": "EM-2 A-3 EM-3 C-29 EM-4 C-12",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to:____Welling FM group",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to:____Welling FM group Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Replaced batteries YES NO",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No Pak CCT# EM-1 A-9 EM-2 A-3 EM-3 C-29 EM-4 C-12"
+    ],
+    "panelInfo": {
+      "manufacturer": "Edwards Spring Coulee Address:",
+      "model": "Fire Shield",
+      "location": "____Welling FM group",
+      "keyLocation": "____Welling FM group"
+    },
+    "testInfo": {
+      "customerId": "5036836"
+    }
+  },
+  "Cardston West Stake": {
+    "buildingName": "Cardston West Stake",
+    "fileName": "Cardston west st.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "B-1",
+        "location": "EM-2 K-3 EXIT LTS E-1",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operatio n Confirme d Zone",
+      "Lamp Test Pass Maintenance Required CCT# Yes No Yes No EM-1 B-1 EM-2 K-3 EXIT LTS E-1"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "AC PWR CCT: A 31"
+    },
+    "testInfo": {}
+  },
+  "Hill Spring": {
+    "buildingName": "Hill Spring",
+    "fileName": "Hill spring.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "",
+        "location": "EM-2 EM-3",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "AC PWR CCT: Main Panel",
+      "location": "Member Custodial Closet"
+    },
+    "testInfo": {}
+  },
+  "Leavitt": {
+    "buildingName": "Leavitt",
+    "fileName": "Leavitt.txt",
+    "fireAlarmDevices": [
+      {
+        "location": "H",
+        "type": "H",
+        "typeName": "Manual Pull Station",
+        "zone": "",
+        "status": "Pass"
+      }
+    ],
+    "emergencyLights": [],
+    "notes": [
+      "Test and maintenance code require this record be maintained by the Owner for a period of two years. 1 2 3 4 5 6",
+      "The Fire Alarm System is operational with minor deficiencies as noted below. The Fire Alarm System has major deficiencies noted below. A copy of this Report has beenWgeivlelingtoF:M group Overall No of devices",
+      "Requires SerAvliacrem Operation Confirmed Type yes"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "LDS Church, Welling FM Group Leavitt Address:"
+    },
+    "testInfo": {}
+  },
+  "Magrath Grandview Park": {
+    "buildingName": "Magrath Grandview Park",
+    "fileName": "Open 2020_21_5370221_Magrath GP_Fire Alarm System Test and Inspection Report.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling FM Group (via electronically)",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling FM Group (via electronically)",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years. YES CCT#: A 14",
+      "Requires Service Alarm Operation Confirmed Zone"
+    ],
+    "panelInfo": {
+      "manufacturer": "Simplex",
+      "model": "4001",
+      "location": "A-1"
+    },
+    "testInfo": {}
+  },
+  "Raymond Seminary": {
+    "buildingName": "Raymond Seminary",
+    "fileName": "Raymond seminary 3.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "",
+        "location": "EM-2 EM-3 EM-4 EM-5 EXIT LITES",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No"
+    ],
+    "panelInfo": {
+      "manufacturer": "Address:",
+      "model": "SLC Monitoring must be contacted before starting verification 1 800 537 5944 (option 1) and request site put in test",
+      "acPower": "",
+      "location": "YES",
+      "keyLocation": "NO"
+    },
+    "testInfo": {}
+  },
+  "Raymond Stake Center": {
+    "buildingName": "Raymond Stake Center",
+    "fileName": "Raymond stake center 2024.txt",
+    "fireAlarmDevices": [
+      {
+        "location": "S Hallway B/S",
+        "type": "S",
+        "typeName": "Smoke Detector",
+        "zone": "",
+        "status": "Pass"
+      }
+    ],
+    "emergencyLights": [
+      {
+        "device": "EM-17",
+        "circuit": "B-9",
+        "location": "EM-18 B-9 EM-19 D-6 EM-20 D-6 EM-21 D-29 EM-22 D-41 EM-23 A-10 EM-24 A-10 EM-25 A-10 EM-26 A-10",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling FM Group",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: Welling FM Group Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Replaced Annual Emergency Lights Test BATTERY TESTS",
+      "Mainteance Required Yes No"
+    ],
+    "panelInfo": {
+      "manufacturer": "",
+      "model": "AC PWR CCT: B 11",
+      "location": "Near Custodial Rm"
+    },
+    "testInfo": {}
+  },
+  "Seminary Cardston": {
+    "buildingName": "Seminary Cardston",
+    "fileName": "Seminary  cardston .txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "",
+        "location": "EM-2 EM-3 EM-4 EM-5 EXIT LITES",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No"
+    ],
+    "panelInfo": {
+      "manufacturer": "Address:",
+      "model": "SLC Monitoring must be contacted before starting verification 1 800 537 5944 (option 1) and request site put in test",
+      "acPower": "",
+      "location": "YES",
+      "keyLocation": "NO"
+    },
+    "testInfo": {}
+  },
+  "Seminary Magrath": {
+    "buildingName": "Seminary Magrath",
+    "fileName": "Seminary magrath 2024.txt",
+    "fireAlarmDevices": [],
+    "emergencyLights": [
+      {
+        "device": "EM-1",
+        "circuit": "",
+        "location": "EM-2 EM-3 EM-4 EM-5 EXIT LITES",
+        "status": "Pass"
+      }
+    ],
+    "notes": [
+      "2 The Fire Alarm System is operational with minor deficiencies as noted below. 3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP",
+      "3 The Fire Alarm System has major deficiencies noted below. 4 A copy of this Report has been given to: WELLING FM GROUP Overall No of devices Overall No of devices",
+      "Note* Test and maintenance code require this record be maintained by the Owner for a period of two years.",
+      "Requires Service Alarm Operation Confirmed Zone",
+      "Mainteance Required Yes No"
+    ],
+    "panelInfo": {
+      "manufacturer": "Address:",
+      "model": "SLC Monitoring must be contacted before starting verification 1 800 537 5944 (option 1) and request site put in test",
+      "acPower": "",
+      "location": "YES",
+      "keyLocation": "NO"
+    },
+    "testInfo": {}
+  }
+};
+    
+    async function populateBuildings() {
+      try {
+        status('🔄 Loading existing buildings from Firebase...');
+        
+        const buildingsRef = db.collection(`apps/${APP_ID}/buildings`);
+        const snapshot = await buildingsRef.get();
+        
+        log(`Found ${snapshot.size} existing buildings in Firebase`);
+        
+        let updated = 0;
+        let notFound = 0;
+        
+        for (const [buildingName, reportData] of Object.entries(buildingsData)) {
+          log(`\n📋 Processing: ${buildingName}`);
+          
+          // Find matching building in Firebase
+          let matchingDoc = null;
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.name === buildingName && data.year === '2025') {
+              matchingDoc = { id: doc.id, data };
+            }
+          });
+          
+          if (!matchingDoc) {
+            log(`  ⚠️ Building not found in Firebase: ${buildingName}`);
+            notFound++;
+            continue;
+          }
+          
+          log(`  ✓ Found building in Firebase (ID: ${matchingDoc.id})`);
+          
+          // Prepare updated building data
+          const updatedData = { ...matchingDoc.data };
+          
+          // Update building details if we have panel info
+          if (reportData.panelInfo.manufacturer) {
+            updatedData.buildingDetails = updatedData.buildingDetails || [];
+            const panelDetail = updatedData.buildingDetails.find(d => d.label === 'Fire Alarm Panel');
+            if (panelDetail) {
+              panelDetail.value = `${reportData.panelInfo.manufacturer} - ${reportData.panelInfo.model}`;
+            } else {
+              updatedData.buildingDetails.push({
+                id: Date.now() + '_panel',
+                label: 'Fire Alarm Panel',
+                value: `${reportData.panelInfo.manufacturer} - ${reportData.panelInfo.model}`
+              });
+            }
+          }
+          
+          if (reportData.panelInfo.location) {
+            updatedData.buildingDetails = updatedData.buildingDetails || [];
+            const locDetail = updatedData.buildingDetails.find(d => d.label === 'Panel Location');
+            if (locDetail) {
+              locDetail.value = reportData.panelInfo.location;
+            } else {
+              updatedData.buildingDetails.push({
+                id: Date.now() + '_loc',
+                label: 'Panel Location',
+                value: reportData.panelInfo.location
+              });
+            }
+          }
+          
+          if (reportData.testInfo.customerId) {
+            updatedData.buildingDetails = updatedData.buildingDetails || [];
+            const custDetail = updatedData.buildingDetails.find(d => d.label === 'Customer ID');
+            if (custDetail) {
+              custDetail.value = reportData.testInfo.customerId;
+            } else {
+              updatedData.buildingDetails.push({
+                id: Date.now() + '_cust',
+                label: 'Customer ID',
+                value: reportData.testInfo.customerId
+              });
+            }
+          }
+          
+          // Populate Fire Alarm Devices section
+          if (reportData.fireAlarmDevices.length > 0) {
+            updatedData.data = updatedData.data || {};
+            updatedData.data.fireAlarmDevices = reportData.fireAlarmDevices.map((device, idx) => ({
+              id: `fa_${Date.now()}_${idx}`,
+              name: `${device.location} - ${device.typeName}`,
+              location: device.location,
+              type: device.typeName,
+              zone: device.zone,
+              status: device.status,
+              date: new Date().toISOString().split('T')[0],
+              notes: ''
+            }));
+            log(`  ✓ Added ${reportData.fireAlarmDevices.length} fire alarm devices`);
+          }
+          
+          // Populate Emergency Lights section
+          if (reportData.emergencyLights.length > 0) {
+            updatedData.data = updatedData.data || {};
+            updatedData.data.emergencyLights = reportData.emergencyLights.map((light, idx) => ({
+              id: `em_${Date.now()}_${idx}`,
+              name: `${light.device} - ${light.location}`,
+              device: light.device,
+              circuit: light.circuit,
+              location: light.location,
+              status: light.status,
+              date: new Date().toISOString().split('T')[0],
+              notes: ''
+            }));
+            log(`  ✓ Added ${reportData.emergencyLights.length} emergency lights`);
+          }
+          
+          // Add notes section if there are notes
+          if (reportData.notes.length > 0) {
+            updatedData.data = updatedData.data || {};
+            updatedData.data.additionalNotes = reportData.notes.map((note, idx) => ({
+              id: `note_${Date.now()}_${idx}`,
+              name: 'Note',
+              content: note,
+              date: new Date().toISOString().split('T')[0]
+            }));
+            
+            // Add to sections if not present
+            if (!updatedData.sections.find(s => s.id === 'additionalNotes')) {
+              updatedData.sections.push({
+                id: 'additionalNotes',
+                name: 'Additional Notes',
+                icon: '📝'
+              });
+            }
+            log(`  ✓ Added ${reportData.notes.length} notes`);
+          }
+          
+          // Update timestamp
+          updatedData.lastModified = new Date().toISOString();
+          
+          // Save to Firebase
+          await buildingsRef.doc(matchingDoc.id).set(updatedData);
+          log(`  ✅ Updated building in Firebase`);
+          updated++;
+        }
+        
+        status(`✅ Complete! Updated: ${updated}, Not Found: ${notFound}`);
+        log(`\n🎉 Population complete!`);
+        log(`   Updated: ${updated} buildings`);
+        log(`   Not found: ${notFound} buildings`);
+        
+      } catch (error) {
+        status(`❌ Error: ${error.message}`);
+        log(`Error: ${error}`);
+        console.error(error);
+      }
+    }
+    
+    // Run on page load
+    populateBuildings();
+  </script>
+</body>
+</html>
