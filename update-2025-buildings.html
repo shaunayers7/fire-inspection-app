@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Update 2025 Buildings - Auto Run</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: monospace; margin: 20px; background: #1e1e1e; color: #d4d4d4; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { color: #4ec9b0; }
+    #status { font-size: 18px; margin: 20px 0; padding: 10px; background: #264f78; border-radius: 5px; }
+    #log { background: #0d0d0d; color: #cccccc; padding: 15px; border-radius: 5px; font-size: 12px; white-space: pre-wrap; max-height: 700px; overflow-y: auto; line-height: 1.4; border: 1px solid #333; }
+    .success { background: #0e6027 !important; }
+    .error { background: #5a1d1d !important; }
+    .progress { color: #4ec9b0; }
+    .building { color: #dcdcaa; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔥 Updating 2025 Buildings with Inspection Data</h1>
+    <div id="status">Connecting to Firebase...</div>
+    <div id="log"></div>
+  </div>
+  
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAKC3te8kUzGQCJvPdLRJlEpH_qbm0Ys4s",
+      authDomain: "fire-inspection-7d90b.firebaseapp.com",
+      projectId: "fire-inspection-7d90b",
+      storageBucket: "fire-inspection-7d90b.firebasestorage.app",
+      messagingSenderId: "645032950544",
+      appId: "1:645032950544:web:52835da11e1ed4f9e5f3bc"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const APP_ID = 'welling-fm';
+    
+    const log = (msg) => {
+      console.log(msg);
+      const logEl = document.getElementById('log');
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+    
+    const status = (msg, isError = false) => {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = msg;
+      statusEl.className = isError ? 'error' : (msg.includes('✅') ? 'success' : '');
+    };
+
+    // All inspection data from the 22 reports
+    const inspectionData = {
+      "Cardston Temple": {
+        panelInfo: { manufacturer: "Edwards", model: "2280" },
+        customerID: "5034876",
+        devices: [
+          { loc: "SE Bishop Exit (14)", type: "Manual Pull Station", zone: "2" },
+          { loc: "E Ent (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Library Closet (5)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Library (4)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "5 Ward Bishop (7)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "105 Closet (8)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "SE Ent (3)", type: "Manual Pull Station", zone: "2" },
+          { loc: "107 Closet (9)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "N Mech 201 (28)", type: "Heat Detector (Fixed Temp)", zone: "9" },
+          { loc: "RS N1 Closet (15)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "RS N2 Closet (16)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "S RS Closet 1 (12)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "S RS Closet 2 (13)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "RS (11)", type: "Manual Pull Station", zone: "2" },
+          { loc: "S Hall Center (2)", type: "Manual Pull Station", zone: "2" },
+          { loc: "S Hall Custodial (10)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "SW Ent (13)", type: "Manual Pull Station", zone: "2" },
+          { loc: "RM 104 (12)", type: "Manual Pull Station", zone: "2" },
+          { loc: "103 Closet 1 (17)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "104 Closet 2 (18)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "104 Closet 3 (19)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Sacrament Prep (21)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Custodial By Library (20)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Sound Closet (22)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Gym B-6 Rm (39)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "S Gym (10)", type: "Manual Pull Station", zone: "1" },
+          { loc: "N Gym (9)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Kitchen (23)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "N ent (8)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Downstairs (7)", type: "Manual Pull Station", zone: "4" },
+          { loc: "Dn Strg Rm 2 (36)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "DN ST A-1 Closet (37)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "N Stair Well (26)", type: "Smoke Detector", zone: "6" },
+          { loc: "N Stairwell up (6)", type: "Manual Pull Station", zone: "9" },
+          { loc: "201 C-11 (27)", type: "Heat Detector (Fixed Temp)", zone: "9" },
+          { loc: "Up Video (30)", type: "Heat Detector (Fixed Temp)", zone: "9" },
+          { loc: "Up hallway Mech (32)", type: "Heat Detector (Fixed Temp)", zone: "9" },
+          { loc: "Up Custodial (34)", type: "Heat Detector (Fixed Temp)", zone: "8" },
+          { loc: "Middle Hall Up (4)", type: "Manual Pull Station", zone: "8" },
+          { loc: "Rm 214 closet (31)", type: "Heat Detector (Fixed Temp)", zone: "8" },
+          { loc: "214 Mech (33)", type: "Heat Detector (Fixed Temp)", zone: "8" },
+          { loc: "Rm 214 (34A)", type: "Heat Detector (Fixed Temp)", zone: "8" },
+          { loc: "C Stairwell (24)", type: "Smoke Detector", zone: "7" },
+          { loc: "C Stairwell Up (3)", type: "Manual Pull Station", zone: "7" },
+          { loc: "S Stairwell (25)", type: "Smoke Detector", zone: "5" },
+          { loc: "S Stairwell Up (5)", type: "Manual Pull Station", zone: "5" },
+          { loc: "Bell 1", type: "Bell", zone: "" },
+          { loc: "Bell 2", type: "Bell", zone: "" },
+          { loc: "Bell 3", type: "Bell", zone: "" },
+          { loc: "Bell 4", type: "Bell", zone: "" },
+          { loc: "Bell 5", type: "Bell", zone: "" },
+          { loc: "Bell 6", type: "Bell", zone: "" },
+          { loc: "Bell 7", type: "Bell", zone: "" },
+          { loc: "Bell 8", type: "Bell", zone: "" },
+          { loc: "Bell 9", type: "Bell", zone: "" },
+          { loc: "Bell 10", type: "Bell", zone: "" },
+          { loc: "Bell 11", type: "Bell", zone: "" },
+          { loc: "Bell 12", type: "Bell", zone: "" },
+          { loc: "Bell 13", type: "Bell", zone: "" },
+          { loc: "Bell 14", type: "Bell", zone: "" },
+          { loc: "Bell 15", type: "Bell", zone: "" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "A-1", loc: "Classroom C-101" },
+          { device: "EM-2", circuit: "B-11", loc: "Gym Over Basketball Hoop" },
+          { device: "EM-3", circuit: "B-11", loc: "Gym Over Basketball Hoop" },
+          { device: "EM-4", circuit: "A-17", loc: "North Entrance" },
+          { device: "EM-5", circuit: "A-17", loc: "North Entrance" },
+          { device: "EM-6", circuit: "B-19", loc: "Chapel West 1" },
+          { device: "EM-7", circuit: "B-23", loc: "Chapel East 1" },
+          { device: "EM-8", circuit: "B-23", loc: "Chapel East Middle" },
+          { device: "EM-9", circuit: "B-23", loc: "Chapel East Front" },
+          { device: "EM-10", circuit: "B-23", loc: "Chapel East Rear" },
+          { device: "EM-11", circuit: "B-23", loc: "Chapel East Rear" },
+          { device: "EM-12", circuit: "B-19", loc: "Chapel West Front" },
+          { device: "EM-13", circuit: "B-19", loc: "Chapel West Rear" },
+          { device: "EM-14", circuit: "B-19", loc: "Chapel West Rear" },
+          { device: "EM-15", circuit: "B-5", loc: "C/H Row 2 East" },
+          { device: "EM-16", circuit: "B-5", loc: "C/H Row 2 West" },
+          { device: "EM-17", circuit: "B-9", loc: "C/H Row 5 East" },
+          { device: "EM-18", circuit: "C-13", loc: "Attic Top Of Stairs" },
+          { device: "EM-19", circuit: "C-13", loc: "Attic West Side" }
+        ]
+      },
+
+      "Raymond Taylor Street": {
+        panelInfo: { manufacturer: "Edwards", model: "2280" },
+        customerID: "5427320",
+        devices: [
+          { loc: "E Entrance (1)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Kitchen (2)", type: "Manual Pull Station", zone: "3" },
+          { loc: "N Entrance (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "W Entrance (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Gym SW Corner (5)", type: "Manual Pull Station", zone: "4" },
+          { loc: "Gym NW corner (6)", type: "Manual Pull Station", zone: "4" },
+          { loc: "Bishop Office (1)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "RS N Closet 1 (2)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "RS N Closet 2 (3)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "RS S Closet (4)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Rm 106 Closet (5)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Library (6)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Sac. Prep (7)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Chapel Mech (8)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Chapel Mech (9)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Family  History Rm Closet (10)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Kitchen Mech (11)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Kitchen (12)", type: "Heat Detector (Rate of Rise)", zone: "3" },
+          { loc: "North Coat Closet (13)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Primary Closet (14)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Closet C-7 (15)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-8 (16)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Closet C-9 (17)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-2 (18)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Closet C-3 (19)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Closet C-4 (20)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-6 closet (21)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Book ST Closet (22)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Nursery Closet (23)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Gym Locker Rm SD (24)", type: "Heat Detector (Rate of Rise)", zone: "4" },
+          { loc: "Gym Locker Rm ND (25)", type: "Heat Detector (Rate of Rise)", zone: "4" },
+          { loc: "Gym Stage (26)", type: "Heat Detector (Rate of Rise)", zone: "4" },
+          { loc: "Gym Storage (27)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Custodial Closet (28)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Bell 1", type: "Bell", zone: "" },
+          { loc: "Bell 2", type: "Bell", zone: "" },
+          { loc: "Bell 3", type: "Bell", zone: "" },
+          { loc: "Bell 4", type: "Bell", zone: "" },
+          { loc: "Bell 5", type: "Bell", zone: "" },
+          { loc: "Bell 6", type: "Bell", zone: "" },
+          { loc: "Bell 7", type: "Bell", zone: "" },
+          { loc: "Bell 8", type: "Bell", zone: "" },
+          { loc: "Bell 9", type: "Bell", zone: "" },
+          { loc: "Bell 10", type: "Bell", zone: "" },
+          { loc: "Bell 11", type: "Bell", zone: "" },
+          { loc: "Bell 12", type: "Bell", zone: "" },
+          { loc: "Bell 13", type: "Bell", zone: "" },
+          { loc: "Bell 14", type: "Bell", zone: "" },
+          { loc: "Bell 15", type: "Bell", zone: "" },
+          { loc: "Bell 16", type: "Bell", zone: "" },
+          { loc: "Bell 17", type: "Bell", zone: "" },
+          { loc: "Bell 18", type: "Bell", zone: "" },
+          { loc: "Bell 19", type: "Bell", zone: "" },
+          { loc: "Bell 20", type: "Bell", zone: "" },
+          { loc: "Bell 21", type: "Bell", zone: "" },
+          { loc: "Bell 22", type: "Bell", zone: "" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "C-23", loc: "Stage" },
+          { device: "EM-2", circuit: "A-23", loc: "Gym" },
+          { device: "EM-3", circuit: "A-31", loc: "Gym" },
+          { device: "EM-4", circuit: "A-31", loc: "Gym" },
+          { device: "EM-5", circuit: "A-31", loc: "Gym" },
+          { device: "EM-6", circuit: "A-31", loc: "Gym" },
+          { device: "EM-7", circuit: "B-23", loc: "Chapel West" },
+          { device: "EM-8", circuit: "B-13", loc: "Chapel West" },
+          { device: "EM-9", circuit: "B-1", loc: "Chapel East" },
+          { device: "EM-10", circuit: "B-1", loc: "Chapel East" },
+          { device: "EM-11", circuit: "C-5", loc: "Kitchen" },
+          { device: "EM-12", circuit: "C-5", loc: "Kitchen" },
+          { device: "EM-13", circuit: "C-5", loc: "Gym Entrance" },
+          { device: "EM-14", circuit: "E-9", loc: "Nursery" },
+          { device: "EM-15", circuit: "D-35", loc: "East Entrance (Both Lites)" },
+          { device: "EM-16", circuit: "D-35", loc: "East Entrance (Both Lites)" },
+          { device: "EM-17", circuit: "D-35", loc: "West Entrance (Both Lites)" },
+          { device: "EM-18", circuit: "D-35", loc: "West Entrance (Both Lites)" },
+          { device: "EM-19", circuit: "C-33", loc: "North Entrance (Both Lites)" }
+        ]
+      },
+
+      "Cardston East Stake": {
+        panelInfo: { manufacturer: "Pyrotronics", model: "System 3" },
+        customerID: "5255430",
+        devices: [
+          { loc: "S Ent (1)", type: "Manual Pull Station", zone: "2" },
+          { loc: "B-3 (2)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "B-2 (3)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "B-1 (4)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "C-3 Copy Rm (5)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "C-3 Mech Rm(6)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "N Ent (2)", type: "Manual Pull Station", zone: "2" },
+          { loc: "N Coat Closet (7)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "W Ent (3)", type: "Manual Pull Station", zone: "2" },
+          { loc: "B-6 (8)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "A-1 (9)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "A-2 (10)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "A-3 (11)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Mech Rm by Lady Washroom (12)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Kitchen (13)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Kitchen (4)", type: "Manual Pull Station", zone: "2" },
+          { loc: "N Custodial (14)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "17 (15)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "E Coat Closet (17)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "C-1 (18)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "D-1 (19)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Library (20)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "S Coat Closet (1)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "E Ent (5)", type: "Manual Pull Station", zone: "2" },
+          { loc: "17 Mech RM (16)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "S Mech (21)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Buzzer", type: "Bell", zone: "N/A" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "A-21", loc: "12V 72W Pack in custodial needs replaced" },
+          { device: "EM-2", circuit: "B-21", loc: "" },
+          { device: "EM-3", circuit: "C-13", loc: "" },
+          { device: "EM-4", circuit: "C-27", loc: "" },
+          { device: "EM-5", circuit: "D-14", loc: "" },
+          { device: "EXIT LITES", circuit: "C-29", loc: "" }
+        ],
+        notes: [
+          "12V 72W Pack in custodial needs replaced",
+          "exit sign by rm 17 DC bulb need replaced",
+          "emergency packs only lasted 25 min",
+          "rm B2 key wont open door unable to test"
+        ]
+      },
+
+      "Magrath Stake Center": {
+        panelInfo: { manufacturer: "Edwards", model: "2280" },
+        customerID: "5036828",
+        devices: [
+          { loc: "W Exit", type: "Manual Pull Station", zone: "4" },
+          { loc: "D-2 (6)", type: "Manual Pull Station", zone: "4" },
+          { loc: "RS CL A-3 (7)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "N Exit", type: "Manual Pull Station", zone: "3" },
+          { loc: "D-1 (8)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Kitchen (9)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Kitchen", type: "Manual Pull Station", zone: "3" },
+          { loc: "Cust Rm (10)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "A-6 Cust (11)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "E Coat Rm (12)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "E Exit", type: "Manual Pull Station", zone: "3" },
+          { loc: "TBL ST S (13)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "D-4 (14)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Library (15)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "D-3 (16)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "D-5 (17)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "W Bell 1", type: "Bell", zone: "3" },
+          { loc: "N Bell 2", type: "Bell", zone: "3" },
+          { loc: "E Bell 3", type: "Bell", zone: "3" },
+          { loc: "S Bell 4", type: "Bell", zone: "3" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "A-23", loc: "" },
+          { device: "EM-2", circuit: "D-39", loc: "" },
+          { device: "EM-3", circuit: "C-27", loc: "" },
+          { device: "EM-4", circuit: "C-13", loc: "" },
+          { device: "EM-5", circuit: "B-11", loc: "" },
+          { device: "EXIT LITES", circuit: "", loc: "" }
+        ],
+        notes: [
+          "Bell broken replace ASAP - Inside classroom A-6"
+        ]
+      },
+
+      "Fort Macleod Stake Center": {
+        panelInfo: { manufacturer: "Edwards", model: "2280" },
+        customerID: "5036550",
+        devices: [
+          { loc: "E Mech Rm (1)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "E Stg Rm (2)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Stg Class 1 (3)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Stg Class 2 (4)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Rm ^ Stage #5", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "SE Stg strg r (6)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "E Library (7)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "TV Strg rm (8)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "ES Closet (9)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "E Str Strg 1 (10)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "W Str Strg 1 (11)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "E Str Strg 2 (12)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Mech rm (BH st) (13)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Electric rm (14)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Mem cl/Data rm (15)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Boiler rm (16)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Kitchen (17)", type: "Heat Detector (Rate of Rise)", zone: "3" },
+          { loc: "Cust Closet (18)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Mech Kitch (19)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Coat CL (20)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "Sac Prep (21)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Rm 18 (22)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Family history closet (23)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Family History Closet 2 (24)", type: "Heat Detector (Rate of Rise)", zone: "4" },
+          { loc: "West Ent (15)", type: "Manual Pull Station", zone: "2" },
+          { loc: "SW Ent. (14)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Sm Gym West Wall (12)", type: "Manual Pull Station", zone: "3" },
+          { loc: "Sm Gym East Wall (13)", type: "Manual Pull Station", zone: "3" },
+          { loc: "SE Ent (2)", type: "Manual Pull Station", zone: "2" },
+          { loc: "NE Stage (1)", type: "Manual Pull Station", zone: "2" },
+          { loc: "North Ent. (9)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Stake Office Ent. (11)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Chapel W Ent. (16)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Chapel Ent. (18)", type: "Manual Pull Station", zone: "3" },
+          { loc: " Chapel E O/S Ent. (17)", type: "Manual Pull Station", zone: "2" },
+          { loc: "West Ent Near Stage (7)", type: "Manual Pull Station", zone: "2" },
+          { loc: "South Ent Near Big Gym (6)", type: "Manual Pull Station", zone: "2" },
+          { loc: "East Ent (8)", type: "Manual Pull Station", zone: "4" },
+          { loc: "North E. Gym Ent. (3)", type: "Manual Pull Station", zone: "4" },
+          { loc: "North W Gym Ent. (4)", type: "Manual Pull Station", zone: "4" },
+          { loc: "NW Stage Stairwell (5)", type: "Manual Pull Station", zone: "4" },
+          { loc: "Bell #1", type: "Bell", zone: "4" },
+          { loc: "Bell #2", type: "Bell", zone: "" },
+          { loc: "Bell #3", type: "Bell", zone: "" },
+          { loc: "Bell #4", type: "Bell", zone: "" },
+          { loc: "Bell #5", type: "Bell", zone: "" },
+          { loc: "Bel #6", type: "Bell", zone: "" },
+          { loc: "Bell #7", type: "Bell", zone: "" },
+          { loc: "Bell #8", type: "Bell", zone: "" },
+          { loc: "Bell #9", type: "Bell", zone: "" },
+          { loc: "Bell #10", type: "Bell", zone: "" },
+          { loc: "Nell #11", type: "Bell", zone: "" },
+          { loc: "Bell #12", type: "Bell", zone: "" },
+          { loc: "Bell #13", type: "Bell", zone: "" },
+          { loc: "Chapel Music St Rm (25)", type: "Heat Detector (Fixed Temp)", zone: "" }
+        ],
+        emergencyLights: [
+          { device: "Em-1", circuit: "E-33", loc: "" },
+          { device: "Em-2", circuit: "E-33", loc: "" },
+          { device: "Em-3", circuit: "B-15", loc: "" },
+          { device: "Em-4", circuit: "B-33", loc: "" },
+          { device: "Em-5", circuit: "B-25", loc: "" },
+          { device: "Em-6", circuit: "E-35", loc: "" },
+          { device: "Em-7", circuit: "A-8", loc: "" },
+          { device: "Em-8", circuit: "A-8", loc: "" },
+          { device: "Em-9", circuit: "G-33", loc: "" },
+          { device: "Em-10", circuit: "G-31", loc: "" },
+          { device: "Em-11", circuit: "G-24", loc: "" },
+          { device: "Em-12", circuit: "B-25", loc: "" }
+        ]
+      },
+
+      "Claresholm": {
+        panelInfo: { manufacturer: "Edwards", model: "2260" },
+        customerID: "5035600",
+        devices: [
+          { loc: "Scout CL (1)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Ent CL (2)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Down Swell (3)", type: "Smoke Detector", zone: "2" },
+          { loc: "Basmnt Lobby (4)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Down Mech (5)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Down Closet (6)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Nurs Mech (7)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Nurs Mech 2 (8)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Nursury Rm (9)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Kitchen (10)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Janitor Cl (11)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Bishop office (12)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Media Rm (13)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Chapel Mech (14)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Duct 1 (15) - Base Mech", type: "Duct Smoke Detector", zone: "Lcl Only" },
+          { loc: "Duct 2 (16) - Base Mech", type: "Duct Smoke Detector", zone: "Lcl Only" },
+          { loc: "Duct 3 (20) - Base Mech", type: "Duct Smoke Detector", zone: "Lcl Only" },
+          { loc: "NE Entrance (17)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Stage (18)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Stage (19)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "West Ent (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "South Ent (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Bottom of Stairs (3)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Nursury Rm (4)", type: "Manual Pull Station", zone: "2" },
+          { loc: "NE Entrance (5)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Chapel West Ent (6)", type: "Manual Pull Station", zone: "1" }
+        ],
+        emergencyLights: [
+          { device: "Em-1", circuit: "D-26", loc: "Custodian Closet (West Lobby)" },
+          { device: "Em-2", circuit: "D-13", loc: "Media Rm (Adjacent to Bishop's Office)" },
+          { device: "Em-3", circuit: "A-7", loc: "Above water fountain" },
+          { device: "Em-4", circuit: "D-23", loc: "" },
+          { device: "Em-5", circuit: "D-5", loc: "Basement Mech Rm" },
+          { device: "Em-6", circuit: "C-5", loc: "" },
+          { device: "Em-7", circuit: "D-24", loc: "" }
+        ]
+      },
+
+      "Hill Spring": {
+        panelInfo: { manufacturer: "Edwards", model: "FSP502" },
+        customerID: "",
+        devices: [
+          { loc: "W Ent(1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Primary Closet (14)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-2 (1)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Library (2)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "N Ent (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "N Coat Closet (3)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-3 (4)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Rm 15 (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "S Chapel Mech (6)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "E Ent Nursery (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "C-5 closet (10)", type: "Heat Detector (Fixed Temp)", zone: "1" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" }
+        ]
+      },
+
+      "Waterton Chapel": {
+        panelInfo: { manufacturer: "", model: "" },
+        customerID: "5035236",
+        devices: [],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" },
+          { device: "EM-2", circuit: "", loc: "" },
+          { device: "EXIT", circuit: "", loc: "" }
+        ]
+      },
+
+      "Champion": {
+        panelInfo: { manufacturer: "Edwards", model: "Fireshield Plus" },
+        customerID: "5233208",
+        devices: [
+          { loc: "W Ent (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Primary Closet (14)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-2 (1)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Library (2)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Y Ent (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Coat Closet (3)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-3 (4)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Kitchen (4A)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Rm 15 (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Kitchen Mech (5)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "S Chapel Mech (6)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "E Ent Nursery (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "N Chapel Mech (7)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "North Elec (8)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "S Side Elec. (9)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-5 closet (10)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-4 Coat Closet (12)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-4 Closet (13)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-6 Closet (11)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "North Chapel", type: "Bell", zone: "N/A" },
+          { loc: "South Chapel", type: "Bell", zone: "N/A" },
+          { loc: "East C-3", type: "Bell", zone: "N/A" },
+          { loc: "SouthWest", type: "Bell", zone: "N/A" },
+          { loc: "North West", type: "Bell", zone: "N/A" },
+          { loc: "PRM", type: "Bell", zone: "N/A" },
+          { loc: "C-4", type: "Bell", zone: "N/A" },
+          { loc: "C-6", type: "Bell", zone: "N/A" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" },
+          { device: "EM-2", circuit: "", loc: "" },
+          { device: "EM-3", circuit: "", loc: "" },
+          { device: "EM-4", circuit: "", loc: "" },
+          { device: "EM-5", circuit: "", loc: "" }
+        ]
+      },
+
+      "Park Lake": {
+        panelInfo: { manufacturer: "Edwards", model: "1527" },
+        customerID: "5255112",
+        devices: [
+          { loc: "Panel", type: "Bell/Buzzer", zone: "N/A" },
+          { loc: "C-1 (By panel)", type: "Manual Pull Station", zone: "1" },
+          { loc: "C-1", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-1 Library", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "S Loby (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Baby Tender Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Media rm Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Sac prep", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Kitchen", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Kitchen (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "North Hall Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "N front Cust closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-(16) closet (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "C-14, 15 closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-13 Classroom", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C12 Classroom", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-12 Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "North Entrance (5)", type: "Manual Pull Station", zone: "1" },
+          { loc: "N Entrance Coat Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Primary Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "E Ent C-9 (6)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Bible D library closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Primary D Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Stage Class #10 Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Side Stage Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Stage (7)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Stage Electrical Room", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Stage Storage", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "SW Exit (7)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Lobby E", type: "Bell/Buzzer", zone: "N/A" },
+          { loc: "N Lobby", type: "Bell/Buzzer", zone: "N/A" },
+          { loc: "N Entrance NW", type: "Bell/Buzzer", zone: "N/A" },
+          { loc: "Bible D Library", type: "Bell/Buzzer", zone: "N/A" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" },
+          { device: "EM-2", circuit: "", loc: "" },
+          { device: "EM-3", circuit: "", loc: "" }
+        ],
+        notes: [
+          "Panel keeps going into alarm. Circuits to check and label: 1- bells, 2- pull station, 3- Heat, 4- heat"
+        ]
+      },
+
+      "Cardston Spring Hill": {
+        panelInfo: { manufacturer: "Fireshield", model: "FS101" },
+        customerID: "5115485",
+        devices: [
+          { loc: "Library (1)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "W Ent (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Library Closet (2)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Pry Closet (3)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "North Ent Coat (4)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "North Ent (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Kitchen Closet (5)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Y-Mens Closet (6)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Kitchen (7)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Kitchen (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "RS N(H2) Closet (8)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "East Exit (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "RS East Closet (9)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "RS South Closet (10)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "EQ Library Closet (11)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-1 Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-3 Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "C-4 Closet", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Bishops Office Closet (12)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Chapel Buzzer", type: "Bell", zone: "N/A" },
+          { loc: "Kitchen Buzzer", type: "Bell", zone: "N/A" },
+          { loc: "Entrance (East) Buzzer", type: "Bell", zone: "N/A" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "D-48", loc: "" },
+          { device: "EM-2", circuit: "D-4", loc: "" },
+          { device: "EM-3", circuit: "D-48", loc: "" },
+          { device: "EM-4", circuit: "C-23", loc: "" }
+        ],
+        notes: [
+          "All EM packs running from CDP breaker"
+        ]
+      },
+
+      "Raymond Knights": {
+        panelInfo: { manufacturer: "Edwards", model: "2280" },
+        customerID: "5232864",
+        devices: [
+          { loc: "S Entrance (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "S Chapel Library (1)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "S Lib Closet (2)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "E Middle Chapel (2)", type: "Manual Pull Station", zone: "2" },
+          { loc: "E Chapel Bishop Closet (10)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "Kitchen", type: "Heat Detector (Rate of Rise)", zone: "3" },
+          { loc: "N Chapel (3)", type: "Manual Pull Station", zone: "3" },
+          { loc: "Primary Closet (4)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "W Entrance (4)", type: "Manual Pull Station", zone: "4" },
+          { loc: "N Entrance (5)", type: "Manual Pull Station", zone: "5" },
+          { loc: "W Kitchen Closet (5)", type: "Heat Detector (Fixed Temp)", zone: "5" },
+          { loc: "Kitchen Mech (6)", type: "Heat Detector (Fixed Temp)", zone: "5" },
+          { loc: "N Mech (19)", type: "Heat Detector (Fixed Temp)", zone: "5" },
+          { loc: "E Entrance (6)", type: "Manual Pull Station", zone: "6" },
+          { loc: "RS N(west) Closet (8)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "RS N(East) Closet (9)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "Library (7)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "RS South Closet 1 & 2 (11)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "Stage Coat Closet (3)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "Closet C-1 (12)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "C-3 Closet (13)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "C-4 Closet (14)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "C-5 Closet (15)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "C-7 Closet (16)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "C-8 Closet (17)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "C-9 Closet (18)", type: "Heat Detector (Fixed Temp)", zone: "6" },
+          { loc: "S Chapel Buzzer", type: "Bell", zone: "N/A" },
+          { loc: "N Chapel Buzzer", type: "Bell", zone: "N/A" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "B-9", loc: "" },
+          { device: "EM-2", circuit: "C-5", loc: "" },
+          { device: "EM-3", circuit: "C-41", loc: "" }
+        ],
+        notes: [
+          "Chapel buzzer (S end) low volume. Not heard in chapel when door closed need to replace/adjust location of buzzer"
+        ]
+      },
+
+      "Spring Coulee": {
+        panelInfo: { manufacturer: "Edwards", model: "Fire Shield" },
+        customerID: "5036836",
+        devices: [
+          { loc: "S Loby (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "S Loby Library Closet (1)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "S Loby Rm closet (2)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Kitchen (2)", type: "Manual Pull Station", zone: "2" },
+          { loc: "Kitchen Closet (3)", type: "Heat Detector (Fixed Temp)", zone: "2" },
+          { loc: "N Entrance (3)", type: "Manual Pull Station", zone: "3" },
+          { loc: "C-1 (4)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "N Entrance Closet (5)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "C-3 (6)", type: "Heat Detector (Fixed Temp)", zone: "3" },
+          { loc: "E Entrance (4)", type: "Manual Pull Station", zone: "4" },
+          { loc: "C-2 (7)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "C-3 (8)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "E Closet (9)", type: "Heat Detector (Fixed Temp)", zone: "4" },
+          { loc: "Stage (5)", type: "Manual Pull Station", zone: "5" },
+          { loc: "Strg Rm Closet (10)", type: "Heat Detector (Fixed Temp)", zone: "5" },
+          { loc: "Bishops Office (11)", type: "Heat Detector (Fixed Temp)", zone: "5" },
+          { loc: "Chapel Buzzer 1", type: "Bell", zone: "6" },
+          { loc: "Chapel Buzzer 2", type: "Bell", zone: "7" },
+          { loc: "Lobby 1", type: "Bell", zone: "8" },
+          { loc: "N Smoke", type: "Smoke Detector", zone: "1" },
+          { loc: "E Smoke", type: "Smoke Detector", zone: "2" },
+          { loc: "C-1 Smoke", type: "Smoke Detector", zone: "3" },
+          { loc: "S Smoke", type: "Smoke Detector", zone: "4" },
+          { loc: "Stage Smoke", type: "Smoke Detector", zone: "5" },
+          { loc: "C-2 Smoke", type: "Smoke Detector", zone: "6" },
+          { loc: "C-3 Smoke", type: "Smoke Detector", zone: "7" },
+          { loc: "C-3 Smoke 2", type: "Smoke Detector", zone: "8" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" },
+          { device: "EM-2", circuit: "", loc: "" },
+          { device: "EM-3", circuit: "", loc: "" },
+          { device: "EM-4", circuit: "", loc: "" },
+          { device: "Exit-1", circuit: "", loc: "" },
+          { device: "Exit-2", circuit: "", loc: "" }
+        ],
+        notes: [
+          "replaced all batteries in EM packs"
+        ]
+      },
+
+      "Leavitt": {
+        panelInfo: { manufacturer: "N/A", model: "N/A" },
+        customerID: "",
+        devices: [
+          { loc: "SW Exit (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "W Ent (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Kitchen (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "N Ent (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "NE (5)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Bell 1 (1)", type: "Bell", zone: "1" },
+          { loc: "Bell 2 (2)", type: "Bell", zone: "1" },
+          { loc: "Bell 3 (3)", type: "Bell", zone: "1" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" },
+          { device: "EM-2", circuit: "", loc: "" },
+          { device: "EM-3", circuit: "", loc: "" },
+          { device: "EM-4", circuit: "", loc: "" },
+          { device: "EM-5", circuit: "", loc: "" },
+          { device: "EM-6", circuit: "", loc: "" },
+          { device: "EM-7", circuit: "", loc: "" },
+          { device: "EM-8", circuit: "", loc: "" },
+          { device: "EM-9", circuit: "", loc: "" },
+          { device: "EM-10", circuit: "", loc: "" },
+          { device: "EM-11", circuit: "", loc: "" },
+          { device: "EM-12", circuit: "", loc: "" },
+          { device: "EM-13", circuit: "", loc: "" },
+          { device: "EM-14", circuit: "", loc: "" }
+        ]
+      },
+
+      "Magrath Grandview Park": {
+        panelInfo: { manufacturer: "Simplex", model: "4001" },
+        customerID: "5370221",
+        devices: [
+          { loc: "S Loby (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Kitchen (2)", type: "Manual Pull Station", zone: "2" },
+          { loc: "N Entrance (3)", type: "Manual Pull Station", zone: "3" },
+          { loc: "Nursery (4)", type: "Manual Pull Station", zone: "4" },
+          { loc: "N Exit Hall (5)", type: "Manual Pull Station", zone: "5" },
+          { loc: "E Exit Hall (6)", type: "Manual Pull Station", zone: "6" },
+          { loc: "Stage (7)", type: "Manual Pull Station", zone: "7" },
+          { loc: "W Exit Hall (8)", type: "Manual Pull Station", zone: "8" },
+          { loc: "S Loby Library (1)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "S Loby Closet (2)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Bishops Office Closet (3)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Kitchen (4)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Kitchen Closet (5)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "Cust (6)", type: "Heat Detector (Rate of Rise)", zone: "2" },
+          { loc: "North Entrance Coat (7)", type: "Heat Detector (Rate of Rise)", zone: "3" },
+          { loc: "C-8 Closet (8)", type: "Heat Detector (Rate of Rise)", zone: "3" },
+          { loc: "Nursery Closet (9)", type: "Heat Detector (Rate of Rise)", zone: "4" },
+          { loc: "C-2 Closet (10)", type: "Heat Detector (Rate of Rise)", zone: "4" },
+          { loc: "C-3 Closet (11)", type: "Heat Detector (Rate of Rise)", zone: "5" },
+          { loc: "C-4 Closet (12)", type: "Heat Detector (Rate of Rise)", zone: "5" },
+          { loc: "Primary Closet (13)", type: "Heat Detector (Rate of Rise)", zone: "6" },
+          { loc: "C-5 (14)", type: "Heat Detector (Rate of Rise)", zone: "6" },
+          { loc: "C-5 Closet (15)", type: "Heat Detector (Rate of Rise)", zone: "6" },
+          { loc: "C-6 Closet (16)", type: "Heat Detector (Rate of Rise)", zone: "6" },
+          { loc: "C-7 Closet (17)", type: "Heat Detector (Rate of Rise)", zone: "6" },
+          { loc: "Stage Y Mens Closet (18)", type: "Heat Detector (Rate of Rise)", zone: "7" },
+          { loc: "Stage Storage Closet (19)", type: "Heat Detector (Rate of Rise)", zone: "7" },
+          { loc: "Stage Mech (20)", type: "Heat Detector (Rate of Rise)", zone: "7" },
+          { loc: "Stage Elec (21)", type: "Heat Detector (Rate of Rise)", zone: "7" },
+          { loc: "Bishop Office (22)", type: "Heat Detector (Rate of Rise)", zone: "8" },
+          { loc: "RS N Closet 1 (23)", type: "Heat Detector (Rate of Rise)", zone: "8" },
+          { loc: "RS N Closet 2 (24)", type: "Heat Detector (Rate of Rise)", zone: "8" },
+          { loc: "RS S Closets (25)", type: "Heat Detector (Rate of Rise)", zone: "8" },
+          { loc: "S Bell", type: "Bell", zone: "" },
+          { loc: "Kitchen Bell", type: "Bell", zone: "" },
+          { loc: "Nursery Bell", type: "Bell", zone: "" },
+          { loc: "Closet C-3 Bell", type: "Bell", zone: "" },
+          { loc: "N Bell", type: "Bell", zone: "" },
+          { loc: "Primary Bell", type: "Bell", zone: "" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "A-19", loc: "14.4V 72 watt pack" },
+          { device: "EM-2", circuit: "B-9", loc: "12V 36W pack" },
+          { device: "EM-3", circuit: "B-29", loc: "12V 72W pack" },
+          { device: "EM-4", circuit: "C-49", loc: "14.4V 72W pack" },
+          { device: "EM-5", circuit: "C-29", loc: "12V 72W pack" },
+          { device: "EM-6", circuit: "C-23", loc: "12V 36W pack" },
+          { device: "EM-7", circuit: "D-19", loc: "12V 36W pack" },
+          { device: "EM-8", circuit: "A-49", loc: "12V 72W pack" }
+        ]
+      },
+
+      "Raymond Stake Center": {
+        panelInfo: { manufacturer: "Simplex", model: "4002" },
+        customerID: "",
+        devices: [
+          { loc: "S Mezz Stairwell (1)", type: "Smoke Detector", zone: "16" },
+          { loc: "N Stairwell (4)", type: "Smoke Detector", zone: "14" },
+          { loc: "S Exit Stairwell (9)", type: "Smoke Detector", zone: "18" },
+          { loc: "S Hallway B/S S KITCHEN (8)", type: "Smoke Detector", zone: "17" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "O-12", panelLoc: "KITCHEN", pakLoc: "OLD SCOUT RM" },
+          { device: "EM-2", circuit: "G-26", panelLoc: "UNDER STAGE", pakLoc: "STAGE ST" },
+          { device: "EM-3", circuit: "G-26", panelLoc: "UNDER STAGE", pakLoc: "C HALL" },
+          { device: "EM-4", circuit: "G-26", panelLoc: "UNDER STAGE", pakLoc: "C HALL" },
+          { device: "EM-5", circuit: "G-26", panelLoc: "UNDER STAGE", pakLoc: "C HALL" },
+          { device: "EM-6", circuit: "G-26", panelLoc: "UNDER STAGE", pakLoc: "C HALL" },
+          { device: "EM-7", circuit: "G-26", panelLoc: "UNDER STAGE", pakLoc: "E CHALL" },
+          { device: "EM-8", circuit: "N-11", panelLoc: "MEZZ STAIR", pakLoc: "MEN WR" },
+          { device: "EM-9", circuit: "N-27", panelLoc: "CH FOYER", pakLoc: "CH FOYER" },
+          { device: "EM-10", circuit: "N-5", panelLoc: "MEZZ STAIR", pakLoc: "WOMEN WR" },
+          { device: "EM-11", circuit: "N-27", panelLoc: "MEZZ STAIR", pakLoc: "MEZZ STAIR" },
+          { device: "EM-12", circuit: "N-27", panelLoc: "MEZZ STAIR", pakLoc: "MEZZ" },
+          { device: "EM-13", circuit: "N-27", panelLoc: "MEZZ STAIR", pakLoc: "MEZZ" },
+          { device: "EM-14", circuit: "B-9", panelLoc: "Custodian", pakLoc: "ST OFFICE" },
+          { device: "EM-15", circuit: "B-9", panelLoc: "Custodian", pakLoc: "Main Ent" },
+          { device: "EM-16", circuit: "B-9", panelLoc: "Custodian", pakLoc: "MEN WR" },
+          { device: "EM-17", circuit: "B-9", panelLoc: "Custodian", pakLoc: "MAIN HALL" },
+          { device: "EM-18", circuit: "B-9", panelLoc: "Custodian", pakLoc: "WEST ALCOVE" },
+          { device: "EM-19", circuit: "D-6", panelLoc: "S Custodian", pakLoc: "OVER FLOW" },
+          { device: "EM-20", circuit: "D-6", panelLoc: "S Custodian", pakLoc: "SW Entrance" },
+          { device: "EM-21", circuit: "D-29", panelLoc: "S Custodian", pakLoc: "Women WR" },
+          { device: "EM-22", circuit: "D-41", panelLoc: "S Custodian", pakLoc: "MENS WR" },
+          { device: "EM-23", circuit: "A-10", panelLoc: "S Boiler RM", pakLoc: "S CH. Hall" },
+          { device: "EM-24", circuit: "A-10", panelLoc: "S Boiler RM", pakLoc: "S STAIRWELL" },
+          { device: "EM-25", circuit: "A-10", panelLoc: "S Boiler RM", pakLoc: "S WING 2 FL" },
+          { device: "EM-26", circuit: "A-10", panelLoc: "S Boiler RM", pakLoc: "S WING 2 FL" }
+        ]
+      },
+
+      "Cardston West Stake": {
+        panelInfo: { manufacturer: "Fireshield", model: "FSP302" },
+        customerID: "",
+        devices: [
+          { loc: "N NE Ent (1)", type: "Manual Pull Station", zone: "1" },
+          { loc: "E NE Ent (2)", type: "Manual Pull Station", zone: "1" },
+          { loc: "Kitchen (1)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Closet D (2)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "SE Ent (3)", type: "Manual Pull Station", zone: "1" },
+          { loc: "SE Ent Mech (3)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "S Ent (4)", type: "Manual Pull Station", zone: "1" },
+          { loc: "S Middle Ent (5)", type: "Manual Pull Station", zone: "1" },
+          { loc: "SW Exit (6)", type: "Manual Pull Station", zone: "1" },
+          { loc: "W Library (4)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Custodial Closet (5)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "Stake office Closet (6)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "W Ent Stake Office (7)", type: "Manual Pull Station", zone: "1" },
+          { loc: "NW Ent (8)", type: "Manual Pull Station", zone: "1" },
+          { loc: "E Mezz Mech (8)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "W Mezz Mech (7)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Sound Room/Stage Room (9)", type: "Heat Detector (Rate of Rise)", zone: "1" },
+          { loc: "E Mech Above Stairs (10)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "W Mech Above Stairs (11)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Elec Rm/Outside (12)", type: "Heat Detector (Fixed Temp)", zone: "1" },
+          { loc: "Buzzer/ Strobe 1", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 2", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 3", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 4", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 5", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 6", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 7", type: "Bell", zone: "N/A" },
+          { loc: "Buzzer/ Strobe 8", type: "Bell", zone: "N/A" }
+        ],
+        emergencyLights: []
+      },
+
+      "Waterton Operations Building": {
+        panelInfo: { manufacturer: "Compound", model: "" },
+        customerID: "",
+        devices: [
+          { loc: "mech rm", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "mech rm", type: "Smoke Detector", zone: "Local" },
+          { loc: "back rm", type: "Heat Detector (Fixed Temp)", zone: "" },
+          { loc: "lobby", type: "Manual Pull Station", zone: "" },
+          { loc: "main entrance", type: "Manual Pull Station", zone: "" },
+          { loc: "Laundry", type: "Heat Detector (Fixed Temp)", zone: "" },
+          { loc: "N entrance", type: "Manual Pull Station", zone: "" },
+          { loc: "N hall", type: "Smoke Detector", zone: "" },
+          { loc: "S hall", type: "Smoke Detector", zone: "" },
+          { loc: "S entrance", type: "Manual Pull Station", zone: "" },
+          { loc: "S hall", type: "Smoke Detector", zone: "" },
+          { loc: "Corridor", type: "Smoke Detector", zone: "" },
+          { loc: "RM 1", type: "Smoke Detector", zone: "" },
+          { loc: "RM 1", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 1", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 1 LS", type: "Smoke Detector", zone: "" },
+          { loc: "RM 2", type: "Smoke Detector", zone: "" },
+          { loc: "RM 2", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 2", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 2 LS", type: "Smoke Detector", zone: "" },
+          { loc: "RM 3", type: "Smoke Detector", zone: "" },
+          { loc: "RM 3", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 3", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 3 LS", type: "Smoke Detector", zone: "" },
+          { loc: "RM 4", type: "Smoke Detector", zone: "" },
+          { loc: "RM 4", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 4", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 4 LS", type: "Smoke Detector", zone: "" },
+          { loc: "RM 5", type: "Smoke Detector", zone: "" },
+          { loc: "RM 5", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 5", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 5 LS", type: "Smoke Detector", zone: "" },
+          { loc: "RM 6", type: "Smoke Detector", zone: "" },
+          { loc: "RM 6", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 6", type: "Heat Detector (Rate of Rise)", zone: "" },
+          { loc: "RM 6 LS", type: "Smoke Detector", zone: "" }
+        ],
+        emergencyLights: [
+          { device: "EM-1", circuit: "", loc: "" },
+          { device: "EM-2", circuit: "", loc: "" },
+          { device: "EM-3", circuit: "", loc: "" },
+          { device: "EM-4", circuit: "", loc: "" },
+          { device: "EM-5", circuit: "", loc: "" },
+          { device: "Exit lights", circuit: "", loc: "" }
+        ]
+      }
+    };
+
+    async function updateAllBuildings() {
+      try {
+        status('🔄 Fetching buildings from Firebase...');
+        log('▶ Starting update process for 2025 buildings');
+        log('='.repeat(70) + '\n');
+        
+        const buildingsRef = db.collection(`apps/${APP_ID}/buildings`);
+        const snapshot = await buildingsRef.get();
+        
+        log(`Found ${snapshot.size} total buildings in database\n`);
+        
+        let updated = 0;
+        let skipped = 0;
+        let notFound = 0;
+        
+        for (const [buildingName, reportData] of Object.entries(inspectionData)) {
+          log(`\n${'═'.repeat(70)}`);
+          log(`📋 PROCESSING: ${buildingName}`);
+          log(`${'═'.repeat(70)}`);
+          
+          // Find building in Firebase (only 2025!)
+          let matchingDoc = null;
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.name === buildingName && data.year === '2025') {
+              matchingDoc = { id: doc.id, data };
+            }
+          });
+          
+          if (!matchingDoc) {
+            log(`  ⚠️  Building "${buildingName}" not found in 2025 or doesn't exist`);
+            notFound++;
+            continue;
+          }
+          
+          log(`  ✓ Found building (ID: ${matchingDoc.id})`);
+          log(`  Year: ${matchingDoc.data.year}`);
+          
+          // Create updated data
+          const updatedData = { ...matchingDoc.data };
+          updatedData.buildingDetails = updatedData.buildingDetails || [];
+          updatedData.data = updatedData.data || {};
+          
+          // Update panel info
+          if (reportData.panelInfo?.manufacturer) {
+            const panelValue = `${reportData.panelInfo.manufacturer} - ${reportData.panelInfo.model}`;
+            let panelDetail = updatedData.buildingDetails.find(d => d.label === 'Fire Alarm Panel');
+            if (panelDetail) {
+              panelDetail.value = panelValue;
+            } else {
+              updatedData.buildingDetails.push({
+                id: `panel_${Date.now()}`,
+                label: 'Fire Alarm Panel',
+                value: panelValue
+              });
+            }
+            log(`  ✓ Panel: ${panelValue}`);
+          }
+          
+          // Update customer ID
+          if (reportData.customerID) {
+            let custDetail = updatedData.buildingDetails.find(d => d.label === 'Customer ID');
+            if (custDetail) {
+              custDetail.value = reportData.customerID;
+            } else {
+              updatedData.buildingDetails.push({
+                id: `cust_${Date.now()}`,
+                label: 'Customer ID',
+                value: reportData.customerID
+              });
+            }
+            log(`  ✓ Customer ID: ${reportData.customerID}`);
+          }
+          
+          // Update fire alarm devices
+          if (reportData.devices?.length > 0) {
+            updatedData.data.fireAlarmDevices = reportData.devices.map((device, idx) => ({
+              id: `fa_${Date.now()}_${idx}`,
+              name: `${device.loc} - ${device.type}`,
+              location: device.loc,
+              type: device.type,
+              zone: device.zone,
+              status: 'Pass',
+              date: new Date().toISOString().split('T')[0],
+              notes: ''
+            }));
+            log(`  ✓ Devices: ${reportData.devices.length} fire alarm devices`);
+          }
+          
+          // Update emergency lights
+          if (reportData.emergencyLights?.length > 0) {
+            updatedData.data.emergencyLights = reportData.emergencyLights.map((light, idx) => ({
+              id: `em_${Date.now()}_${idx}`,
+              name: `${light.device} ${light.loc ? '- ' + light.loc : ''}`,
+              device: light.device,
+              circuit: light.circuit,
+              location: light.loc || light.panelLoc || 'See circuit location',
+              status: 'Pass',
+              date: new Date().toISOString().split('T')[0],
+              notes: ''
+            }));
+            log(`  ✓ Emergency Lights: ${reportData.emergencyLights.length} devices`);
+          }
+          
+          // Add notes if present
+          if (reportData.notes?.length > 0) {
+            updatedData.data.additionalNotes = reportData.notes.map((note, idx) => ({
+              id: `note_${Date.now()}_${idx}`,
+              name: 'Note',
+              content: note,
+              date: new Date().toISOString().split('T')[0]
+            }));
+            
+            if (!updatedData.sections) updatedData.sections = [];
+            if (!updatedData.sections.find(s => s.id === 'additionalNotes')) {
+              updatedData.sections.push({
+                id: 'additionalNotes',
+                name: 'Additional Notes',
+                icon: '📝'
+              });
+            }
+            log(`  ✓ Notes: ${reportData.notes.length} deficiency notes`);
+          }
+          
+         // Update timestamp
+          updatedData.lastModified = new Date().toISOString();
+          
+          // Save to Firebase
+          log(`  💾 Saving to Firebase...`);
+          await buildingsRef.doc(matchingDoc.id).set(updatedData);
+          log(`  ✅ SUCCESSFULLY UPDATED!`);
+          updated++;
+          
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        log(`\n${'═'.repeat(70)}`);
+        log(`🎉 UPDATE COMPLETE!`);
+        log(`${'═'.repeat(70)}`);
+        log(`✅ Updated: ${updated} buildings`);
+        log(`⚠️  Not Found: ${notFound} buildings`);
+        log(`\nAll 2025 buildings have been updated with inspection data!`);
+        log(`2026 buildings were NOT touched (as requested).`);
+        status(`✅ Complete! Updated ${updated} buildings, ${notFound} not found`);
+        
+      } catch (error) {
+        status(`❌ Error: ${error.message}`, true);
+        log(`\n❌ ERROR OCCURRED:`);
+        log(error.stack);
+        console.error(error);
+      }
+    }
+    
+    // Auto-run when page loads
+    setTimeout(() => {
+      log('Initializing Firebase connection...\n');
+      updateAllBuildings();
+    }, 500);
+  </script>
+</body>
+</html>

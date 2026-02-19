@@ -1241,6 +1241,10 @@
             const timerIntervalRef = useRef(null);
             const alertedTimersRef = useRef(new Set());
             
+            // Import 2025 inspection data state
+            const [importStatus, setImportStatus] = useState('idle'); // idle, importing, success, error
+            const [importMessage, setImportMessage] = useState('');
+            
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
                 const storedVersion = localStorage.getItem(VERSION_CHECK_KEY);
@@ -2941,6 +2945,182 @@
                 }
             };
 
+            // --- IMPORT 2025 INSPECTION DATA --- (18 buildings with complete data from inspection reports)
+            const INSPECTION_DATA_2025 = window.INSPECTION_DATA_2025_FULL || {};
+
+            const importInspectionData2025 = async () => {
+                if (!db || !user) {
+                    setImportMessage('❌ Please login first');
+                    return;
+                }
+                
+                if (!confirm('🔥 IMPORT 2025 INSPECTION DATA\n\nThis will update all 2025 buildings with actual inspection report data.\n\n⚠️ This will replace existing device data with parsed information from inspection reports.\n\n✅ 2026 data will NOT be touched.\n\nContinue?')) {
+                    return;
+                }
+                
+                try {
+                    setImportStatus('importing');
+                    setImportMessage('📥 Starting import...');
+                    
+                    console.log('🔥 Starting 2025 inspection data import...');
+                    
+                    // Get current 2025 buildings
+                    const buildings2025 = yearData['2025'] || [];
+                    console.log(`Found ${buildings2025.length} buildings in 2025`);
+                    
+                    let updated = 0;
+                    let notFound = 0;
+                    
+                    // Update each building with inspection data
+                    const updatedBuildings = buildings2025.map(building => {
+                        const reportData = INSPECTION_DATA_2025[building.name];
+                        
+                        if (!reportData) {
+                            console.log(`⚠️  No inspection data for: ${building.name}`);
+                            notFound++;
+                            return building;
+                        }
+                        
+                        console.log(`✅ Updating: ${building.name}`);
+                        updated++;
+                        
+                        const updatedBuilding = { ...building };
+                        
+                        // Update building details
+                        if (!updatedBuilding.buildingDetails) {
+                            updatedBuilding.buildingDetails = [];
+                        }
+                        
+                        // Update panel info
+                        if (reportData.panelInfo?.manufacturer) {
+                            const panelValue = `${reportData.panelInfo.manufacturer} - ${reportData.panelInfo.model}`;
+                            const panelIdx = updatedBuilding.buildingDetails.findIndex(d => d.label === 'Fire Alarm Panel');
+                            if (panelIdx >= 0) {
+                                updatedBuilding.buildingDetails[panelIdx].value = panelValue;
+                            } else {
+                                updatedBuilding.buildingDetails.push({
+                                    id: `panel_${Date.now()}`,
+                                    label: 'Fire Alarm Panel',
+                                    value: panelValue
+                                });
+                            }
+                        }
+                        
+                        // Update customer ID
+                        if (reportData.customerID) {
+                            const custIdx = updatedBuilding.buildingDetails.findIndex(d => d.label === 'Customer ID');
+                            if (custIdx >= 0) {
+                                updatedBuilding.buildingDetails[custIdx].value = reportData.customerID;
+                            } else {
+                                updatedBuilding.buildingDetails.push({
+                                    id: `cust_${Date.now()}`,
+                                    label: 'Customer ID',
+                                    value: reportData.customerID
+                                });
+                            }
+                        }
+                        
+                        // Update fire alarm devices
+                        if (reportData.devices?.length > 0) {
+                            if (!updatedBuilding.data) updatedBuilding.data = {};
+                            updatedBuilding.data.fireAlarmDevices = reportData.devices.map((device, idx) => ({
+                                id: `fa_${Date.now()}_${idx}`,
+                                name: `${device.loc} - ${device.type}`,
+                                location: device.loc,
+                                type: device.type,
+                                zone: device.zone,
+                                status: 'pending',
+                                date: new Date().toISOString().split('T')[0],
+                                notes: ''
+                            }));
+                        }
+                        
+                        // Update emergency lights
+                        if (reportData.emergencyLights?.length > 0) {
+                            if (!updatedBuilding.data) updatedBuilding.data = {};
+                            updatedBuilding.data.emergencyLights = reportData.emergencyLights.map((light, idx) => ({
+                                id: `em_${Date.now()}_${idx}`,
+                                name: `${light.device} ${light.loc ? '- ' + light.loc : ''}`,
+                                device: light.device,
+                                circuit: light.circuit,
+                                location: light.loc || light.panelLoc || 'See circuit location',
+                                status: 'pending',
+                                date: new Date().toISOString().split('T')[0],
+                                notes: ''
+                            }));
+                        }
+                        
+                        // Add notes if present
+                        if (reportData.notes?.length > 0) {
+                            if (!updatedBuilding.data) updatedBuilding.data = {};
+                            updatedBuilding.data.additionalNotes = reportData.notes.map((note, idx) => ({
+                                id: `note_${Date.now()}_${idx}`,
+                                name: 'Note',
+                                content: note,
+                                date: new Date().toISOString().split('T')[0]
+                            }));
+                            
+                            // Ensure additionalNotes section exists
+                            if (!updatedBuilding.sections) updatedBuilding.sections = [];
+                            if (!updatedBuilding.sections.find(s => s.id === 'additionalNotes')) {
+                                updatedBuilding.sections.push({
+                                    id: 'additionalNotes',
+                                    name: 'Additional Notes',
+                                    icon: '📝'
+                                });
+                            }
+                        }
+                        
+                        // Update timestamp
+                        updatedBuilding.lastModified = new Date().toISOString();
+                        
+                        return updatedBuilding;
+                    });
+                    
+                    // Update local state
+                    setYearData(prev => ({
+                        ...prev,
+                        '2025': updatedBuildings
+                    }));
+                    
+                    // Save to cloud
+                    setImportMessage('☁️ Saving to cloud...');
+                    const { collection, setDoc, doc } = window.FirebaseSDK;
+                    
+                    for (const building of updatedBuildings) {
+                        if (INSPECTION_DATA_2025[building.name]) {
+                            const buildingRef = doc(db, `apps/${APP_ID}/buildings/${building.id}`);
+                            await setDoc(buildingRef, {
+                                ...building,
+                                lastSync: new Date().toISOString(),
+                                syncedBy: user.email
+                            });
+                        }
+                    }
+                    
+                    setImportStatus('success');
+                    setImportMessage(`✅ Import complete! Updated ${updated} buildings, ${notFound} not found`);
+                    
+                    console.log('🎉 Import complete!');
+                    console.log(`✅ Updated: ${updated} buildings`);
+                    console.log(`⚠️  Not found: ${notFound} buildings`);
+                    
+                    setTimeout(() => {
+                        setImportStatus('idle');
+                        setImportMessage('');
+                    }, 5000);
+                    
+                } catch (error) {
+                    console.error('❌ Import error:', error);
+                    setImportStatus('error');
+                    setImportMessage(`❌ Import failed: ${error.message}`);
+                    setTimeout(() => {
+                        setImportStatus('idle');
+                        setImportMessage('');
+                    }, 5000);
+                }
+            };
+
             // --- TIMER FUNCTIONS ---
             // Create AudioContext once (reusable)
             const audioContextRef = useRef(null);
@@ -3385,6 +3565,58 @@
                                 ⚠️ <strong>Warning:</strong> At least one admin must exist. Removing yourself will revoke your admin access.
                             </p>
                         </div>
+                    </div>
+                    
+                    {/* 2025 Inspection Data Import - Admin Only */}
+                    <div className="bg-gradient-to-br from-orange-50 to-red-50 rounded-2xl p-6 border-2 border-orange-300 shadow-md">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="text-lg font-bold text-orange-900 flex items-center gap-2">
+                                    🔥 Import 2025 Inspection Data
+                                </h2>
+                                <p className="text-sm text-orange-700 mt-1">
+                                    Replace placeholder devices with actual inspection report data
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl p-4 mb-4 border border-orange-200">
+                            <h3 className="text-sm font-bold text-gray-800 mb-2">📋 What This Does:</h3>
+                            <ul className="text-xs text-gray-700 space-y-1.5">
+                                <li>✅ Updates all 2025 buildings with real inspection data</li>
+                                <li>✅ Adds actual device names, locations, zones, and types</li>
+                                <li>✅ Includes emergency lights with circuits and locations</li>
+                                <li>✅ Adds panel info and customer IDs where available</li>
+                                <li>⚠️ Replaces existing device data (can't be undone easily)</li>
+                                <li>✅ Does NOT touch 2026 buildings</li>
+                            </ul>
+                        </div>
+                        
+                        {importMessage && (
+                            <div className={`mb-4 p-3 rounded-lg text-sm font-semibold ${
+                                importStatus === 'success' ? 'bg-green-100 text-green-800 border-2 border-green-300' :
+                                importStatus === 'error' ? 'bg-red-100 text-red-800 border-2 border-red-300' :
+                                'bg-blue-100 text-blue-800 border-2 border-blue-300'
+                            }`}>
+                                {importMessage}
+                            </div>
+                        )}
+                        
+                        <button 
+                            onClick={importInspectionData2025}
+                            disabled={importStatus === 'importing'}
+                            className={`w-full py-4 rounded-xl font-bold text-base transition-all shadow-lg ${
+                                importStatus === 'importing'
+                                ? 'bg-gray-400 text-white cursor-not-allowed'
+                                : 'bg-gradient-to-r from-orange-600 to-red-600 text-white hover:from-orange-700 hover:to-red-700 active:scale-95'
+                            }`}
+                        >
+                            {importStatus === 'importing' ? '⏳ Importing...' : '🚀 Import 2025 Data Now'}
+                        </button>
+                        
+                        <p className="text-xs text-orange-700 mt-3 text-center">
+                            💡 <strong>Tip:</strong> Make sure to sync to cloud after import completes!
+                        </p>
                     </div>
                     
                     <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
