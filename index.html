@@ -334,6 +334,7 @@
             id: `b-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             name: name,
             lastSynced: null,
+            createdAt: new Date().toISOString(), // Track creation timestamp
             inspectionDetails: {
                 date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
                 time: new Date().toTimeString().split(' ')[0].substring(0, 5), // HH:MM format
@@ -3591,8 +3592,16 @@
                             );
                         } else if (sortBy === 'date') {
                             filteredBuildings = [...filteredBuildings].sort((a, b) => {
-                                const dateA = a.inspectionDetails?.date || a.details?.lastServiceDate || '';
-                                const dateB = b.inspectionDetails?.date || b.details?.lastServiceDate || '';
+                                // Use inspection date, then lastServiceDate, then createdAt as fallbacks
+                                const dateA = a.inspectionDetails?.date || a.details?.lastServiceDate || a.createdAt || '';
+                                const dateB = b.inspectionDetails?.date || b.details?.lastServiceDate || b.createdAt || '';
+                                
+                                // If both dates are empty, maintain original order
+                                if (!dateA && !dateB) return 0;
+                                // Empty dates go to the end
+                                if (!dateA) return 1;
+                                if (!dateB) return -1;
+                                
                                 return dateSortOrder === 'newest' 
                                     ? dateB.localeCompare(dateA) // Newest first
                                     : dateA.localeCompare(dateB); // Oldest first
