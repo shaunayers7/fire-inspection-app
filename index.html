@@ -3475,17 +3475,24 @@
                     <button 
                         onClick={() => {
                             console.log('🏢 Adding new building...');
-                            setYearData(prev => {
-                                const currentBuildings = prev[selectedYear] || [];
-                                const buildingNumber = currentBuildings.length + 1;
-                                const newBuilding = getNewBuildingTemplate(`New Building ${buildingNumber}`);
-                                console.log('✅ Created new building:', newBuilding.name, newBuilding.id);
-                                
-                                return {
-                                    ...prev,
-                                    [selectedYear]: [newBuilding, ...currentBuildings]
-                                };
-                            });
+                            
+                            // Create building first (outside setState to get the ID)
+                            const currentBuildings = yearData[selectedYear] || [];
+                            const buildingNumber = currentBuildings.length + 1;
+                            const newBuilding = getNewBuildingTemplate(`New Building ${buildingNumber}`);
+                            console.log('✅ Created new building:', newBuilding.name, newBuilding.id);
+                            
+                            // Add to state
+                            setYearData(prev => ({
+                                ...prev,
+                                [selectedYear]: [newBuilding, ...(prev[selectedYear] || [])]
+                            }));
+                            
+                            // Immediately open the new building for editing
+                            setSelectedBuildingId(newBuilding.id);
+                            setView('form');
+                            viewRef.current = 'form';
+                            console.log('📝 Opening new building for editing');
                         }} 
                         className="w-full p-4 border-2 border-dashed border-blue-300 rounded-xl text-blue-500 font-bold uppercase text-sm hover:bg-blue-50 hover:border-blue-400 transition-all active:scale-98"
                     >
