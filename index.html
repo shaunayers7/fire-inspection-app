@@ -818,7 +818,24 @@
                     className={`bg-white border-b border-gray-100 p-4 draggable-item ${isDragging ? 'is-dragging' : ''} ${item.fixed && isDeficiencyView ? 'bg-green-50/20' : ''}`}
                 >
                     <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 space-y-2">
+                        {/* Show only timer bubble when running and collapsed */}
+                        {isEmergencyLight && item.timer?.isRunning && isTimerCollapsed ? (
+                            <div className="flex-1">
+                                {/* MINIMIZED VIEW - Just the compact bubble */}
+                                <div 
+                                    onClick={() => setIsTimerCollapsed(false)}
+                                    className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md text-white ${
+                                        item.timer.mode === 'down' && getTimerDisplay() === '00:00'
+                                            ? 'bg-red-500 border-red-600 animate-pulse'
+                                            : 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-600'
+                                    }`}
+                                >
+                                    <span className="font-bold text-sm">{item.label}</span>
+                                    <span className="font-mono font-bold text-lg">{getTimerDisplay()}</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 space-y-2">
                             <div className="flex items-start gap-2">
                                 <div className="flex flex-col gap-0.5 mr-1">
                                     <span className="text-[10px] font-black text-gray-300">{index}.</span>
@@ -1035,44 +1052,38 @@
                                                 ⏱️ Add Battery Timer
                                             </button>
                                         </div>
-                                    ) : item.timer.isRunning && isTimerCollapsed ? (
-                                        // MINIMIZED VIEW - Compact bubble when timer is running and collapsed
-                                        <div 
-                                            onClick={() => setIsTimerCollapsed(false)}
-                                            className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md ${
-                                                item.timer.mode === 'down' && getTimerDisplay() === '00:00'
-                                                    ? 'bg-red-500 border-red-600 text-white animate-pulse'
-                                                    : 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-600 text-white'
-                                            }`}
-                                        >
-                                            <span className="font-bold text-sm">{item.label}</span>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-mono font-bold text-lg">{getTimerDisplay()}</span>
-                                                <span className="text-xs opacity-80">👁️</span>
-                                            </div>
-                                        </div>
-                                    ) : (
+                                    ) : item.timer ? (
                                         // FULL CONTROLS - When timer is paused/setup or running but expanded
-                                        <div className="p-3 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-200 space-y-2">
+                                        <div className={`p-3 rounded-lg border space-y-2 ${
+                                            item.timer.isRunning
+                                                ? item.timer.mode === 'down' && getTimerDisplay() === '00:00'
+                                                    ? 'bg-gradient-to-r from-red-50 to-red-100 border-red-200'
+                                                    : 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200'
+                                                : 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200'
+                                        }`}>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-xs font-bold text-yellow-800">🔋 Battery Test Timer</span>
-                                                <div className="flex gap-2">
-                                                    {item.timer.isRunning && (
-                                                        <button
-                                                            onClick={() => setIsTimerCollapsed(true)}
-                                                            className="text-gray-500 hover:text-gray-700 text-xs"
-                                                            title="Collapse timer"
-                                                        >
-                                                            ➖
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        onClick={removeTimer}
-                                                        className="text-red-400 hover:text-red-600 text-xs"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
+                                                <span 
+                                                    className={`text-xs font-bold ${
+                                                        item.timer.isRunning
+                                                            ? item.timer.mode === 'down' && getTimerDisplay() === '00:00'
+                                                                ? 'text-red-800 cursor-pointer hover:text-red-900'
+                                                                : 'text-green-800 cursor-pointer hover:text-green-900'
+                                                            : 'text-yellow-800'
+                                                    }`}
+                                                    onClick={() => {
+                                                        if (item.timer.isRunning) {
+                                                            setIsTimerCollapsed(true);
+                                                        }
+                                                    }}
+                                                >
+                                                    🔋 Battery Test Timer {item.timer.isRunning && (item.timer.mode === 'down' && getTimerDisplay() === '00:00' ? '(Finished!)' : '(Running)')}
+                                                </span>
+                                                <button
+                                                    onClick={removeTimer}
+                                                    className="text-red-400 hover:text-red-600 text-xs"
+                                                >
+                                                    ✕
+                                                </button>
                                             </div>
                                             
                                             <div className="text-center">
@@ -1085,8 +1096,14 @@
                                                 }`}>
                                                     {getTimerDisplay()}
                                                 </div>
-                                                <div className="text-[10px] text-yellow-700 font-medium mt-0.5">
-                                                    MM:SS {item.timer.isRunning && '(Running)'}
+                                                <div className={`text-[10px] font-medium mt-0.5 ${
+                                                    item.timer.isRunning
+                                                        ? item.timer.mode === 'down' && getTimerDisplay() === '00:00'
+                                                            ? 'text-red-700'
+                                                            : 'text-green-700'
+                                                        : 'text-yellow-700'
+                                                }`}>
+                                                    MM:SS {item.timer.isRunning && (item.timer.mode === 'down' && getTimerDisplay() === '00:00' ? '(Finished!)' : '(Running)')}
                                                 </div>
                                             </div>
                                             
@@ -1157,10 +1174,11 @@
                                                 )}
                                             </div>
                                         </div>
-                                    )}
+                                    ) : null}
                                 </div>
                             )}
                         </div>
+                        )}
                         {!isDeficiencyView && <TriStateButton status={item.status} onToggle={(s) => onUpdateMeta({ status: s, fixed: false, dateFixed: null })} />}
                     </div>
                 </div>
@@ -3992,6 +4010,53 @@
                                             </button>
                                         </div>
                                     </div>
+                                    {/* Show timer bubbles when collapsed (Emergency Lights only) */}
+                                    {!expandedSections[s.id] && s.id === 'lights' && (
+                                        <div className="bg-white p-3 space-y-2">
+                                            {activeBuilding.data[s.id]?.filter(item => item.timer).map((item) => {
+                                                const getTimerDisplay = () => {
+                                                    if (!item.timer) return '00:00';
+                                                    
+                                                    let seconds = 0;
+                                                    if (item.timer.isRunning) {
+                                                        seconds = Math.floor((Date.now() - item.timer.startTime) / 1000);
+                                                    } else {
+                                                        seconds = item.timer.pausedTime || 0;
+                                                    }
+                                                    
+                                                    if (item.timer.mode === 'down') {
+                                                        seconds = Math.max(0, item.timer.duration - seconds);
+                                                    }
+                                                    
+                                                    const mins = Math.floor(seconds / 60);
+                                                    const secs = seconds % 60;
+                                                    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                                                };
+                                                
+                                                const timerDisplay = getTimerDisplay();
+                                                const isFinished = item.timer.mode === 'down' && timerDisplay === '00:00' && item.timer.isRunning;
+                                                const isPaused = !item.timer.isRunning;
+                                                
+                                                let bubbleColor = 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-600';
+                                                if (isFinished) {
+                                                    bubbleColor = 'bg-red-500 border-red-600 animate-pulse';
+                                                } else if (isPaused) {
+                                                    bubbleColor = 'bg-yellow-500 border-yellow-600';
+                                                }
+                                                
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        onClick={() => setExpandedSections(p => ({...p, [s.id]: true}))}
+                                                        className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md text-white ${bubbleColor}`}
+                                                    >
+                                                        <span className="font-bold text-sm">{item.label}</span>
+                                                        <span className="font-mono font-bold text-lg">{timerDisplay}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                     {expandedSections[s.id] && (
                                         <div className="bg-white">
                                             {activeBuilding.data[s.id]?.map((item, i, arr) => (
