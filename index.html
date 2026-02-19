@@ -1498,7 +1498,7 @@
                                 { id: 'devices', title: 'Device inventory', color: 'bg-[#1C252E]', isDev: true },
                                 { id: 'battery', title: 'Battery health', color: 'bg-blue-500', isDev: false },
                                 { id: 'lights', title: 'Emergency lights', color: 'bg-[#EAB308]', isDev: false }
-                            },
+                            ],
                             data: {
                                 checklist: [
                                     { id: "ck1-2026-hillspring", label: "Building occupants informed of test", status: "not-started", note: "", photo: null, fixed: false },
@@ -1668,6 +1668,15 @@
                             return building;
                         });
                     });
+                    
+                    // MIGRATION: Add new default buildings if they don't exist in saved data
+                    const existingBuildingIds = parsedData[2026].map(b => b.id);
+                    const newBuildings = default2026Buildings.filter(b => !existingBuildingIds.includes(b.id));
+                    
+                    if (newBuildings.length > 0) {
+                        console.log(`📦 Adding ${newBuildings.length} new default building(s):`, newBuildings.map(b => b.name).join(', '));
+                        parsedData[2026] = [...parsedData[2026], ...newBuildings];
+                    }
                     
                     // PROTECTION: Only restore on FIRST load (empty localStorage)
                     // After that, respect cloud data (multi-user collaboration)
