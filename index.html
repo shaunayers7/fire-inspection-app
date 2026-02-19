@@ -1647,6 +1647,7 @@
                     }
                     
                     localStorage.setItem('fire_inspection_v4_data', dataString);
+                    console.log(`💾 Auto-saved to localStorage (${dataSizeMB}MB)`);
                 } catch (error) {
                     if (error.name === 'QuotaExceededError' || error.code === 22) {
                         console.error('❌ Storage quota exceeded! Your device storage is full.');
@@ -1792,12 +1793,21 @@
                 }
             };
             
-            // Helper: Navigate back (saves to local storage only - NO CLOUD SYNC)
+            // Helper: Navigate back (saves to local storage immediately - NO CLOUD SYNC)
             const saveAndNavigate = (targetView) => {
-                console.log(`💾 Navigating to ${targetView} - saving to local storage only`);
+                console.log(`💾 Navigating to ${targetView} - saving to local storage first`);
                 
-                // Data is automatically saved to localStorage via the yearData useEffect
-                // Just navigate - no cloud sync
+                // IMPORTANT: Force immediate save to localStorage before navigating
+                // This prevents race conditions when user types and immediately clicks back
+                try {
+                    const dataString = JSON.stringify(yearData);
+                    localStorage.setItem('fire_inspection_v4_data', dataString);
+                    console.log('✅ Data saved to localStorage before navigation');
+                } catch (error) {
+                    console.error('❌ Failed to save before navigation:', error);
+                }
+                
+                // Navigate (the yearData useEffect will also save, but this ensures immediate save)
                 setView(targetView);
                 viewRef.current = targetView;
             };
@@ -2406,6 +2416,8 @@
                 // Track field modification for conflict detection
                 const timestamp = new Date().toISOString();
                 const userName = user?.email || user?.displayName || 'Unknown';
+                
+                console.log(`✏️ Updating building ${key}:`, value);
                 
                 // Log the change
                 logChange('update_building_detail', { 
