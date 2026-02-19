@@ -1042,16 +1042,35 @@
                             
                             {/* Timer controls for emergency lights */}
                             {isEmergencyLight && (
-                                <div className="mt-3 p-3 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-200">
+                                <div className="mt-3">
                                     {!item.timer ? (
-                                        <button
-                                            onClick={() => updateTimerMode('up')}
-                                            className="w-full text-xs font-bold text-yellow-700 hover:text-yellow-900 uppercase tracking-wide"
+                                        <div className="p-3 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-200">
+                                            <button
+                                                onClick={() => updateTimerMode('up')}
+                                                className="w-full text-xs font-bold text-yellow-700 hover:text-yellow-900 uppercase tracking-wide"
+                                            >
+                                                ⏱️ Add Battery Timer
+                                            </button>
+                                        </div>
+                                    ) : item.timer.isRunning ? (
+                                        // MINIMIZED VIEW - When timer is running, show compact bubble
+                                        <div 
+                                            onClick={pauseTimer}
+                                            className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md ${
+                                                item.timer.mode === 'down' && getTimerDisplay() === '00:00'
+                                                    ? 'bg-red-500 border-red-600 text-white animate-pulse'
+                                                    : 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-600 text-white'
+                                            }`}
                                         >
-                                            ⏱️ Add Battery Timer
-                                        </button>
+                                            <span className="font-bold text-sm">{item.label}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono font-bold text-lg">{getTimerDisplay()}</span>
+                                                <span className="text-xs opacity-80">⏸️</span>
+                                            </div>
+                                        </div>
                                     ) : (
-                                        <div className="space-y-2">
+                                        // FULL CONTROLS - When timer is paused/setup
+                                        <div className="p-3 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-200 space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs font-bold text-yellow-800">🔋 Battery Test Timer</span>
                                                 <button
@@ -1075,7 +1094,6 @@
                                                 <select
                                                     value={item.timer.mode}
                                                     onChange={(e) => updateTimerMode(e.target.value)}
-                                                    disabled={item.timer.isRunning}
                                                     className="text-xs px-2 py-1 border rounded flex-1 bg-white"
                                                 >
                                                     <option value="up">Count Up</option>
@@ -1086,7 +1104,6 @@
                                                     <select
                                                         value={item.timer.duration}
                                                         onChange={(e) => onUpdateMeta({ timer: { ...item.timer, duration: parseInt(e.target.value) } })}
-                                                        disabled={item.timer.isRunning}
                                                         className="text-xs px-2 py-1 border rounded flex-1 bg-white"
                                                     >
                                                         <option value="10">10 sec</option>
@@ -1105,21 +1122,12 @@
                                             </div>
                                             
                                             <div className="flex gap-2">
-                                                {!item.timer.isRunning ? (
-                                                    <button
-                                                        onClick={startTimer}
-                                                        className="flex-1 bg-green-500 text-white text-xs font-bold py-2 rounded hover:bg-green-600 transition-colors uppercase"
-                                                    >
-                                                        ▶️ Start
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={pauseTimer}
-                                                        className="flex-1 bg-yellow-500 text-white text-xs font-bold py-2 rounded hover:bg-yellow-600 transition-colors uppercase"
-                                                    >
-                                                        ⏸️ Pause
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={startTimer}
+                                                    className="flex-1 bg-green-500 text-white text-xs font-bold py-2 rounded hover:bg-green-600 transition-colors uppercase"
+                                                >
+                                                    ▶️ Start
+                                                </button>
                                                 <button
                                                     onClick={resetTimer}
                                                     className="flex-1 bg-gray-400 text-white text-xs font-bold py-2 rounded hover:bg-gray-500 transition-colors uppercase"
