@@ -3473,14 +3473,21 @@
                     
                     {/* Add Building Button */}
                     <button 
-                        onClick={() => setYearData(prev => ({ 
-                            ...prev, 
-                            [selectedYear]: [
-                                getNewBuildingTemplate(`New Building ${(yearData[selectedYear] || []).length + 1}`),
-                                ...(prev[selectedYear] || [])
-                            ] 
-                        }))} 
-                        className="w-full p-4 border-2 border-dashed border-blue-300 rounded-xl text-blue-500 font-bold uppercase text-sm hover:bg-blue-50 hover:border-blue-400 transition-all"
+                        onClick={() => {
+                            console.log('🏢 Adding new building...');
+                            setYearData(prev => {
+                                const currentBuildings = prev[selectedYear] || [];
+                                const buildingNumber = currentBuildings.length + 1;
+                                const newBuilding = getNewBuildingTemplate(`New Building ${buildingNumber}`);
+                                console.log('✅ Created new building:', newBuilding.name, newBuilding.id);
+                                
+                                return {
+                                    ...prev,
+                                    [selectedYear]: [newBuilding, ...currentBuildings]
+                                };
+                            });
+                        }} 
+                        className="w-full p-4 border-2 border-dashed border-blue-300 rounded-xl text-blue-500 font-bold uppercase text-sm hover:bg-blue-50 hover:border-blue-400 transition-all active:scale-98"
                     >
                         + Add New Building
                     </button>
