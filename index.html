@@ -1124,6 +1124,42 @@
                                                 await savePendingUpload(item.id, fileToUpload, thumbnail);
                                             }
                                             
+                                            // CRITICAL iOS FIX: Save to localStorage IMMEDIATELY (synchronously)
+                                            // This ensures photos persist even if app is killed immediately after adding
+                                            try {
+                                                const currentData = localStorage.getItem('fire_inspection_v4_data');
+                                                if (currentData) {
+                                                    const parsedData = JSON.parse(currentData);
+                                                    const yearBuildings = parsedData[selectedYear] || [];
+                                                    const buildingIndex = yearBuildings.findIndex(b => b.id === selectedBuildingId);
+                                                    
+                                                    if (buildingIndex !== -1) {
+                                                        const building = yearBuildings[buildingIndex];
+                                                        // Find the section and item
+                                                        for (const sectionKey in building.data) {
+                                                            const sectionItems = building.data[sectionKey];
+                                                            const itemIndex = sectionItems.findIndex(i => i.id === item.id);
+                                                            if (itemIndex !== -1) {
+                                                                // Update photos array directly
+                                                                const currentPhotos = sectionItems[itemIndex].photos || [];
+                                                                sectionItems[itemIndex].photos = [...currentPhotos, newPhoto];
+                                                                sectionItems[itemIndex]._uploading = false;
+                                                                sectionItems[itemIndex]._uploadProgress = 100;
+                                                                sectionItems[itemIndex]._uploadStatus = '✅ Saved! Click "Export & Save" to upload to cloud';
+                                                                
+                                                                // Save back to localStorage IMMEDIATELY
+                                                                localStorage.setItem('fire_inspection_v4_data', JSON.stringify(parsedData));
+                                                                console.log('💾 IMMEDIATE save to localStorage (iOS safety)');
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            } catch (error) {
+                                                console.error('❌ Immediate save failed:', error);
+                                            }
+                                            
+                                            // Also update React state (normal flow)
                                             onUpdateMeta({
                                                 photos: [...photos, newPhoto],
                                                 _uploading: false,
@@ -1303,6 +1339,33 @@
                                                                 
                                                                 // Remove from photos array
                                                                 const updatedPhotos = photos.filter(p => p.id !== photo.id);
+                                                                
+                                                                // CRITICAL iOS FIX: Save to localStorage IMMEDIATELY
+                                                                try {
+                                                                    const currentData = localStorage.getItem('fire_inspection_v4_data');
+                                                                    if (currentData) {
+                                                                        const parsedData = JSON.parse(currentData);
+                                                                        const yearBuildings = parsedData[selectedYear] || [];
+                                                                        const buildingIndex = yearBuildings.findIndex(b => b.id === selectedBuildingId);
+                                                                        
+                                                                        if (buildingIndex !== -1) {
+                                                                            const building = yearBuildings[buildingIndex];
+                                                                            for (const sectionKey in building.data) {
+                                                                                const sectionItems = building.data[sectionKey];
+                                                                                const itemIndex = sectionItems.findIndex(i => i.id === item.id);
+                                                                                if (itemIndex !== -1) {
+                                                                                    sectionItems[itemIndex].photos = updatedPhotos;
+                                                                                    localStorage.setItem('fire_inspection_v4_data', JSON.stringify(parsedData));
+                                                                                    console.log('💾 IMMEDIATE save after photo deletion (iOS safety)');
+                                                                                    break;
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                } catch (error) {
+                                                                    console.error('❌ Immediate save failed:', error);
+                                                                }
+                                                                
                                                                 onUpdateMeta({ photos: updatedPhotos });
                                                             }}
                                                             className="absolute bottom-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
@@ -2206,6 +2269,78 @@
                 }
             }, []);
             
+            // CRITICAL iOS FIX: Restore pending media from IndexedDB on app load
+            // This recreates blob URLs for videos that became invalid when app was killed
+            useEffect(() => {
+                const restorePendingMedia = async () => {
+                    try {
+                        const pending = await getPendingUploads();
+                        if (pending.length === 0) return;
+                        
+                        console.log(`📂 Restoring ${pending.length} pending media from IndexedDB...`);
+                        
+                        // Create map of itemId -> blob URL
+                        const mediaMap = new Map();
+                        for (const upload of pending) {
+                            if (upload.file) {
+                                // Recreate blob URL for this file
+                                const blobURL = URL.createObjectURL(upload.file);
+                                mediaMap.set(upload.id, {
+                                    blobURL: blobURL,
+                                    thumbnail: upload.thumbnail,
+                                    isVideo: upload.file.type.startsWith('video')
+                                });
+                            }
+                        }
+                        
+                        if (mediaMap.size === 0) return;
+                        
+                        // Update yearData with restored blob URLs
+                        setYearData(prevData => {
+                            const newData = JSON.parse(JSON.stringify(prevData));
+                            let restoredCount = 0;
+                            
+                            for (const year in newData) {
+                                for (const building of newData[year]) {
+                                    for (const sectionKey in building.data) {
+                                        for (const item of building.data[sectionKey]) {
+                                            if (mediaMap.has(item.id) && item.photos) {
+                                                const media = mediaMap.get(item.id);
+                                                // Update photos array with restored blob URL
+                                                item.photos = item.photos.map(photo => {
+                                                    if (photo._pendingSync && !photo.photoURL && media.isVideo) {
+                                                        // Restore video blob URL
+                                                        return { ...photo, photoURL: media.blobURL };
+                                                    } else if (photo._pendingSync && !photo.photoURL && !media.isVideo) {
+                                                        // For images without photoURL, use thumbnail
+                                                        return photo; // thumbnail should already be there
+                                                    }
+                                                    return photo;
+                                                });
+                                                restoredCount++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (restoredCount > 0) {
+                                console.log(`✅ Restored ${restoredCount} media item(s) from IndexedDB`);
+                            }
+                            
+                            return newData;
+                        });
+                        
+                    } catch (error) {
+                        console.error('❌ Failed to restore pending media:', error);
+                    }
+                };
+                
+                // Run once after a short delay to ensure yearData is loaded
+                const timer = setTimeout(restorePendingMedia, 1000);
+                return () => clearTimeout(timer);
+            }, []); // Run once on mount
+            
             // Failsafe: If user is logged in but view is stuck on login, force to year-select
             useEffect(() => {
                 if (authInitialized && user && user.email && view === 'login') {
@@ -3081,9 +3216,10 @@
                     });
                 }
                 
-                setYearData(prev => ({
-                    ...prev,
-                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
+                // Update React state
+                const updatedData = {
+                    ...yearData,
+                    [selectedYear]: yearData[selectedYear].map(b => b.id === selectedBuildingId ? {
                         ...b, 
                         data: { ...b.data, [sect]: b.data[sect].map(i => i.id === id ? { ...i, ...meta } : i) },
                         // Track when this field was modified and by whom
@@ -3092,7 +3228,13 @@
                             [`data.${sect}.${id}`]: { timestamp, user: userName, changes: meta }
                         }
                     } : b)
-                }));
+                };
+                
+                // CRITICAL: Save immediately to localStorage (iOS best practice)
+                immediatelySaveToLocalStorage(updatedData);
+                
+                // Then update React state (triggers useEffect but data already saved)
+                setYearData(updatedData);
             };
 
             const updateBuildingDetail = (key, value) => {
@@ -3109,9 +3251,10 @@
                     building: activeBuilding?.name
                 });
                 
-                setYearData(prev => ({
-                    ...prev,
-                    [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
+                // Update data
+                const updatedData = {
+                    ...yearData,
+                    [selectedYear]: yearData[selectedYear].map(b => b.id === selectedBuildingId ? {
                         ...(key === 'buildingName' ? { ...b, name: value, details: { ...b.details, [key]: value } } : { ...b, details: { ...b.details, [key]: value } }),
                         // Track when this field was modified and by whom
                         fieldModifications: {
@@ -3119,7 +3262,13 @@
                             [key === 'buildingName' ? 'name' : `details.${key}`]: { timestamp, user: userName, value }
                         }
                     } : b)
-                }));
+                };
+                
+                // CRITICAL: Save immediately to localStorage (iOS best practice)
+                immediatelySaveToLocalStorage(updatedData);
+                
+                // Then update React state
+                setYearData(updatedData);
             };
 
             // --- COPY BUILDING FUNCTION ---
@@ -4589,6 +4738,25 @@
                     }
                 });
             }, [activeBuilding]);
+            
+            // CRITICAL iOS BEST PRACTICE: Immediate localStorage save helper
+            // This ensures data persists even if app is killed immediately after an update
+            // Used for all data mutations to prevent data loss on iOS app suspension/termination
+            const immediatelySaveToLocalStorage = (updatedYearData) => {
+                try {
+                    const dataString = JSON.stringify(updatedYearData);
+                    localStorage.setItem('fire_inspection_v4_data', dataString);
+                    const sizeMB = (dataString.length / 1024 / 1024).toFixed(2);
+                    console.log(`💾 IMMEDIATE save to localStorage (${sizeMB}MB) - iOS safety`);
+                    return true;
+                } catch (error) {
+                    console.error('❌ Immediate save failed:', error);
+                    if (error.name === 'QuotaExceededError' || error.code === 22) {
+                        alert('⚠️ Storage full! Cannot save changes. Please delete old photos or export data.');
+                    }
+                    return false;
+                }
+            };
             
             // Log changes to Firestore
             const logChange = async (action, details) => {

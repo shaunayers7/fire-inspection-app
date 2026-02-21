@@ -78,7 +78,144 @@
 - Example: Displaying fields in specific order (UI change) ≠ Changing field names in database (data change)
 - Always preserve the underlying data structure even when improving UI/UX
 
-## 7. CLOUD SYNC (UPDATED FEB 2026)
+## 7. iOS BEST PRACTICES & APP TEMPLATE STANDARDS (CRITICAL)
+
+### PURPOSE:
+This app serves as a **STARTER TEMPLATE** for future app development. All patterns, solutions, and best practices documented here are designed to eliminate trial-and-error in future builds. When building new apps from this template, follow these proven patterns.
+
+### IMMEDIATE SAVE PATTERN (MANDATORY FOR ALL DATA UPDATES):
+**Problem Solved:** iOS PWAs can be killed instantly when user swipes up to close app. React state updates are asynchronous and may not complete before app termination, causing data loss.
+
+**Solution Implementation:**
+1. **Helper Function Pattern:**
+   ```javascript
+   const immediatelySaveToLocalStorage = (updatedYearData) => {
+       try {
+           const dataString = JSON.stringify(updatedYearData);
+           localStorage.setItem('YOUR_STORAGE_KEY', dataString);
+           console.log(`💾 IMMEDIATE save to localStorage - iOS safety`);
+           return true;
+       } catch (error) {
+           console.error('❌ Immediate save failed:', error);
+           if (error.name === 'QuotaExceededError' || error.code === 22) {
+               alert('⚠️ Storage full! Cannot save changes.');
+           }
+           return false;
+       }
+   };
+   ```
+
+2. **Apply to ALL state mutations:**
+   - ✅ Form input changes (text fields, checkboxes, dropdowns)
+   - ✅ Photo/video uploads (save metadata + IndexedDB)
+   - ✅ Item status updates (pass/fail/pending)
+   - ✅ Notes, timestamps, user selections
+   - ✅ Building details, inspection info
+   - ✅ Timer states, custom fields
+   - ❌ DO NOT skip any data mutation
+
+3. **Standard Update Pattern:**
+   ```javascript
+   const updateSomething = (newValue) => {
+       // 1. Calculate updated data (synchronous)
+       const updatedData = {
+           ...currentData,
+           field: newValue
+       };
+       
+       // 2. Save IMMEDIATELY to localStorage (synchronous)
+       immediatelySaveToLocalStorage(updatedData);
+       
+       // 3. THEN update React state (async - triggers useEffect)
+       setYearData(updatedData);
+   };
+   ```
+
+4. **Why this order matters:**
+   - localStorage save is **synchronous** (completes before next line)
+   - React setState is **asynchronous** (scheduled for later)
+   - If app is killed after step 2, data is already saved
+   - If app is killed before step 2, data loss occurs
+
+### MEDIA HANDLING (PHOTOS/VIDEOS):
+**Pattern:** Local-first with cloud upload on demand
+1. **Save to IndexedDB immediately** (within 5 seconds)
+2. **Store thumbnail in localStorage** (small, fast)
+3. **Mark as pending sync** (orange badge ⏱)
+4. **Upload to cloud on explicit action** (Export & Save button)
+5. **Update badge to synced** (green ☁) after upload
+
+**IndexedDB Structure:**
+```javascript
+{
+    id: itemId,
+    file: blob,
+    thumbnail: dataURL,
+    timestamp: Date.now(),
+    uploaded: false
+}
+```
+
+**Restore on App Load:**
+```javascript
+useEffect(() => {
+    const restorePendingMedia = async () => {
+        const pending = await getPendingUploads();
+        // Recreate blob URLs for videos
+        // Restore thumbnails for photos
+        // Update state with restored media
+    };
+    setTimeout(restorePendingMedia, 1000);
+}, []); // Run once on mount
+```
+
+### PWA OFFLINE-FIRST ARCHITECTURE:
+1. **Service Worker:** Cache all static assets (HTML, CSS, JS, icons)
+2. **localStorage:** Primary data storage (5-10MB limit)
+3. **IndexedDB:** Media files and large objects (50MB+ capacity)
+4. **Firebase:** Cloud backup and multi-user sync (secondary)
+5. **Network Detection:** Show online/offline indicator
+6. **Background Sync:** Upload pending changes every 30 seconds when online
+
+### DATA PERSISTENCE CHECKLIST (BEFORE DEPLOYMENT):
+- [ ] All form inputs call `immediatelySaveToLocalStorage()`
+- [ ] All status changes save immediately
+- [ ] Photo uploads save to IndexedDB + localStorage
+- [ ] App tested: Add photo → Kill app → Reopen → Photo still there
+- [ ] App tested: Change checkbox → Kill app → Reopen → State preserved
+- [ ] App tested: Edit text → Kill app → Reopen → Text saved
+- [ ] Storage quota exceeded handled gracefully (alert user)
+- [ ] IndexedDB restore runs on app load (useEffect hook)
+
+### MULTI-USER SYNC STRATEGY:
+1. **Local changes save immediately** (iOS safety)
+2. **Cloud sync happens on explicit action** (Export & Save)
+3. **Conflict detection at field level** (timestamp comparison)
+4. **User chooses resolution** (local vs cloud per field)
+5. **Protected data preserved** (baseline buildings, critical fields)
+
+### APP TEMPLATE USAGE GUIDE:
+When creating a new app from this template:
+1. **Keep the immediate save pattern** (change storage key only)
+2. **Keep IndexedDB media handling** (proven iOS solution)
+3. **Keep offline-first architecture** (service worker + localStorage)
+4. **Keep conflict resolution logic** (multi-user proven)
+5. **Update field names but preserve pattern** (immediate save → state update)
+6. **Test iOS extensively** (most common failure point)
+
+### LESSONS LEARNED (DO NOT REPEAT):
+- ❌ Never rely on React state for data persistence
+- ❌ Never upload large files before saving locally
+- ❌ Never use blob URLs without IndexedDB backup (videos)
+- ❌ Never skip immediate save for "simple" updates
+- ❌ Never assume iOS gives time for async operations
+- ✅ Always save synchronously before state update
+- ✅ Always test by killing app immediately after action
+- ✅ Always provide visual feedback (badges, progress bars)
+- ✅ Always handle storage quota exceeded errors
+- ✅ Always restore pending media on app load
+
+## 8. CLOUD SYNC (UPDATED FEB 2026)
 * **Provider:** Firebase Firestore
 * **Auto-Push:** 5 seconds after last edit, changes push to cloud automatically
 * **Manual Pull:** "☁ Sync" button pulls latest data from cloud
@@ -88,11 +225,11 @@
 * **Protected Buildings:** Bellevue & Pincher Creek only restored on FIRST LOAD (new user)
 * **See:** [technical/SYNC-FEATURE.md](technical/SYNC-FEATURE.md) for complete documentation
 
-## 7. PROJECT MANAGEMENT
+## 9. PROJECT MANAGEMENT
 * **Master Task List:** Located in `docs/TODO.md`.
 * **Workflow Rule:** Before starting a new feature, the AI should check `TODO.md` to see what is next on the list and update the checkbox once the code is written.
 
-## 8. FEATURE AUTHORIZATION POLICY (CRITICAL)
+## 10. FEATURE AUTHORIZATION POLICY (CRITICAL)
 * **Explicit Approval Required:** No features, text, UI elements, or functionality may be added unless explicitly requested by the user.
 * **No Unauthorized Changes:** Do not modify, add, or remove any words, labels, status messages, or content that was not specifically asked for.
 * **User Intent Only:** All implementations must strictly follow user requirements without adding "helpful" extras or interpretations.
