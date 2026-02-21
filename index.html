@@ -66,7 +66,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getFirestore, doc, setDoc, getDoc, deleteDoc, collection, getDocs, addDoc, serverTimestamp, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
         import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-storage.js";
+        import { getStorage, ref, uploadBytes, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-storage.js";
         
         window.FirebaseSDK = { 
             initializeApp, 
@@ -91,6 +91,7 @@
             getStorage,
             ref,
             uploadBytes,
+            uploadBytesResumable,
             getDownloadURL,
             deleteObject
         };
@@ -326,6 +327,80 @@
         
         const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
+
+        // IndexedDB helper for offline photo storage
+        const PHOTO_DB_NAME = 'fire-inspection-photos';
+        const PHOTO_DB_VERSION = 1;
+        const PENDING_STORE = 'pending-uploads';
+        
+        const openPhotoDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(PHOTO_DB_NAME, PHOTO_DB_VERSION);
+                
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    
+                    // Create store for pending uploads
+                    if (!db.objectStoreNames.contains(PENDING_STORE)) {
+                        const store = db.createObjectStore(PENDING_STORE, { keyPath: 'id' });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                        console.log('📦 Created IndexedDB store for offline photos');
+                    }
+                };
+            });
+        };
+        
+        const savePendingUpload = async (itemId, file, thumbnail) => {
+            try {
+                const db = await openPhotoDB();
+                const tx = db.transaction(PENDING_STORE, 'readwrite');
+                const store = tx.objectStore(PENDING_STORE);
+                
+                await store.put({
+                    id: itemId,
+                    file: file,
+                    thumbnail: thumbnail,
+                    timestamp: Date.now(),
+                    uploaded: false
+                });
+                
+                console.log('💾 Saved photo to IndexedDB for later upload:', itemId);
+            } catch (error) {
+                console.error('Failed to save to IndexedDB:', error);
+            }
+        };
+        
+        const getPendingUploads = async () => {
+            try {
+                const db = await openPhotoDB();
+                const tx = db.transaction(PENDING_STORE, 'readonly');
+                const store = tx.objectStore(PENDING_STORE);
+                const request = store.getAll();
+                
+                return new Promise((resolve, reject) => {
+                    request.onsuccess = () => resolve(request.result || []);
+                    request.onerror = () => reject(request.error);
+                });
+            } catch (error) {
+                console.error('Failed to get pending uploads:', error);
+                return [];
+            }
+        };
+        
+        const deletePendingUpload = async (itemId) => {
+            try {
+                const db = await openPhotoDB();
+                const tx = db.transaction(PENDING_STORE, 'readwrite');
+                const store = tx.objectStore(PENDING_STORE);
+                await store.delete(itemId);
+                console.log('✅ Removed from IndexedDB:', itemId);
+            } catch (error) {
+                console.error('Failed to delete from IndexedDB:', error);
+            }
+        };
 
         // Permanent Core Sections IDs
         const PROTECTED_SECTIONS = ['inspectionDetails', 'checklist', 'control', 'devices', 'battery', 'lights'];
@@ -975,95 +1050,176 @@
                                         
                                         try {
                                             const mediaType = isVideo ? 'video' : 'image';
+                                            let thumbnail = null;
+                                            let fileToUpload = file;
                                             
-                                            // Option 1: Upload to Firebase Storage (if available)
-                                            if (window.firebaseStorage && window.FirebaseSDK) {
-                                                onUpdateMeta({ _uploadProgress: 10, _uploadStatus: 'Uploading to cloud...' });
+                                            // Step 1: Create thumbnail immediately for instant feedback
+                                            if (!isVideo) {
+                                                onUpdateMeta({ _uploadProgress: 5, _uploadStatus: 'Creating thumbnail...' });
+                                                thumbnail = await createThumbnail(file);
+                                                onUpdateMeta({ thumbnail: thumbnail });
+                                                console.log('📸 Thumbnail created');
+                                            }
+                                            
+                                            // Step 2: Compress image before uploading
+                                            if (!isVideo) {
+                                                onUpdateMeta({ _uploadProgress: 15, _uploadStatus: 'Compressing image...' });
+                                                const compressed = await compressImage(file);
                                                 
-                                                const { ref, uploadBytes, getDownloadURL } = window.FirebaseSDK;
+                                                // Convert compressed dataURL to Blob for upload
+                                                const response = await fetch(compressed);
+                                                fileToUpload = await response.blob();
                                                 
-                                                // Create unique file path: inspections/{itemId}/{timestamp}_{filename}
+                                                const originalMB = (file.size / 1024 / 1024).toFixed(2);
+                                                const compressedMB = (fileToUpload.size / 1024 / 1024).toFixed(2);
+                                                console.log(`🗜️ Compressed: ${originalMB}MB → ${compressedMB}MB`);
+                                            }
+                                            
+                                            // Step 3: Try Firebase Storage upload (if online and available)
+                                            const isOnline = navigator.onLine;
+                                            
+                                            if (isOnline && window.firebaseStorage && window.FirebaseSDK) {
+                                                onUpdateMeta({ _uploadProgress: 25, _uploadStatus: 'Uploading to cloud...' });
+                                                
+                                                const { ref, uploadBytesResumable, getDownloadURL } = window.FirebaseSDK;
+                                                
+                                                // Create unique file path
                                                 const timestamp = Date.now();
-                                                const fileName = `${timestamp}_${file.name}`;
+                                                const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
                                                 const storageRef = ref(window.firebaseStorage, `inspections/${item.id}/${fileName}`);
                                                 
-                                                // Upload full resolution to Firebase Storage with timeout
-                                                onUpdateMeta({ _uploadProgress: 30, _uploadStatus: `Uploading ${fileSizeMB}MB...` });
+                                                // Use uploadBytesResumable for progress tracking
+                                                const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
                                                 
-                                                // Timeout wrapper (60 seconds for uploads)
-                                                const uploadWithTimeout = Promise.race([
-                                                    uploadBytes(storageRef, file),
-                                                    new Promise((_, reject) => 
-                                                        setTimeout(() => reject(new Error('Upload timeout - please check your internet connection')), 60000)
-                                                    )
-                                                ]);
-                                                
-                                                await uploadWithTimeout;
-                                                
-                                                onUpdateMeta({ _uploadProgress: 70, _uploadStatus: 'Getting URL...' });
-                                                const photoURL = await getDownloadURL(storageRef);
-                                                
-                                                console.log('✅ Uploaded to Firebase Storage:', photoURL);
-                                                
-                                                onUpdateMeta({
-                                                    photoURL: photoURL,
-                                                    storagePath: `inspections/${item.id}/${fileName}`,
-                                                    mediaType: mediaType,
-                                                    _uploading: false,
-                                                    _uploadProgress: 100,
-                                                    _uploadStatus: 'Complete!'
+                                                await new Promise((resolve, reject) => {
+                                                    // Set 90 second timeout
+                                                    const timeout = setTimeout(() => {
+                                                        uploadTask.cancel();
+                                                        reject(new Error('Upload timeout after 90 seconds'));
+                                                    }, 90000);
+                                                    
+                                                    uploadTask.on('state_changed',
+                                                        (snapshot) => {
+                                                            // Track real upload progress
+                                                            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                                                            const uploaded = (snapshot.bytesTransferred / 1024 / 1024).toFixed(1);
+                                                            const total = (snapshot.totalBytes / 1024 / 1024).toFixed(1);
+                                                            
+                                                            onUpdateMeta({ 
+                                                                _uploadProgress: 25 + (progress * 0.65), // Scale to 25-90%
+                                                                _uploadStatus: `Uploading ${uploaded}/${total}MB...`
+                                                            });
+                                                        },
+                                                        (error) => {
+                                                            clearTimeout(timeout);
+                                                            reject(error);
+                                                        },
+                                                        async () => {
+                                                            clearTimeout(timeout);
+                                                            
+                                                            // Upload complete - get download URL
+                                                            onUpdateMeta({ _uploadProgress: 95, _uploadStatus: 'Finalizing...' });
+                                                            
+                                                            try {
+                                                                const photoURL = await getDownloadURL(uploadTask.snapshot.ref);
+                                                                console.log('✅ Uploaded to Firebase Storage:', photoURL);
+                                                                
+                                                                // Delete from IndexedDB if it was pending
+                                                                await deletePendingUpload(item.id);
+                                                                
+                                                                onUpdateMeta({
+                                                                    photoURL: photoURL,
+                                                                    storagePath: `inspections/${item.id}/${fileName}`,
+                                                                    mediaType: mediaType,
+                                                                    thumbnail: thumbnail,
+                                                                    _uploading: false,
+                                                                    _uploadProgress: 100,
+                                                                    _uploadStatus: 'Complete!',
+                                                                    _syncedToCloud: true
+                                                                });
+                                                                
+                                                                resolve();
+                                                            } catch (error) {
+                                                                reject(error);
+                                                            }
+                                                        }
+                                                    );
                                                 });
                                             } else {
-                                                // Fallback: Compress and store locally (no cloud)
-                                                console.warn('⚠️ Firebase Storage not available, storing locally');
+                                                // Offline or Firebase not available - save to IndexedDB
+                                                console.warn(isOnline ? '⚠️ Firebase Storage not available' : '📴 Offline - saving locally');
                                                 
-                                                onUpdateMeta({ _uploadProgress: 50, _uploadStatus: 'Compressing...' });
+                                                onUpdateMeta({ _uploadProgress: 50, _uploadStatus: isOnline ? 'Saving locally...' : 'Offline - saving for later...' });
                                                 
                                                 if (isVideo) {
-                                                    // Videos: can't compress easily, store direct URL
+                                                    // Videos: store object URL temporarily
                                                     const videoURL = URL.createObjectURL(file);
+                                                    await savePendingUpload(item.id, file, null);
+                                                    
                                                     onUpdateMeta({
                                                         photoURL: videoURL,
                                                         mediaType: 'video',
                                                         _uploading: false,
                                                         _uploadProgress: 100,
-                                                        _uploadStatus: 'Complete!'
+                                                        _uploadStatus: 'Saved locally',
+                                                        _syncedToCloud: false,
+                                                        _pendingSync: true
                                                     });
                                                 } else {
-                                                    // Images: compress and store as base64
-                                                    const compressed = await compressImage(file);
-                                                    const reader = new FileReader();
-                                                    reader.onloadend = () => {
-                                                        onUpdateMeta({
-                                                            photo: reader.result,
-                                                            mediaType: 'image',
-                                                            _uploading: false,
-                                                            _uploadProgress: 100,
-                                                            _uploadStatus: 'Complete!'
-                                                        });
-                                                    };
-                                                    reader.readAsDataURL(compressed || file);
+                                                    // Images: save compressed version to IndexedDB
+                                                    await savePendingUpload(item.id, fileToUpload, thumbnail);
+                                                    
+                                                    onUpdateMeta({
+                                                        thumbnail: thumbnail,
+                                                        mediaType: 'image',
+                                                        _uploading: false,
+                                                        _uploadProgress: 100,
+                                                        _uploadStatus: isOnline ? 'Saved locally' : 'Will sync when online',
+                                                        _syncedToCloud: false,
+                                                        _pendingSync: true
+                                                    });
                                                 }
+                                                
+                                                console.log('💾 Saved to IndexedDB - will sync when online');
                                             }
                                         } catch (error) {
                                             console.error('Upload error:', error);
                                             
-                                            // Provide specific error messages based on error type
-                                            let errorMsg = '❌ Upload failed\n\n';
-                                            if (error.message.includes('timeout')) {
-                                                errorMsg += '⏱️ Upload timed out after 60 seconds.\n\nPossible causes:\n- Slow internet connection\n- Large file size (try a smaller image)\n- Server issues\n\nTry again with a better connection or compress the image first.';
-                                            } else if (error.code === 'storage/unauthorized') {
-                                                errorMsg += '🔒 Permission denied.\n\nThis might be a Firebase Storage configuration issue.\nContact your administrator.';
-                                            } else if (error.code === 'storage/canceled') {
-                                                errorMsg += 'Upload was canceled.';
-                                            } else if (error.code === 'storage/unknown') {
-                                                errorMsg += 'Unknown error occurred.\n\nPlease check:\n- Your internet connection\n- Try a smaller file\n- Contact support if this persists';
-                                            } else {
-                                                errorMsg += `${error.message}\n\nTry:\n- Using a smaller image\n- Checking your internet connection\n- Trying again in a moment`;
+                                            // On error, try to save locally as fallback
+                                            try {
+                                                console.log('🔄 Attempting local fallback...');
+                                                const thumbnail = !isVideo ? await createThumbnail(file) : null;
+                                                await savePendingUpload(item.id, file, thumbnail);
+                                                
+                                                onUpdateMeta({
+                                                    thumbnail: thumbnail,
+                                                    mediaType: mediaType,
+                                                    _uploading: false,
+                                                    _uploadProgress: 100,
+                                                    _uploadStatus: 'Saved locally (sync pending)',
+                                                    _syncedToCloud: false,
+                                                    _pendingSync: true
+                                                });
+                                                
+                                                // Show friendly error message
+                                                let errorMsg = '⚠️ Cloud upload failed, but saved locally\n\n';
+                                                if (error.message.includes('timeout')) {
+                                                    errorMsg += 'Upload took too long. Will retry when you have a better connection.';
+                                                } else if (error.code === 'storage/unauthorized') {
+                                                    errorMsg += '🔒 Firebase Storage not configured.\nPhoto saved locally and will sync when Storage is enabled.';
+                                                } else if (error.code === 'storage/canceled') {
+                                                    errorMsg += 'Upload was canceled. Photo saved locally.';
+                                                } else {
+                                                    errorMsg += 'Will retry upload automatically when back online.';
+                                                }
+                                                
+                                                console.log(errorMsg);
+                                                // Don't show alert - just log it since we handled it gracefully
+                                            } catch (fallbackError) {
+                                                console.error('Fallback storage failed:', fallbackError);
+                                                alert('❌ Failed to save photo\n\nCould not save to cloud or locally.\nPlease try again.');
+                                                onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
                                             }
-                                            
-                                            alert(errorMsg);
-                                            onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
                                         }
                                         
                                         e.target.value = ''; // Reset input for reuse
@@ -1097,8 +1253,8 @@
                                     placeholder="Add notes..."
                                 />
                             )}
-                            {/* Show uploaded media */}
-                            {(item.photoURL || item.photo) && (
+                            {/* Show uploaded media or thumbnail */}
+                            {(item.photoURL || item.photo || item.thumbnail) && (
                                 <>
                                     <div className="mt-2 relative group w-24 h-24">
                                         {item.mediaType === 'video' ? (
@@ -1117,20 +1273,35 @@
                                         ) : (
                                             <div className="relative w-full h-full">
                                                 <img 
-                                                    src={item.photoURL || item.photo} 
+                                                    src={item.photoURL || item.thumbnail || item.photo} 
                                                     className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
                                                     onClick={() => {
-                                                        onTriggerModal({
-                                                            title: "Media Viewer",
-                                                            type: 'media',
-                                                            mediaURL: item.photoURL || item.photo,
-                                                            mediaType: item.mediaType || 'image'
-                                                        });
+                                                        if (item.photoURL || item.photo) {
+                                                            onTriggerModal({
+                                                                title: "Media Viewer",
+                                                                type: 'media',
+                                                                mediaURL: item.photoURL || item.photo,
+                                                                mediaType: item.mediaType || 'image'
+                                                            });
+                                                        }
                                                     }}
                                                     alt="Inspection media"
                                                 />
-                                                {item.photoURL && (
-                                                    <div className="absolute bottom-1 right-1 bg-blue-500 text-white text-[8px] px-1 rounded font-bold" title="Stored in cloud">☁</div>
+                                                {/* Sync status indicators */}
+                                                {item._syncedToCloud && (
+                                                    <div className="absolute bottom-1 right-1 bg-green-500 text-white text-[8px] px-1.5 rounded-full font-bold flex items-center gap-0.5" title="Synced to cloud">
+                                                        <span>☁</span>
+                                                    </div>
+                                                )}
+                                                {item._pendingSync && !item._syncedToCloud && (
+                                                    <div className="absolute bottom-1 right-1 bg-orange-500 text-white text-[8px] px-1.5 rounded-full font-bold animate-pulse" title="Pending cloud sync">
+                                                        ⏱
+                                                    </div>
+                                                )}
+                                                {!item.photoURL && item.thumbnail && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
+                                                        <span className="text-white text-[9px] font-bold text-center px-2">Offline<br/>Will sync</span>
+                                                    </div>
                                                 )}
                                             </div>
                                         )}
@@ -1343,6 +1514,7 @@
                 const saved = localStorage.getItem(THEME_KEY);
                 return saved ? saved === 'dark' : false;
             });
+            const [isOnline, setIsOnline] = useState(navigator.onLine);
             
             // Lazy loading state - show 20 buildings initially, load more on demand
             const [buildingsToShow, setBuildingsToShow] = useState(20);
@@ -2096,6 +2268,131 @@
                     localStorage.setItem(THEME_KEY, 'light');
                 }
             }, [darkMode]);
+
+            // Background sync for pending photo uploads
+            useEffect(() => {
+                let syncInterval;
+                
+                const syncPendingPhotos = async () => {
+                    // Only run if Firebase Storage is available and we're online
+                    if (!window.firebaseStorage || !window.FirebaseSDK || !navigator.onLine) {
+                        return;
+                    }
+                    
+                    try {
+                        const pending = await getPendingUploads();
+                        
+                        if (pending.length === 0) {
+                            return;
+                        }
+                        
+                        console.log(`📤 Found ${pending.length} pending photo(s) to upload`);
+                        
+                        for (const upload of pending) {
+                            try {
+                                console.log(`⬆️ Syncing photo for item: ${upload.id}`);
+                                
+                                const { ref, uploadBytesResumable, getDownloadURL } = window.FirebaseSDK;
+                                
+                                // Create storage reference
+                                const timestamp = Date.now();
+                                const fileName = `${timestamp}_synced.jpg`;
+                                const storageRef = ref(window.firebaseStorage, `inspections/${upload.id}/${fileName}`);
+                                
+                                // Upload the file
+                                const uploadTask = uploadBytesResumable(storageRef, upload.file);
+                                
+                                await new Promise((resolve, reject) => {
+                                    uploadTask.on('state_changed',
+                                        (snapshot) => {
+                                            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                                            console.log(`📊 Upload progress: ${progress}%`);
+                                        },
+                                        (error) => {
+                                            console.error('Background upload failed:', error);
+                                            reject(error);
+                                        },
+                                        async () => {
+                                            const photoURL = await getDownloadURL(uploadTask.snapshot.ref);
+                                            console.log('✅ Background upload complete:', photoURL);
+                                            
+                                            // Update the item in yearData
+                                            setYearData(prevData => {
+                                                const newData = JSON.parse(JSON.stringify(prevData));
+                                                
+                                                // Find the item across all years and buildings
+                                                for (const year in newData) {
+                                                    for (const building of newData[year]) {
+                                                        for (const sectionId in building.data) {
+                                                            const items = building.data[sectionId];
+                                                            const itemIndex = items.findIndex(item => item.id === upload.id);
+                                                            
+                                                            if (itemIndex !== -1) {
+                                                                items[itemIndex].photoURL = photoURL;
+                                                                items[itemIndex].storagePath = `inspections/${upload.id}/${fileName}`;
+                                                                items[itemIndex]._syncedToCloud = true;
+                                                                items[itemIndex]._pendingSync = false;
+                                                                console.log(`📝 Updated item ${upload.id} with cloud URL`);
+                                                                
+                                                                // Save to localStorage
+                                                                localStorage.setItem('fire_inspection_v4_data', JSON.stringify(newData));
+                                                                
+                                                                return newData;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                return newData;
+                                            });
+                                            
+                                            // Delete from IndexedDB
+                                            await deletePendingUpload(upload.id);
+                                            
+                                            resolve();
+                                        }
+                                    );
+                                });
+                            } catch (error) {
+                                console.error(`Failed to sync photo ${upload.id}:`, error);
+                                // Don't delete from IndexedDB on failure - will retry next time
+                            }
+                        }
+                        
+                        console.log('✅ Background photo sync complete');
+                    } catch (error) {
+                        console.error('Background sync error:', error);
+                    }
+                };
+                
+                // Run sync immediately on mount
+                syncPendingPhotos();
+                
+                // Run sync every 30 seconds
+                syncInterval = setInterval(syncPendingPhotos, 30000);
+                
+                // Listen for online event to sync immediately
+                const handleOnline = () => {
+                    console.log('📶 Back online - syncing pending photos...');
+                    setIsOnline(true);
+                    setTimeout(syncPendingPhotos, 2000); // Wait 2s for connection to stabilize
+                };
+                
+                const handleOffline = () => {
+                    console.log('📴 Offline mode');
+                    setIsOnline(false);
+                };
+                
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+                
+                // Cleanup
+                return () => {
+                    clearInterval(syncInterval);
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                };
+            }, []);
 
             // Reset lazy loading when year changes
             useEffect(() => {
@@ -4975,6 +5272,11 @@
                             >
                                 {darkMode ? '☼' : '☾'}
                             </button>
+                            {!isOnline && (
+                                <div className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold bg-orange-100 text-orange-600 animate-pulse" title="Offline - photos will sync when back online">
+                                    📴 Offline
+                                </div>
+                            )}
                             {hasUnsavedCloudChanges && (
                                 <div className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[9px] sm:text-[10px] font-bold bg-red-100 text-red-600 animate-pulse">
                                     ⚠️ Unsaved
