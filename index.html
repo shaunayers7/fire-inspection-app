@@ -873,14 +873,18 @@
                             <div className="flex-1">
                                 {/* MINIMIZED VIEW - Just the compact bubble */}
                                 <div 
-                                    onClick={() => setIsTimerCollapsed(false)}
+                                    onClick={() => setIsTimerCollapsed(!isTimerCollapsed)}
+                                    title="Click to expand timer controls"
                                     className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md text-white ${
                                         item.timer.mode === 'down' && getTimerDisplay() === '00:00'
                                             ? 'bg-red-500 border-red-600 animate-pulse'
                                             : 'bg-gradient-to-r from-green-500 to-emerald-500 border-green-600'
                                     }`}
                                 >
-                                    <span className="font-bold text-sm">{item.label}</span>
+                                    <span className="font-bold text-sm flex items-center gap-2">
+                                        {item.label}
+                                        <span className="text-[10px] opacity-70">▲</span>
+                                    </span>
                                     <span className="font-mono font-bold text-lg">{getTimerDisplay()}</span>
                                 </div>
                             </div>
@@ -1125,7 +1129,7 @@
                                         }`}>
                                             <div className="flex items-center justify-between">
                                                 <span 
-                                                    className={`text-xs font-bold ${
+                                                    className={`text-xs font-bold flex items-center gap-1 ${
                                                         item.timer.isRunning
                                                             ? item.timer.mode === 'down' && getTimerDisplay() === '00:00'
                                                                 ? 'text-red-800 cursor-pointer hover:text-red-900'
@@ -1134,14 +1138,19 @@
                                                     }`}
                                                     onClick={() => {
                                                         if (item.timer.isRunning) {
-                                                            setIsTimerCollapsed(true);
+                                                            setIsTimerCollapsed(!isTimerCollapsed);
                                                         }
                                                     }}
+                                                    title={item.timer.isRunning ? "Click to minimize timer" : ""}
                                                 >
                                                     🔋 Battery Test Timer {item.timer.isRunning && (item.timer.mode === 'down' && getTimerDisplay() === '00:00' ? '(Finished!)' : '(Running)')}
+                                                    {item.timer.isRunning && <span className="text-[10px] opacity-60">▼</span>}
                                                 </span>
                                                 <button
-                                                    onClick={removeTimer}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        removeTimer();
+                                                    }}
                                                     className="text-red-400 hover:text-red-600 text-xs"
                                                 >
                                                     ✕
