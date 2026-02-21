@@ -3082,6 +3082,16 @@
                 };
             };
 
+            // Scroll a section element to just below the sticky header bar
+            const scrollToSection = (id) => {
+                const el = document.getElementById(id);
+                const header = document.querySelector('.sticky.top-0');
+                if (!el) return;
+                const headerHeight = header ? header.offsetHeight : 0;
+                const top = el.getBoundingClientRect().top + window.scrollY - headerHeight - 4;
+                window.scrollTo({ top, behavior: 'smooth' });
+            };
+
             // Get completion count for a section (completed/total)
             const getSectionCompletion = (sectionId) => {
                 if (!activeBuilding || !activeBuilding.data[sectionId]) {
@@ -6020,9 +6030,7 @@
                         <div className="rounded-xl border overflow-hidden shadow-sm" id="section-inspectionDetails">
                             <button onClick={() => {
                                 setExpandedSections(p => p.inspectionDetails ? {} : { inspectionDetails: true });
-                                setTimeout(() => {
-                                    document.getElementById('section-inspectionDetails')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }, 100);
+                                setTimeout(() => { scrollToSection('section-inspectionDetails'); }, 100);
                             }} className="w-full bg-green-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>0. Inspection Details</span>
                                 <span className="text-lg opacity-50">{expandedSections['inspectionDetails'] ? '−' : '+'}</span>
@@ -6120,9 +6128,7 @@
                         <div className="rounded-xl border overflow-hidden shadow-sm" id="section-details">
                             <button onClick={() => {
                                 setExpandedSections(p => p.details ? {} : { details: true });
-                                setTimeout(() => {
-                                    document.getElementById('section-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }, 100);
+                                setTimeout(() => { scrollToSection('section-details'); }, 100);
                             }} className="w-full bg-blue-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>1. Building Details</span>
                                 <span className="text-lg opacity-50">{expandedSections['details'] ? '−' : '+'}</span>
@@ -6158,9 +6164,7 @@
                                         <button 
                                             onClick={() => {
                                                 setExpandedSections(p => p[s.id] ? {} : { [s.id]: true });
-                                                setTimeout(() => {
-                                                    document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                                }, 100);
+                                                setTimeout(() => { scrollToSection(`section-${s.id}`); }, 100);
                                             }} 
                                             className="flex-1 text-left font-bold text-xs uppercase flex items-center gap-2"
                                         >
@@ -6230,9 +6234,7 @@
                                             )}
                                             <button onClick={() => {
                                                 setExpandedSections(p => p[s.id] ? {} : { [s.id]: true });
-                                                setTimeout(() => {
-                                                    document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                                }, 100);
+                                                setTimeout(() => { scrollToSection(`section-${s.id}`); }, 100);
                                             }} className="text-lg opacity-50">
                                                 {expandedSections[s.id] ? '−' : '+'}
                                             </button>
@@ -6277,9 +6279,7 @@
                                                         key={item.id}
                                                         onClick={() => {
                                                             setExpandedSections({ [s.id]: true });
-                                                            setTimeout(() => {
-                                                                document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                                            }, 100);
+                                                            setTimeout(() => { scrollToSection(`section-${s.id}`); }, 100);
                                                         }}
                                                         className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md text-white ${bubbleColor}`}
                                                     >
@@ -6329,9 +6329,7 @@
                         <div className="rounded-xl border border-red-200 overflow-hidden shadow-sm" id="section-defs">
                             <button onClick={() => {
                                 setExpandedSections(p => p.defs ? {} : { defs: true });
-                                setTimeout(() => {
-                                    document.getElementById('section-defs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }, 100);
+                                setTimeout(() => { scrollToSection('section-defs'); }, 100);
                             }} className="w-full bg-red-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>{activeBuilding.sections.length + 2}. Deficiencies</span>
                                 <div className="flex items-center gap-3">
