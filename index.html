@@ -1007,9 +1007,19 @@
                                     <button onClick={async () => {
                                         // iOS Safari permission check and guidance
                                         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-                                        if (isIOS && !navigator.onLine) {
-                                            alert('📴 Offline\n\nPhotos will save to your phone and sync when you click "Export & Save"');
+                                        
+                                        // Check if permissions API is available (not on iOS Safari)
+                                        if (isIOS) {
+                                            console.log('📱 iOS detected - permission prompt will appear when you select a photo');
+                                            
+                                            // Show iOS-specific guidance on first photo
+                                            const hasPhotos = item.photos && item.photos.length > 0;
+                                            if (!hasPhotos) {
+                                                const message = '📷 iPhone Photo Upload\n\n1. Select photo source (Camera/Library)\n2. Tap "Allow" when blue hand appears\n3. Photo saves to this device\n4. Click "Export & Save" at bottom to upload to cloud';
+                                                console.log(message);
+                                            }
                                         }
+                                        
                                         fileInputRef.current.click();
                                     }} className="hover:text-blue-500">📷 Media</button>
                                     {isDeficiencyView && (
@@ -1086,181 +1096,59 @@
                                                 console.log(`🗜️ Compressed: ${originalMB}MB → ${compressedMB}MB`);
                                             }
                                             
-                                            // Step 3: Try Firebase Storage upload (if online and available)
+                                            // Step 3: Save locally FIRST (skip Firebase until Export & Save)
+                                            // This prevents timeout issues and works offline
                                             const isOnline = navigator.onLine;
                                             
-                                            if (isOnline && window.firebaseStorage && window.FirebaseSDK) {
-                                                onUpdateMeta({ _uploadProgress: 25, _uploadStatus: 'Uploading to cloud...' });
-                                                
-                                                const { ref, uploadBytesResumable, getDownloadURL } = window.FirebaseSDK;
-                                                
-                                                // Create unique file path
-                                                const timestamp = Date.now();
-                                                const fileName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-                                                const storageRef = ref(window.firebaseStorage, `inspections/${item.id}/${fileName}`);
-                                                
-                                                // Use uploadBytesResumable for progress tracking
-                                                const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
-                                                
-                                                await new Promise((resolve, reject) => {
-                                                    // Set 90 second timeout
-                                                    const timeout = setTimeout(() => {
-                                                        uploadTask.cancel();
-                                                        reject(new Error('Upload timeout after 90 seconds'));
-                                                    }, 90000);
-                                                    
-                                                    uploadTask.on('state_changed',
-                                                        (snapshot) => {
-                                                            // Track real upload progress
-                                                            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-                                                            const uploaded = (snapshot.bytesTransferred / 1024 / 1024).toFixed(1);
-                                                            const total = (snapshot.totalBytes / 1024 / 1024).toFixed(1);
-                                                            
-                                                            onUpdateMeta({ 
-                                                                _uploadProgress: 25 + (progress * 0.65), // Scale to 25-90%
-                                                                _uploadStatus: `Uploading ${uploaded}/${total}MB...`
-                                                            });
-                                                        },
-                                                        (error) => {
-                                                            clearTimeout(timeout);
-                                                            reject(error);
-                                                        },
-                                                        async () => {
-                                                            clearTimeout(timeout);
-                                                            
-                                                            // Upload complete - get download URL
-                                                            onUpdateMeta({ _uploadProgress: 95, _uploadStatus: 'Finalizing...' });
-                                                            
-                                                            try {
-                                                                const photoURL = await getDownloadURL(uploadTask.snapshot.ref);
-                                                                console.log('✅ Uploaded to Firebase Storage:', photoURL);
-                                                                
-                                                                // Delete from IndexedDB if it was pending
-                                                                await deletePendingUpload(item.id);
-                                                                
-                                                                // Add to photos array instead of replacing
-                                                                const photos = item.photos || [];
-                                                                const newPhoto = {
-                                                                    id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                                                    photoURL: photoURL,
-                                                                    storagePath: `inspections/${item.id}/${fileName}`,
-                                                                    mediaType: mediaType,
-                                                                    thumbnail: thumbnail,
-                                                                    _syncedToCloud: true,
-                                                                    uploadedAt: new Date().toISOString()
-                                                                };
-                                                                
-                                                                onUpdateMeta({
-                                                                    photos: [...photos, newPhoto],
-                                                                    _uploading: false,
-                                                                    _uploadProgress: 100,
-                                                                    _uploadStatus: 'Complete!',
-                                                                });
-                                                                
-                                                                resolve();
-                                                            } catch (error) {
-                                                                reject(error);
-                                                            }
-                                                        }
-                                                    );
-                                                });
+                                            console.log('💾 Saving photo locally (will upload to cloud when you click Export & Save)');
+                                            onUpdateMeta({ _uploadProgress: 50, _uploadStatus: 'Saving to device...' });
+                                            
+                                            // Add to photos array
+                                            const photos = item.photos || [];
+                                            const newPhoto = {
+                                                id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                                mediaType: mediaType,
+                                                thumbnail: thumbnail,
+                                                _syncedToCloud: false,
+                                                _pendingSync: true,
+                                                uploadedAt: new Date().toISOString()
+                                            };
+                                            
+                                            if (isVideo) {
+                                                // Videos: store object URL temporarily
+                                                const videoURL = URL.createObjectURL(file);
+                                                await savePendingUpload(item.id, file, null);
+                                                newPhoto.photoURL = videoURL;
                                             } else {
-                                                // Offline or Firebase not available - save to IndexedDB
-                                                console.warn(isOnline ? '⚠️ Firebase Storage not available' : '📴 Offline - saving locally');
-                                                
-                                                onUpdateMeta({ _uploadProgress: 50, _uploadStatus: isOnline ? 'Saving locally...' : 'Offline - saving for later...' });
-                                                
-                                                // Add to photos array instead of replacing
-                                                const photos = item.photos || [];
-                                                const newPhoto = {
-                                                    id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                                    mediaType: mediaType,
-                                                    thumbnail: thumbnail,
-                                                    _syncedToCloud: false,
-                                                    _pendingSync: true,
-                                                    uploadedAt: new Date().toISOString()
-                                                };
-                                                
-                                                if (isVideo) {
-                                                    // Videos: store object URL temporarily
-                                                    const videoURL = URL.createObjectURL(file);
-                                                    await savePendingUpload(item.id, file, null);
-                                                    newPhoto.photoURL = videoURL;
-                                                } else {
-                                                    // Images: save compressed version to IndexedDB
-                                                    await savePendingUpload(item.id, fileToUpload, thumbnail);
-                                                }
-                                                
-                                                onUpdateMeta({
-                                                    photos: [...photos, newPhoto],
-                                                    _uploading: false,
-                                                    _uploadProgress: 100,
-                                                    _uploadStatus: '📱 Saved locally - click "Export & Save" to sync to cloud',
-                                                });
-                                                
-                                                console.log('💾 Saved to IndexedDB - will sync when you click Export & Save');
-                                                
-                                                // Show reminder on iOS
-                                                if (isIOS) {
-                                                    setTimeout(() => {
-                                                        console.log('💡 Reminder: Photos are saved on your device. Click "Export & Save" to upload to cloud.');
-                                                    }, 2000);
-                                                }
+                                                // Images: save compressed version to IndexedDB
+                                                await savePendingUpload(item.id, fileToUpload, thumbnail);
+                                            }
+                                            
+                                            onUpdateMeta({
+                                                photos: [...photos, newPhoto],
+                                                _uploading: false,
+                                                _uploadProgress: 100,
+                                                _uploadStatus: '✅ Saved! Click "Export & Save" to upload to cloud',
+                                            });
+                                            
+                                            console.log('✅ Photo saved locally - will sync to cloud when you click Export & Save');
+                                            
+                                            // Show iOS reminder
+                                            if (isIOS && photos.length === 0) {
+                                                setTimeout(() => {
+                                                    alert('📷 Photo Saved!\n\nYour photo is saved on this device.\n\nTo upload to cloud:\n1. Scroll to bottom\n2. Tap "Export & Save"\n3. Wait for sync to complete');
+                                                }, 500);
                                             }
                                         } catch (error) {
-                                            console.error('Upload error:', error);
+                                            console.error('Save error:', error);
                                             
-                                            // On error, try to save locally as fallback
-                                            try {
-                                                console.log('🔄 Attempting local fallback...');
-                                                const thumbnail = !isVideo ? await createThumbnail(file) : null;
-                                                await savePendingUpload(item.id, file, thumbnail);
-                                                
-                                                // Add to photos array instead of replacing
-                                                const photos = item.photos || [];
-                                                const newPhoto = {
-                                                    id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                                                    thumbnail: thumbnail,
-                                                    mediaType: mediaType,
-                                                    _syncedToCloud: false,
-                                                    _pendingSync: true,
-                                                    uploadedAt: new Date().toISOString()
-                                                };
-                                                
-                                                onUpdateMeta({
-                                                    photos: [...photos, newPhoto],
-                                                    _uploading: false,
-                                                    _uploadProgress: 100,
-                                                    _uploadStatus: '📱 Saved - click "Export & Save" to sync',
-                                                });
-                                                
-                                                console.log('💾 Saved locally after error - will sync when you click Export & Save');
-                                                
-                                                // Show friendly error message
-                                                let errorMsg = '⚠️ Cloud upload failed, but saved locally\n\n';
-                                                if (error.message.includes('timeout')) {
-                                                    errorMsg += 'Upload took too long. Will retry when you have a better connection.';
-                                                } else if (error.code === 'storage/unauthorized') {
-                                                    errorMsg += '🔒 Firebase Storage not configured.\nPhoto saved locally and will sync when Storage is enabled.';
-                                                } else if (error.code === 'storage/canceled') {
-                                                    errorMsg += 'Upload was canceled. Photo saved locally.';
-                                                } else {
-                                                    errorMsg += 'Will retry upload automatically when back online.';
-                                                }
-                                                
-                                                console.log(errorMsg);
-                                                // Don't show alert - just log it since we handled it gracefully
-                                            } catch (fallbackError) {
-                                                console.error('Fallback storage failed:', fallbackError);
-                                                
-                                                // iOS-specific error messages
-                                                if (isIOS) {
-                                                    alert('❌ Photo Upload Failed\n\nPossible fixes for iPhone:\n\n1. Grant Camera/Photos permission:\n   - Settings → Safari → Camera → Allow\n   - Settings → Safari → Photos → All Photos\n\n2. Free up storage space\n\n3. Try a smaller photo\n\n4. Delete & reinstall app from home screen');
-                                                } else {
-                                                    alert('❌ Failed to save photo\n\nCould not save to cloud or locally.\nPlease try again.');
-                                                }
-                                                onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
+                                            // iOS-specific error messages
+                                            if (isIOS) {
+                                                alert('❌ Photo Save Failed\n\nPossible fixes for iPhone:\n\n1. Grant Camera/Photos permission:\n   - Tap the blue hand icon when it appears\n   - Or: Delete app from home screen and reinstall\n\n2. Free up storage space on iPhone\n\n3. Try a smaller photo\n\n4. Restart Safari');
+                                            } else {
+                                                alert('❌ Failed to save photo\n\nPlease try again or contact support.');
                                             }
+                                            onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
                                         }
                                         
                                         e.target.value = ''; // Reset input for reuse
@@ -1271,10 +1159,19 @@
                                 <div className="mt-2 space-y-2">
                                     <div className="flex items-center gap-2 text-xs text-blue-600">
                                         <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                                        <span>{item._uploadStatus || 'Uploading...'}</span>
+                                        <span className="flex-1">{item._uploadStatus || 'Processing...'}</span>
                                         {item._uploadProgress > 0 && (
                                             <span className="font-bold">{item._uploadProgress}%</span>
                                         )}
+                                        <button 
+                                            onClick={() => {
+                                                onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
+                                                console.log('❌ Upload canceled by user');
+                                            }}
+                                            className="ml-2 px-2 py-0.5 bg-red-500 text-white text-[10px] rounded hover:bg-red-600"
+                                        >
+                                            Cancel
+                                        </button>
                                     </div>
                                     {item._uploadProgress > 0 && (
                                         <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
@@ -5816,6 +5713,43 @@
                             </div>
                         )}
                     </div>
+
+                    {/* iOS Photo Upload Help Banner - Only show on iOS */}
+                    {(() => {
+                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                        if (!isIOS) return null;
+                        
+                        // Check if user has any photos (if they do, they probably understand the process)
+                        const hasAnyPhotos = Object.values(activeBuilding.data || {}).some(items => 
+                            items.some(item => item.photos && item.photos.length > 0)
+                        );
+                        
+                        // Only show on first time (no photos yet)
+                        if (hasAnyPhotos) return null;
+                        
+                        return (
+                            <div className="mx-4 mt-4 p-3 bg-amber-50 border border-amber-300 rounded-xl">
+                                <div className="flex items-start gap-2">
+                                    <div className="text-amber-600 text-lg">📱</div>
+                                    <div className="flex-1">
+                                        <div className="text-amber-900 font-bold text-xs mb-1">iPhone Photo Upload</div>
+                                        <div className="text-amber-800 text-[10px] space-y-1">
+                                            <div>1. Tap <span className="font-bold">📷 Media</span> on any item</div>
+                                            <div>2. Tap <span className="font-bold">"Allow"</span> when blue hand appears</div>
+                                            <div>3. Select photo (saves instantly to device)</div>
+                                            <div>4. Scroll to bottom & tap <span className="font-bold">"Export & Save"</span> to upload to cloud</div>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={(e) => { e.currentTarget.parentElement.parentElement.remove(); }}
+                                        className="text-amber-400 hover:text-amber-600 font-bold text-sm"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     <div className="p-4 space-y-3">
                         {/* Section 0: Inspection Details */}
