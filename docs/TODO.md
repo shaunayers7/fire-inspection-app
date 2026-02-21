@@ -13,15 +13,7 @@
 - [x] iOS-style pull-to-refresh with content movement
 - [x] Share app section with iOS/Android installation instructions
 - [x] Fix settings page overflow on mobile devices
-
-## Manual Cleanup Required 🧹
-**Action needed:** Delete the following 4 unused utility files from project root:
-- `populate-2025-buildings.html` (460 lines)
-- `populate-pincher-creek.html` (143 lines)  
-- `generate-2025-import.js` (284 lines)
-- `test-import-parser.html` (426 lines)
-
-These files were used for the now-removed import feature. Deleting them will reduce codebase by 1,313 lines.
+- [x] Delete unused utility files (13 files, ~4,000 lines removed)
 
 ## Phase 1: Data Import
 - [x] Create docs folder
