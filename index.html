@@ -1128,15 +1128,23 @@
                                                                 // Delete from IndexedDB if it was pending
                                                                 await deletePendingUpload(item.id);
                                                                 
-                                                                onUpdateMeta({
+                                                                // Add to photos array instead of replacing
+                                                                const photos = item.photos || [];
+                                                                const newPhoto = {
+                                                                    id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                                                                     photoURL: photoURL,
                                                                     storagePath: `inspections/${item.id}/${fileName}`,
                                                                     mediaType: mediaType,
                                                                     thumbnail: thumbnail,
+                                                                    _syncedToCloud: true,
+                                                                    uploadedAt: new Date().toISOString()
+                                                                };
+                                                                
+                                                                onUpdateMeta({
+                                                                    photos: [...photos, newPhoto],
                                                                     _uploading: false,
                                                                     _uploadProgress: 100,
                                                                     _uploadStatus: 'Complete!',
-                                                                    _syncedToCloud: true
                                                                 });
                                                                 
                                                                 resolve();
@@ -1152,34 +1160,33 @@
                                                 
                                                 onUpdateMeta({ _uploadProgress: 50, _uploadStatus: isOnline ? 'Saving locally...' : 'Offline - saving for later...' });
                                                 
+                                                // Add to photos array instead of replacing
+                                                const photos = item.photos || [];
+                                                const newPhoto = {
+                                                    id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                                    mediaType: mediaType,
+                                                    thumbnail: thumbnail,
+                                                    _syncedToCloud: false,
+                                                    _pendingSync: true,
+                                                    uploadedAt: new Date().toISOString()
+                                                };
+                                                
                                                 if (isVideo) {
                                                     // Videos: store object URL temporarily
                                                     const videoURL = URL.createObjectURL(file);
                                                     await savePendingUpload(item.id, file, null);
-                                                    
-                                                    onUpdateMeta({
-                                                        photoURL: videoURL,
-                                                        mediaType: 'video',
-                                                        _uploading: false,
-                                                        _uploadProgress: 100,
-                                                        _uploadStatus: 'Saved locally',
-                                                        _syncedToCloud: false,
-                                                        _pendingSync: true
-                                                    });
+                                                    newPhoto.photoURL = videoURL;
                                                 } else {
                                                     // Images: save compressed version to IndexedDB
                                                     await savePendingUpload(item.id, fileToUpload, thumbnail);
-                                                    
-                                                    onUpdateMeta({
-                                                        thumbnail: thumbnail,
-                                                        mediaType: 'image',
-                                                        _uploading: false,
-                                                        _uploadProgress: 100,
-                                                        _uploadStatus: isOnline ? 'Saved locally' : 'Will sync when online',
-                                                        _syncedToCloud: false,
-                                                        _pendingSync: true
-                                                    });
                                                 }
+                                                
+                                                onUpdateMeta({
+                                                    photos: [...photos, newPhoto],
+                                                    _uploading: false,
+                                                    _uploadProgress: 100,
+                                                    _uploadStatus: isOnline ? 'Saved locally' : 'Will sync when online',
+                                                });
                                                 
                                                 console.log('💾 Saved to IndexedDB - will sync when online');
                                             }
@@ -1192,14 +1199,22 @@
                                                 const thumbnail = !isVideo ? await createThumbnail(file) : null;
                                                 await savePendingUpload(item.id, file, thumbnail);
                                                 
-                                                onUpdateMeta({
+                                                // Add to photos array instead of replacing
+                                                const photos = item.photos || [];
+                                                const newPhoto = {
+                                                    id: `photo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                                                     thumbnail: thumbnail,
                                                     mediaType: mediaType,
+                                                    _syncedToCloud: false,
+                                                    _pendingSync: true,
+                                                    uploadedAt: new Date().toISOString()
+                                                };
+                                                
+                                                onUpdateMeta({
+                                                    photos: [...photos, newPhoto],
                                                     _uploading: false,
                                                     _uploadProgress: 100,
                                                     _uploadStatus: 'Saved locally (sync pending)',
-                                                    _syncedToCloud: false,
-                                                    _pendingSync: true
                                                 });
                                                 
                                                 // Show friendly error message
@@ -1254,79 +1269,134 @@
                                     placeholder="Add notes..."
                                 />
                             )}
-                            {/* Show uploaded media or thumbnail */}
-                            {(item.photoURL || item.photo || item.thumbnail) && (
-                                <>
-                                    <div className="mt-2 relative group w-24 h-24">
-                                        {item.mediaType === 'video' ? (
-                                            <video 
-                                                src={item.photoURL || item.photo} 
-                                                className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer" 
-                                                onClick={() => {
-                                                    onTriggerModal({
-                                                        title: "Media Viewer",
-                                                        type: 'media',
-                                                        mediaURL: item.photoURL || item.photo,
-                                                        mediaType: item.mediaType
-                                                    });
-                                                }}
-                                            />
-                                        ) : (
-                                            <div className="relative w-full h-full">
-                                                <img 
-                                                    src={item.photoURL || item.thumbnail || item.photo} 
-                                                    className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
-                                                    onClick={() => {
-                                                        if (item.photoURL || item.photo) {
-                                                            onTriggerModal({
-                                                                title: "Media Viewer",
-                                                                type: 'media',
-                                                                mediaURL: item.photoURL || item.photo,
-                                                                mediaType: item.mediaType || 'image'
-                                                            });
-                                                        }
-                                                    }}
-                                                    alt="Inspection media"
-                                                />
-                                                {/* Sync status indicators */}
-                                                {item._syncedToCloud && (
-                                                    <div className="absolute bottom-1 right-1 bg-green-500 text-white text-[8px] px-1.5 rounded-full font-bold flex items-center gap-0.5" title="Synced to cloud">
-                                                        <span>☁</span>
+                            {/* Show photo gallery */}
+                            {(() => {
+                                // Backward compatibility: migrate old single photo to photos array
+                                const photos = item.photos || [];
+                                const hasOldPhoto = (item.photoURL || item.photo || item.thumbnail) && !item.photos;
+                                
+                                if (hasOldPhoto) {
+                                    // One-time migration of old single photo
+                                    const oldPhoto = {
+                                        id: `photo_legacy_${Date.now()}`,
+                                        photoURL: item.photoURL || item.photo,
+                                        thumbnail: item.thumbnail,
+                                        storagePath: item.storagePath,
+                                        mediaType: item.mediaType || 'image',
+                                        _syncedToCloud: item._syncedToCloud,
+                                        _pendingSync: item._pendingSync,
+                                        uploadedAt: new Date().toISOString()
+                                    };
+                                    
+                                    // Migrate to new format
+                                    setTimeout(() => {
+                                        onUpdateMeta({ 
+                                            photos: [oldPhoto],
+                                            photoURL: null,
+                                            photo: null,
+                                            thumbnail: null,
+                                            storagePath: null,
+                                            mediaType: null
+                                        });
+                                    }, 0);
+                                    
+                                    return null; // Will re-render after migration
+                                }
+                                
+                                if (photos.length === 0) return null;
+                                
+                                return (
+                                    <div className="mt-3 space-y-2">
+                                        <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">
+                                            Photos ({photos.length})
+                                        </div>
+                                        <div className="flex gap-2 overflow-x-auto pb-2">
+                                            {photos.map((photo, idx) => (
+                                                <div key={photo.id || idx} className="flex-shrink-0 relative group">
+                                                    <div className="w-20 h-20 relative">
+                                                        {photo.mediaType === 'video' ? (
+                                                            <video 
+                                                                src={photo.photoURL} 
+                                                                className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer" 
+                                                                onClick={() => {
+                                                                    onTriggerModal({
+                                                                        title: "Video Viewer",
+                                                                        type: 'media',
+                                                                        mediaURL: photo.photoURL,
+                                                                        mediaType: 'video'
+                                                                    });
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            <img 
+                                                                src={photo.photoURL || photo.thumbnail} 
+                                                                className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
+                                                                onClick={() => {
+                                                                    if (photo.photoURL) {
+                                                                        onTriggerModal({
+                                                                            title: "Photo Viewer",
+                                                                            type: 'media',
+                                                                            mediaURL: photo.photoURL,
+                                                                            mediaType: 'image'
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                alt={`Photo ${idx + 1}`}
+                                                            />
+                                                        )}
+                                                        
+                                                        {/* Sync status badge */}
+                                                        {photo._syncedToCloud && (
+                                                            <div className="absolute top-1 right-1 bg-green-500 text-white text-[8px] px-1 rounded-full font-bold" title="Synced">
+                                                                ☁
+                                                            </div>
+                                                        )}
+                                                        {photo._pendingSync && !photo._syncedToCloud && (
+                                                            <div className="absolute top-1 right-1 bg-orange-500 text-white text-[8px] px-1 rounded-full font-bold animate-pulse" title="Pending sync">
+                                                                ⏱
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {/* Delete button (shows on hover) */}
+                                                        <button 
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                
+                                                                if (!confirm('Delete this photo?')) return;
+                                                                
+                                                                // Delete from Firebase Storage if exists
+                                                                if (photo.storagePath && window.firebaseStorage && window.FirebaseSDK) {
+                                                                    try {
+                                                                        const { ref, deleteObject } = window.FirebaseSDK;
+                                                                        const storageRef = ref(window.firebaseStorage, photo.storagePath);
+                                                                        await deleteObject(storageRef);
+                                                                        console.log('✅ Deleted from Firebase Storage');
+                                                                    } catch (error) {
+                                                                        console.warn('⚠️ Could not delete from Storage:', error);
+                                                                    }
+                                                                }
+                                                                
+                                                                // Remove from IndexedDB if pending
+                                                                if (photo._pendingSync) {
+                                                                    await deletePendingUpload(item.id);
+                                                                }
+                                                                
+                                                                // Remove from photos array
+                                                                const updatedPhotos = photos.filter(p => p.id !== photo.id);
+                                                                onUpdateMeta({ photos: updatedPhotos });
+                                                            }}
+                                                            className="absolute bottom-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                                            title="Delete photo"
+                                                        >
+                                                            ×
+                                                        </button>
                                                     </div>
-                                                )}
-                                                {item._pendingSync && !item._syncedToCloud && (
-                                                    <div className="absolute bottom-1 right-1 bg-orange-500 text-white text-[8px] px-1.5 rounded-full font-bold animate-pulse" title="Pending cloud sync">
-                                                        ⏱
-                                                    </div>
-                                                )}
-                                                {!item.photoURL && item.thumbnail && (
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
-                                                        <span className="text-white text-[9px] font-bold text-center px-2">Offline<br/>Will sync</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                    <div className="mt-2 relative inline-block">
-                                        <button onClick={async () => {
-                                            // Delete from Firebase Storage if storage path exists
-                                            if (item.storagePath && window.firebaseStorage && window.FirebaseSDK) {
-                                                try {
-                                                    const { ref, deleteObject } = window.FirebaseSDK;
-                                                    const storageRef = ref(window.firebaseStorage, item.storagePath);
-                                                    await deleteObject(storageRef);
-                                                    console.log('✅ Deleted from Firebase Storage');
-                                                } catch (error) {
-                                                    console.warn('⚠️ Could not delete from Storage (may not exist):', error);
-                                                }
-                                            }
-                                            
-                                            // Clear from item data
-                                            onUpdateMeta({ photo: null, photoURL: null, storagePath: null, mediaType: null });
-                                        }} className="bg-red-500 text-white rounded-full px-3 py-1 text-[10px] font-bold hover:bg-red-600 transition-colors">Delete Media</button>
-                                    </div>
-                                </>
-                            )}
+                                );
+                            })()}
                             
                             {/* Timer controls for emergency lights */}
                             {isEmergencyLight && (
@@ -2309,7 +2379,7 @@
                                             const photoURL = await getDownloadURL(uploadTask.snapshot.ref);
                                             console.log('✅ Background upload complete:', photoURL);
                                             
-                                            // Update the item in yearData
+                                            // Update the item in yearData - add to photos array
                                             setYearData(prevData => {
                                                 const newData = JSON.parse(JSON.stringify(prevData));
                                                 
@@ -2321,10 +2391,32 @@
                                                             const itemIndex = items.findIndex(item => item.id === upload.id);
                                                             
                                                             if (itemIndex !== -1) {
-                                                                items[itemIndex].photoURL = photoURL;
-                                                                items[itemIndex].storagePath = `inspections/${upload.id}/${fileName}`;
-                                                                items[itemIndex]._syncedToCloud = true;
-                                                                items[itemIndex]._pendingSync = false;
+                                                                // Add synced photo to photos array
+                                                                const photos = items[itemIndex].photos || [];
+                                                                const newPhoto = {
+                                                                    id: `photo_bg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                                                                    photoURL: photoURL,
+                                                                    storagePath: `inspections/${upload.id}/${fileName}`,
+                                                                    thumbnail: upload.thumbnail,
+                                                                    mediaType: 'image',
+                                                                    _syncedToCloud: true,
+                                                                    uploadedAt: new Date().toISOString()
+                                                                };
+                                                                
+                                                                // Check if this photo is already in the array (by checking for pending with same thumbnail)
+                                                                const existingPendingIndex = photos.findIndex(p => 
+                                                                    p._pendingSync && p.thumbnail === upload.thumbnail
+                                                                );
+                                                                
+                                                                if (existingPendingIndex !== -1) {
+                                                                    // Update existing pending photo
+                                                                    photos[existingPendingIndex] = newPhoto;
+                                                                } else {
+                                                                    // Add as new photo
+                                                                    photos.push(newPhoto);
+                                                                }
+                                                                
+                                                                items[itemIndex].photos = photos;
                                                                 console.log(`📝 Updated item ${upload.id} with cloud URL`);
                                                                 
                                                                 // Save to localStorage
