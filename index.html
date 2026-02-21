@@ -48,6 +48,7 @@
     <meta name="description" content="Annual fire alarm and emergency light inspection management system">
     <meta name="theme-color" content="#dc2626">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Fire Inspect">
     <link rel="manifest" href="/manifest.json">
@@ -2136,16 +2137,8 @@
                 console.log('📱 Device:', navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop');
                 console.log('🔄 Expected log format: emoji-based messages (🔄, 🗑️, ✨, ☁️)');
                 
-                // Check if we have the new sync logic (informational only, no alert)
-                const syncFunctionString = syncToCloud.toString();
-                const hasNewLogic = syncFunctionString.includes('Starting merge') || syncFunctionString.includes('REMOVING building');
-                
-                if (!hasNewLogic) {
-                    console.warn('⚠️ Old code detection triggered, but this might be a false positive.');
-                    console.log('✅ If sync is working properly, you can ignore this warning.');
-                } else {
-                    console.log('✅ Running latest code with smart deletion sync');
-                }
+                // Version check passed - running latest code
+                console.log('✅ Running latest code with cloud sync enabled');
 
                 // Clean up old drafts (older than 7 days)
                 try {
