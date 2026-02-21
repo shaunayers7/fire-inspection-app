@@ -987,9 +987,18 @@
                                                 const fileName = `${timestamp}_${file.name}`;
                                                 const storageRef = ref(window.firebaseStorage, `inspections/${item.id}/${fileName}`);
                                                 
-                                                // Upload full resolution to Firebase Storage
+                                                // Upload full resolution to Firebase Storage with timeout
                                                 onUpdateMeta({ _uploadProgress: 30, _uploadStatus: `Uploading ${fileSizeMB}MB...` });
-                                                await uploadBytes(storageRef, file);
+                                                
+                                                // Timeout wrapper (60 seconds for uploads)
+                                                const uploadWithTimeout = Promise.race([
+                                                    uploadBytes(storageRef, file),
+                                                    new Promise((_, reject) => 
+                                                        setTimeout(() => reject(new Error('Upload timeout - please check your internet connection')), 60000)
+                                                    )
+                                                ]);
+                                                
+                                                await uploadWithTimeout;
                                                 
                                                 onUpdateMeta({ _uploadProgress: 70, _uploadStatus: 'Getting URL...' });
                                                 const photoURL = await getDownloadURL(storageRef);
@@ -1038,7 +1047,22 @@
                                             }
                                         } catch (error) {
                                             console.error('Upload error:', error);
-                                            alert(`❌ Upload failed: ${error.message}\n\nPlease try again or use a smaller file.`);
+                                            
+                                            // Provide specific error messages based on error type
+                                            let errorMsg = '❌ Upload failed\n\n';
+                                            if (error.message.includes('timeout')) {
+                                                errorMsg += '⏱️ Upload timed out after 60 seconds.\n\nPossible causes:\n- Slow internet connection\n- Large file size (try a smaller image)\n- Server issues\n\nTry again with a better connection or compress the image first.';
+                                            } else if (error.code === 'storage/unauthorized') {
+                                                errorMsg += '🔒 Permission denied.\n\nThis might be a Firebase Storage configuration issue.\nContact your administrator.';
+                                            } else if (error.code === 'storage/canceled') {
+                                                errorMsg += 'Upload was canceled.';
+                                            } else if (error.code === 'storage/unknown') {
+                                                errorMsg += 'Unknown error occurred.\n\nPlease check:\n- Your internet connection\n- Try a smaller file\n- Contact support if this persists';
+                                            } else {
+                                                errorMsg += `${error.message}\n\nTry:\n- Using a smaller image\n- Checking your internet connection\n- Trying again in a moment`;
+                                            }
+                                            
+                                            alert(errorMsg);
                                             onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
                                         }
                                         
