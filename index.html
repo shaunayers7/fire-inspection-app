@@ -5346,8 +5346,13 @@
 
                     <div className="p-4 space-y-3">
                         {/* Section 0: Inspection Details */}
-                        <div className="rounded-xl border overflow-hidden shadow-sm">
-                            <button onClick={() => setExpandedSections(p => p.inspectionDetails ? {} : { inspectionDetails: true })} className="w-full bg-green-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="rounded-xl border overflow-hidden shadow-sm" id="section-inspectionDetails">
+                            <button onClick={() => {
+                                setExpandedSections(p => p.inspectionDetails ? {} : { inspectionDetails: true });
+                                setTimeout(() => {
+                                    document.getElementById('section-inspectionDetails')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
+                            }} className="w-full bg-green-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>0. Inspection Details</span>
                                 <span className="text-lg opacity-50">{expandedSections['inspectionDetails'] ? '−' : '+'}</span>
                             </button>
@@ -5441,8 +5446,13 @@
                         </div>
                         
                         {/* Permanent Section 1: Building Details */}
-                        <div className="rounded-xl border overflow-hidden shadow-sm">
-                            <button onClick={() => setExpandedSections(p => p.details ? {} : { details: true })} className="w-full bg-blue-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="rounded-xl border overflow-hidden shadow-sm" id="section-details">
+                            <button onClick={() => {
+                                setExpandedSections(p => p.details ? {} : { details: true });
+                                setTimeout(() => {
+                                    document.getElementById('section-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
+                            }} className="w-full bg-blue-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>1. Building Details</span>
                                 <span className="text-lg opacity-50">{expandedSections['details'] ? '−' : '+'}</span>
                             </button>
@@ -5467,6 +5477,7 @@
                                 <div 
                                     key={s.id} 
                                     data-drag-id={s.id}
+                                    id={`section-${s.id}`}
                                     onTouchStart={sectionDrag.onTouchStart(s.id)}
                                     onTouchMove={sectionDrag.onTouchMove(s.id)}
                                     onTouchEnd={sectionDrag.onTouchEnd}
@@ -5474,7 +5485,12 @@
                                 >
                                     <div className={`w-full ${s.color} text-white p-3 flex justify-between items-center`}>
                                         <button 
-                                            onClick={() => setExpandedSections(p => p[s.id] ? {} : { [s.id]: true })} 
+                                            onClick={() => {
+                                                setExpandedSections(p => p[s.id] ? {} : { [s.id]: true });
+                                                setTimeout(() => {
+                                                    document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                }, 100);
+                                            }} 
                                             className="flex-1 text-left font-bold text-xs uppercase flex items-center gap-2"
                                         >
                                             <span>{idx + 2}. {s.title}</span>
@@ -5504,7 +5520,12 @@
                                                     });
                                                 }} className="text-white/40 hover:text-white text-lg">✕</button>
                                             )}
-                                            <button onClick={() => setExpandedSections(p => p[s.id] ? {} : { [s.id]: true })} className="text-lg opacity-50">
+                                            <button onClick={() => {
+                                                setExpandedSections(p => p[s.id] ? {} : { [s.id]: true });
+                                                setTimeout(() => {
+                                                    document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                }, 100);
+                                            }} className="text-lg opacity-50">
                                                 {expandedSections[s.id] ? '−' : '+'}
                                             </button>
                                         </div>
@@ -5546,7 +5567,12 @@
                                                 return (
                                                     <div
                                                         key={item.id}
-                                                        onClick={() => setExpandedSections({ [s.id]: true })}
+                                                        onClick={() => {
+                                                            setExpandedSections({ [s.id]: true });
+                                                            setTimeout(() => {
+                                                                document.getElementById(`section-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                            }, 100);
+                                                        }}
                                                         className={`px-4 py-2 rounded-full border-2 flex items-center justify-between cursor-pointer transition-all hover:shadow-md text-white ${bubbleColor}`}
                                                     >
                                                         <span className="font-bold text-sm">{item.label}</span>
@@ -5592,8 +5618,13 @@
                         }} className="w-full p-3 border-2 border-dashed rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add New Section</button>
 
                         {/* Deficiencies Section (Permanent Last Item) */}
-                        <div className="rounded-xl border border-red-200 overflow-hidden shadow-sm">
-                            <button onClick={() => setExpandedSections(p => p.defs ? {} : { defs: true })} className="w-full bg-red-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
+                        <div className="rounded-xl border border-red-200 overflow-hidden shadow-sm" id="section-defs">
+                            <button onClick={() => {
+                                setExpandedSections(p => p.defs ? {} : { defs: true });
+                                setTimeout(() => {
+                                    document.getElementById('section-defs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                }, 100);
+                            }} className="w-full bg-red-600 text-white p-3 text-left font-bold text-xs uppercase flex justify-between items-center">
                                 <span>{activeBuilding.sections.length + 2}. Deficiencies</span>
                                 <div className="flex items-center gap-3">
                                     <span className="bg-white/20 px-2 rounded-md text-[10px]">{allDeficiencies.length + (activeBuilding.data.customDeficiencies?.length || 0)}</span>
