@@ -1008,16 +1008,9 @@
                                         // iOS Safari permission check and guidance
                                         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                                         
-                                        // Check if permissions API is available (not on iOS Safari)
+                                        // Detect iOS for optimized handling
                                         if (isIOS) {
-                                            console.log('📱 iOS detected - permission prompt will appear when you select a photo');
-                                            
-                                            // Show iOS-specific guidance on first photo
-                                            const hasPhotos = item.photos && item.photos.length > 0;
-                                            if (!hasPhotos) {
-                                                const message = '📷 iPhone Photo Upload\n\n1. Select photo source (Camera/Library)\n2. Tap "Allow" when blue hand appears\n3. Photo saves to this device\n4. Click "Export & Save" at bottom to upload to cloud';
-                                                console.log(message);
-                                            }
+                                            console.log('📱 iOS detected - optimized photo upload enabled');
                                         }
                                         
                                         fileInputRef.current.click();
@@ -1053,7 +1046,8 @@
                                         // Check file size (limit to 10MB for photos, 30MB for videos)
                                         const maxSize = isVideo ? 30 * 1024 * 1024 : 10 * 1024 * 1024;
                                         if (file.size > maxSize) {
-                                            alert(`⚠️ File too large! Maximum size: ${isVideo ? '30MB' : '10MB'}\nYour file: ${fileSizeMB}MB\n\nPlease compress or resize before uploading.`);
+                                            console.error(`❌ File too large: ${fileSizeMB}MB (max: ${isVideo ? '30MB' : '10MB'})`);
+                                            onUpdateMeta({ _uploadStatus: `❌ File too large (${fileSizeMB}MB). Max: ${isVideo ? '30MB' : '10MB'}` });
                                             e.target.value = '';
                                             return;
                                         }
@@ -1136,23 +1130,13 @@
                                             });
                                             
                                             console.log('✅ Photo saved locally - will sync to cloud when you click Export & Save');
-                                            
-                                            // Show iOS reminder
-                                            if (isIOS && photos.length === 0) {
-                                                setTimeout(() => {
-                                                    alert('📷 Photo Saved!\n\nYour photo is saved on this device.\n\nTo upload to cloud:\n1. Scroll to bottom\n2. Tap "Export & Save"\n3. Wait for sync to complete');
-                                                }, 500);
-                                            }
                                         } catch (error) {
-                                            console.error('Save error:', error);
-                                            
-                                            // iOS-specific error messages
-                                            if (isIOS) {
-                                                alert('❌ Photo Save Failed\n\nPossible fixes for iPhone:\n\n1. Grant Camera/Photos permission:\n   - Tap the blue hand icon when it appears\n   - Or: Delete app from home screen and reinstall\n\n2. Free up storage space on iPhone\n\n3. Try a smaller photo\n\n4. Restart Safari');
-                                            } else {
-                                                alert('❌ Failed to save photo\n\nPlease try again or contact support.');
-                                            }
-                                            onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
+                                            console.error('❌ Photo save failed:', error);
+                                            onUpdateMeta({ 
+                                                _uploading: false, 
+                                                _uploadProgress: 0, 
+                                                _uploadStatus: '❌ Save failed. Try again or free up storage.' 
+                                            });
                                         }
                                         
                                         e.target.value = ''; // Reset input for reuse
@@ -1285,8 +1269,6 @@
                                                         <button 
                                                             onClick={async (e) => {
                                                                 e.stopPropagation();
-                                                                
-                                                                if (!confirm('Delete this photo?')) return;
                                                                 
                                                                 // Delete from Firebase Storage if exists
                                                                 if (photo.storagePath && window.firebaseStorage && window.FirebaseSDK) {
@@ -2174,11 +2156,9 @@
                     console.log(`💾 Auto-saved to localStorage (${dataSizeMB}MB)`);
                 } catch (error) {
                     if (error.name === 'QuotaExceededError' || error.code === 22) {
-                        console.error('❌ Storage quota exceeded! Your device storage is full.');
-                        alert('⚠️ STORAGE FULL\n\nYour device storage is full. The app cannot save more data.\n\nPlease:\n1. Delete old photos/videos from inspections\n2. Export & Save to cloud\n3. Or use a device with more storage');
+                        console.error('❌ Storage quota exceeded! Device storage is full.');
                     } else {
                         console.error('❌ Failed to save to localStorage:', error);
-                        alert('⚠️ Failed to save data locally. Changes may be lost. Please Export & Save to cloud.');
                     }
                 }
                 
@@ -3133,7 +3113,7 @@
                     setTimeout(() => setSyncStatus('idle'), 3000);
                     
                     // Even if sync failed, still navigate back (data is saved locally)
-                    alert('⚠️ PDF exported but cloud sync failed. Changes saved locally. Try syncing later.');
+                    console.warn('⚠️ Cloud sync failed - changes saved locally');
                     setView('building-select');
                     viewRef.current = 'building-select';
                 }
@@ -3396,7 +3376,7 @@
             
             const addAllowedEmail = async () => {
                 if (!newEmail || !newEmail.includes('@')) {
-                    alert('Please enter a valid email address');
+                    console.error('❌ Invalid email address');
                     return;
                 }
                 try {
@@ -3412,7 +3392,6 @@
                     console.log('✅ Email added to whitelist:', newEmail);
                 } catch (error) {
                     console.error('Failed to add email:', error);
-                    alert('Failed to add email: ' + error.message);
                 }
             };
             
@@ -3429,7 +3408,6 @@
                     console.log('✅ Email removed from whitelist:', email);
                 } catch (error) {
                     console.error('Failed to remove email:', error);
-                    alert('Failed to remove email: ' + error.message);
                 }
             };
             
@@ -3462,13 +3440,11 @@
                         });
                         setAdminEmails(currentAdmins);
                         console.log('✅ Made admin:', email);
-                        alert(`${email} is now an admin`);
                     } else {
-                        alert(`${email} is already an admin`);
+                        console.log(`${email} is already an admin`);
                     }
                 } catch (error) {
                     console.error('Failed to make admin:', error);
-                    alert('Failed to update admin: ' + error.message);
                 }
             };
 
@@ -3495,10 +3471,8 @@
                     URL.revokeObjectURL(url);
                     
                     console.log('✅ Backup exported to device');
-                    alert('✅ Backup downloaded successfully!\n\nFile: fire-inspection-backup-' + new Date().toISOString().split('T')[0] + '.json\n\nKeep this file safe!');
                 } catch (error) {
                     console.error('❌ Export backup error:', error);
-                    alert('❌ Failed to export backup. Please try again.');
                 }
             };
             
@@ -3515,34 +3489,27 @@
                             throw new Error('Invalid backup file format');
                         }
                         
-                        const confirmMsg = `⚠️ RESTORE BACKUP\n\nThis will replace ALL current data with backup from:\n${new Date(backup.exportDate).toLocaleString()}\n\nExported by: ${backup.user?.email || 'Unknown'}\nApp version: ${backup.version || 'Unknown'}\n\nCurrent data will be overwritten!\n\nContinue?`;
-                        
-                        if (confirm(confirmMsg)) {
-                            setYearData(backup.data);
-                            console.log('✅ Backup restored successfully');
-                            alert('✅ Backup restored successfully!\n\nPlease sync to cloud to save changes.');
-                            setHasUnsavedCloudChanges(true);
-                        }
+                        // Restore backup data directly
+                        setYearData(backup.data);
+                        console.log('✅ Backup restored successfully');
+                        setHasUnsavedCloudChanges(true);
                     } catch (error) {
                         console.error('❌ Import backup error:', error);
-                        alert('❌ Failed to import backup. File may be corrupted or invalid.');
                     }
                 };
                 reader.onerror = () => {
-                    alert('❌ Failed to read backup file.');
+                    console.error('❌ Failed to read backup file');
                 };
                 reader.readAsText(file);
             };
 
             const removeAdmin = async (email) => {
                 if (adminEmails.length === 1) {
-                    alert('⚠️ Cannot remove the last admin. Add another admin first.');
+                    console.error('❌ Cannot remove the last admin');
                     return;
                 }
                 if (email === user.email) {
-                    if (!confirm('⚠️ You are removing yourself as admin. You will lose access to settings. Continue?')) {
-                        return;
-                    }
+                    console.warn('⚠️ Removing self as admin');
                 }
                 try {
                     const { doc, setDoc } = window.FirebaseSDK;
@@ -3554,7 +3521,6 @@
                     });
                     setAdminEmails(updatedAdmins);
                     console.log('✅ Admin removed:', email);
-                    alert(`${email} removed from admins`);
                     
                     if (email === user.email) {
                         setIsAdmin(false);
@@ -3563,7 +3529,6 @@
                     }
                 } catch (error) {
                     console.error('Failed to remove admin:', error);
-                    alert('Failed to remove admin: ' + error.message);
                 }
             };
 
@@ -4386,15 +4351,11 @@
                     return;
                 }
                 
-                if (!confirm('🔥 IMPORT 2025 INSPECTION DATA\n\nThis will update all 2025 buildings with actual inspection report data.\n\n⚠️ This will replace existing device data with parsed information from inspection reports.\n\n✅ 2026 data will NOT be touched.\n\nContinue?')) {
-                    return;
-                }
+                console.log('🔥 Starting 2025 inspection data import...');
                 
                 try {
                     setImportStatus('importing');
                     setImportMessage('📥 Starting import...');
-                    
-                    console.log('🔥 Starting 2025 inspection data import...');
                     
                     // Get current 2025 buildings
                     const buildings2025 = yearData['2025'] || [];
@@ -4633,10 +4594,7 @@
                                         // Play sound notification
                                         playTimerSound();
                                         
-                                        // Show alert
-                                        setTimeout(() => {
-                                            alert(`⏰ Timer Complete!\n\n"${item.label}" battery test has finished.\n\nPlease check the emergency light now.`);
-                                        }, 100);
+                                        console.log(`⏰ Timer complete for "${item.label}"`);
                                         
                                         // Auto-pause the timer
                                         updateItem('lights', item.id, {
@@ -4656,10 +4614,7 @@
                                         // Play sound notification
                                         playTimerSound();
                                         
-                                        // Show alert
-                                        setTimeout(() => {
-                                            alert(`⏰ Timer Reached 30 Minutes!\n\n"${item.label}" battery test has reached the maximum time.\n\nTimer has been stopped.`);
-                                        }, 100);
+                                        console.log(`⏰ Timer reached 30 minutes for "${item.label}"`);
                                         
                                         // Auto-pause the timer at 30 minutes
                                         updateItem('lights', item.id, {
@@ -4713,7 +4668,7 @@
                 } catch (error) {
                     console.error('❌ Immediate save failed:', error);
                     if (error.name === 'QuotaExceededError' || error.code === 22) {
-                        alert('⚠️ Storage full! Cannot save changes. Please delete old photos or export data.');
+                        console.error('⚠️ Storage full! Cannot save changes.');
                     }
                     return false;
                 }
@@ -4946,11 +4901,7 @@
                                             {adminEmails.includes(email) ? '✓ Admin' : 'Make Admin'}
                                         </button>
                                         <button 
-                                            onClick={() => {
-                                                if (confirm(`Remove ${email} from allowed list?`)) {
-                                                    removeAllowedEmail(email);
-                                                }
-                                            }}
+                                            onClick={() => removeAllowedEmail(email)}
                                             className="text-red-500 font-bold px-2 hover:bg-red-50 rounded"
                                         >
                                             ✕
@@ -4998,11 +4949,7 @@
                                         )}
                                     </div>
                                     <button 
-                                        onClick={() => {
-                                            if (confirm(`Remove ${email} from admins?`)) {
-                                                removeAdmin(email);
-                                            }
-                                        }}
+                                        onClick={() => removeAdmin(email)}
                                         className="text-red-500 font-bold px-2 hover:bg-red-50 rounded text-sm"
                                     >
                                         Remove
@@ -5663,8 +5610,7 @@
                                                 console.log(`✅ Building ${buildingIdToDelete} deleted successfully`);
                                                 setActiveModal(null);
                                             } catch (error) {
-                                                alert('Failed to delete building from cloud. Please try again.');
-                                                console.error('Delete error:', error);
+                                                console.error('❌ Failed to delete building from cloud:', error);
                                                 isUpdatingFromSync.current = false; // Reset on error
                                             }
                                         } 
@@ -5852,30 +5798,8 @@
                         );
                         
                         // Only show on first time (no photos yet)
-                        if (hasAnyPhotos) return null;
-                        
-                        return (
-                            <div className="mx-4 mt-4 p-3 bg-amber-50 border border-amber-300 rounded-xl">
-                                <div className="flex items-start gap-2">
-                                    <div className="text-amber-600 text-lg">📱</div>
-                                    <div className="flex-1">
-                                        <div className="text-amber-900 font-bold text-xs mb-1">iPhone Photo Upload</div>
-                                        <div className="text-amber-800 text-[10px] space-y-1">
-                                            <div>1. Tap <span className="font-bold">📷 Media</span> on any item</div>
-                                            <div>2. Tap <span className="font-bold">"Allow"</span> when blue hand appears</div>
-                                            <div>3. Select photo (saves instantly to device)</div>
-                                            <div>4. Scroll to bottom & tap <span className="font-bold">"Export & Save"</span> to upload to cloud</div>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={(e) => { e.currentTarget.parentElement.parentElement.remove(); }}
-                                        className="text-amber-400 hover:text-amber-600 font-bold text-sm"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            </div>
-                        );
+                        // iPhone helper removed - cleaner UI
+                        return null;
                     })()}
 
                     <div className="p-4 space-y-3">

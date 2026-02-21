@@ -98,7 +98,7 @@ This app serves as a **STARTER TEMPLATE** for future app development. All patter
        } catch (error) {
            console.error('❌ Immediate save failed:', error);
            if (error.name === 'QuotaExceededError' || error.code === 22) {
-               alert('⚠️ Storage full! Cannot save changes.');
+               console.error('⚠️ Storage full! Cannot save changes.');
            }
            return false;
        }
@@ -209,11 +209,39 @@ When creating a new app from this template:
 - ❌ Never use blob URLs without IndexedDB backup (videos)
 - ❌ Never skip immediate save for "simple" updates
 - ❌ Never assume iOS gives time for async operations
+- ❌ Never use browser alert() or confirm() - use console.log only
+- ❌ Never show lengthy instruction boxes or help text
 - ✅ Always save synchronously before state update
 - ✅ Always test by killing app immediately after action
 - ✅ Always provide visual feedback (badges, progress bars)
 - ✅ Always handle storage quota exceeded errors
 - ✅ Always restore pending media on app load
+- ✅ Always use console logging only (no browser notifications)
+- ✅ Always keep UX clean and minimal (no instruction boxes)
+
+### NOTIFICATION POLICY (MANDATORY):
+**Browser Notifications Prohibited:**
+- ❌ No alert() calls (browser popup dialogs)
+- ❌ No confirm() calls (browser confirmation dialogs)
+- ❌ No prompt() calls (browser input dialogs)
+- ❌ No lengthy instruction boxes in the UI
+- ❌ No help text overlays or tutorials
+
+**Approved Communication Methods:**
+- ✅ console.log() for debugging and status messages
+- ✅ console.error() for error logging
+- ✅ console.warn() for warnings
+- ✅ In-app status badges (⏱ pending, ☁ synced, ✓ complete)
+- ✅ Brief inline status text (max 1-2 words)
+- ✅ Visual indicators (colors, icons, progress bars)
+- ✅ Sound notifications (for timers only, optional)
+
+**Rationale:**
+- Browser alerts interrupt user workflow
+- Users know how to use the app (no hand-holding)
+- Status should be visible in UI, not in popups
+- Professional apps don't spam alerts
+- Future apps built from this template should follow same clean UX pattern
 
 ## 8. CLOUD SYNC (UPDATED FEB 2026)
 * **Provider:** Firebase Firestore
