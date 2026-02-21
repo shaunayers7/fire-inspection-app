@@ -1254,14 +1254,12 @@
                                                                 src={photo.photoURL || photo.thumbnail} 
                                                                 className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
                                                                 onClick={() => {
-                                                                    if (photo.photoURL) {
-                                                                        onTriggerModal({
-                                                                            title: "Photo Viewer",
-                                                                            type: 'media',
-                                                                            mediaURL: photo.photoURL,
-                                                                            mediaType: 'image'
-                                                                        });
-                                                                    }
+                                                                    onTriggerModal({
+                                                                        title: "Photo Viewer",
+                                                                        type: 'media',
+                                                                        mediaURL: photo.photoURL || photo.thumbnail,
+                                                                        mediaType: 'image'
+                                                                    });
                                                                 }}
                                                                 alt={`Photo ${idx + 1}`}
                                                             />
@@ -6117,7 +6115,47 @@
                         </div>
                     </div>
 
-                    {activeModal && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    {/* Media Viewer Modal - Full screen image/video viewer */}
+                    {activeModal && activeModal.type === 'media' && (
+                        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/95" onClick={() => setActiveModal(null)}>
+                            <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-10">
+                                <h2 className="text-white font-bold text-lg">{activeModal.title}</h2>
+                                <button 
+                                    onClick={() => setActiveModal(null)}
+                                    className="text-white bg-black/50 hover:bg-black/70 rounded-full w-10 h-10 flex items-center justify-center text-2xl font-bold transition-colors"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                            
+                            <div className="w-full h-full flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
+                                {activeModal.mediaType === 'video' ? (
+                                    <video 
+                                        src={activeModal.mediaURL} 
+                                        controls
+                                        autoPlay
+                                        className="max-w-full max-h-full rounded-lg shadow-2xl"
+                                        style={{ maxHeight: '90vh' }}
+                                    />
+                                ) : (
+                                    <img 
+                                        src={activeModal.mediaURL} 
+                                        className="max-w-full max-h-full rounded-lg shadow-2xl cursor-zoom-out"
+                                        style={{ maxHeight: '90vh' }}
+                                        onClick={() => setActiveModal(null)}
+                                        alt="Full size view"
+                                    />
+                                )}
+                            </div>
+                            
+                            <div className="absolute bottom-4 left-0 right-0 text-center text-white text-sm">
+                                Tap anywhere to close
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Regular Modal - For confirmations */}
+                    {activeModal && activeModal.type !== 'media' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
                     
                     {/* Conflict Resolution Modal */}
                     {syncConflicts && syncConflicts.length > 0 && (
