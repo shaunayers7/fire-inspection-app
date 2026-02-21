@@ -18,6 +18,53 @@ This is a single-file React PWA (`index.html`). Firebase + Firestore backend. Pr
 
 ---
 
+## 📖 READ THESE DOCS FIRST — EVERY SESSION
+
+Before making any code changes, read these two files:
+
+1. **[docs/COPILOT-INSTRUCTIONS.md](../docs/COPILOT-INSTRUCTIONS.md)** — full patterns, workflow, iOS safety rules, known bugs
+2. **[docs/PRD.md](../docs/PRD.md)** — product requirements, iOS best practices (Section 7 is critical)
+
+If context is summarized and these files haven't been read yet this session, read them before proceeding.
+
+---
+
+## 🎯 PLATFORM TARGET
+
+- **Primary:** iOS Safari PWA (installed to home screen)
+- **Secondary:** Android Chrome
+- This is NOT a native app and NOT a desktop web app
+- All UI, notifications, storage, and API decisions must be validated against iOS Safari PWA behavior
+- Never assume desktop browser behavior applies
+
+---
+
+## 👤 USER PREFERENCES — DO NOT CHANGE WITHOUT BEING ASKED
+
+These are the **current defaults for this project**. Do not change them unless the user explicitly requests it. They are not universal rules — future projects may differ.
+
+| Preference | Current default | Change when |
+|------------|----------------|-------------|
+| Notifications / alerts | In-app status messages (toast, header ✓). No `alert()`, `confirm()`, or `prompt()` | User explicitly asks for a different notification pattern |
+| Navigation after save | User controls navigation. No auto-navigate after save | User explicitly asks for auto-navigation |
+| Button layout | Separate labeled buttons. Not combined | User explicitly asks to combine |
+| Sticky UI elements | Inline/non-sticky by default in this app | User explicitly asks for sticky on a specific element |
+| Data mutations | Save to localStorage synchronously before `setYearData` | Never — this is an iOS safety requirement, not a preference |
+
+---
+
+## ❓ ASK BEFORE ASSUMING
+
+**Always ask the user when:**
+- A platform API behaves differently on iOS Safari vs. desktop (e.g. notifications, file access, storage)
+- There are two valid implementation approaches with different UX tradeoffs
+- The existing code doesn't show a clear pattern for what's being added
+- A change would affect navigation, data persistence, or notifications
+
+**Never silently assume and implement** platform-specific behavior. State the uncertainty and ask.
+
+---
+
 ## ⚠️ MANDATORY PATTERNS
 
 ### iOS Safety — Immediate Save
