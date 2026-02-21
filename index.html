@@ -2264,16 +2264,16 @@
                 // Always save to localStorage for offline capability
                 try {
                     const dataString = JSON.stringify(yearData);
-                    const dataSizeMB = (dataString.length / 1024 / 1024).toFixed(2);
+                    const dataSizeMB = parseFloat((dataString.length / 1024 / 1024).toFixed(2));
                     
-                    // Update storage usage meter
-                    const totalStorage = 10; // Assume 10MB limit (conservative estimate)
-                    const usedMB = parseFloat(dataSizeMB);
-                    const percentage = Math.round((usedMB / totalStorage) * 100);
-                    setStorageUsage({ used: usedMB, total: totalStorage, percentage });
+                    // Use 5MB as the cap — iOS Safari localStorage hard limit
+                    // NOTE: This is localStorage only (text/JSON). Photos go to IndexedDB separately.
+                    const LOCALSTORAGE_LIMIT_MB = 5;
+                    const percentage = Math.min(Math.round((dataSizeMB / LOCALSTORAGE_LIMIT_MB) * 100), 100);
+                    setStorageUsage({ used: dataSizeMB, total: LOCALSTORAGE_LIMIT_MB, percentage });
                     
-                    // Warn if approaching localStorage limit (typically 5-10MB)
-                    if (dataString.length > 8 * 1024 * 1024) {
+                    // Warn if approaching localStorage limit
+                    if (dataString.length > 4 * 1024 * 1024) {
                         console.warn(`⚠️ Data size is large (${dataSizeMB}MB). Consider removing old photos/videos.`);
                     }
                     
@@ -2282,6 +2282,7 @@
                 } catch (error) {
                     if (error.name === 'QuotaExceededError' || error.code === 22) {
                         console.error('❌ Storage quota exceeded! Device storage is full.');
+                        setStorageUsage(prev => ({ ...prev, percentage: 100 })); // Keep bar full, don't reset
                     } else {
                         console.error('❌ Failed to save to localStorage:', error);
                     }
@@ -3226,7 +3227,9 @@
                 }
             };
             
-            // Save to cloud only (no PDF export)
+            // Save to cloud only (no PDF export, NO navigation - user stays on form)
+            // DECISION: Do NOT navigate away after save. User hits ← back button themselves.
+            // DO NOT add setView() or navigation here - this was an explicit user request.
             const saveToCloudOnly = async () => {
                 if (!activeBuilding) return;
                 try {
@@ -3234,14 +3237,13 @@
                     setSyncStatus('syncing');
                     await syncToCloud();
                     setSyncStatus('success');
-                    setHasUnsavedCloudChanges(false); // Clear unsaved changes flag
-                    setTimeout(() => setSyncStatus('idle'), 2000);
+                    setHasUnsavedCloudChanges(false);
+                    setTimeout(() => setSyncStatus('idle'), 3000);
                     console.log('✅ Cloud save complete!');
                 } catch (error) {
                     console.error('❌ Cloud save error:', error);
                     setSyncStatus('error');
                     setTimeout(() => setSyncStatus('idle'), 3000);
-                    // Data is still saved locally
                     console.warn('⚠️ Cloud sync failed - changes saved locally');
                 }
             };
@@ -5914,7 +5916,7 @@
             }
 
             return (
-                <div className="pb-44 safe-top">
+                <div className="pb-8 safe-top">
                     <div className="bg-white p-3 sm:p-4 sticky top-0 border-b z-50">
                         <div className="flex flex-wrap justify-between items-center gap-2 mb-2">
                             <button onClick={() => saveAndNavigate('building-select')} className="text-blue-600 font-bold px-1 sm:px-2 py-1 text-sm sm:text-base">← Save</button>
@@ -6318,30 +6320,21 @@
                         })()}
 
                         {/* Action Buttons */}
-                        <div className="pt-4 pb-6 space-y-3">
-                            {/* Export PDF Button */}
+                        <div className="pt-4 pb-8 flex gap-3">
                             <button 
                                 onClick={exportPDFOnly} 
-                                className="w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
+                                className="flex-1 bg-blue-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
                                 title="Generate and download PDF report"
                             >
                                 📄 Export PDF
                             </button>
-                            <div className="text-center text-[10px] text-gray-400 -mt-2">
-                                Download inspection report as PDF
-                            </div>
-                            
-                            {/* Save to Cloud Button */}
                             <button 
                                 onClick={saveToCloudOnly} 
-                                className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
+                                className="flex-1 bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
                                 title="Save all changes and photos to cloud"
                             >
-                                ☁️ Save & Exit
+                                ☁️ Save
                             </button>
-                            <div className="text-center text-[10px] text-gray-400 -mt-2">
-                                Sync all data & photos to cloud, then return to building list
-                            </div>
                         </div>
                     </div>
 

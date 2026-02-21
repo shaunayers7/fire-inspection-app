@@ -16,6 +16,19 @@
 3. **TODO.md** - Feature roadmap and task tracking
 4. **Technical docs** - Implementation details for specific features
 
+## 🔒 LOCKED UI/UX DECISIONS (DO NOT REVERT)
+
+These were explicitly requested by the user. Never reverse them, even if refactoring nearby code.
+
+| Area | Decision | What NOT to do |
+|------|----------|----------------|
+| Building form — Save button | `saveToCloudOnly()` syncs to cloud and shows ✓ status. **No navigation.** User presses ← back when ready. | ❌ Do not add `setView()` or any navigation inside this function |
+| Building form — buttons | Two separate buttons: **📄 Export PDF** (blue) and **☁️ Save** (green), side-by-side at bottom of scroll, not sticky/fixed | ❌ Do not combine into one button, do not make sticky |
+| Real-time sync | Disabled intentionally. Manual sync only via explicit user action. | ❌ Do not re-enable Firestore `onSnapshot` listeners |
+| Conflict resolution UI | `ConflictResolutionBody` is a standalone component (not inline in `.map()`). Hooks must live at component level. | ❌ Do not move `useState` back inside `.map()` callbacks |
+
+> **Rule for future changes:** If a user asks to change something in one of these areas, update this table first with the new decision before touching the code.
+
 ## ⚠️ MANDATORY PATTERNS (NEVER VIOLATE)
 
 ### 1. IMMEDIATE SAVE PATTERN (iOS Safety)
