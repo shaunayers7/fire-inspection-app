@@ -677,7 +677,7 @@
             const labelTextareaRef = useRef(null);
             
             // Image compression helper - compresses images to reduce storage size
-            const compressImage = (file, maxWidth = 1200, quality = 0.85) => {
+            const compressImage = (file, maxWidth = 2400, quality = 0.92) => {
                 return new Promise((resolve, reject) => {
                     // If it's a video, don't compress (return null to indicate no compression)
                     if (file.type.startsWith('video')) {
