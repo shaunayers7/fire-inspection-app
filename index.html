@@ -592,107 +592,6 @@
             return <button onClick={handleClick} className={`${baseClass} bg-gray-200 text-gray-400`}>○</button>;
         };
 
-        // ==================== Media Display Component ====================
-        // Loads images from IndexedDB or cloud URL efficiently
-        const MediaDisplay = ({ item, onTriggerModal }) => {
-            const [mediaURL, setMediaURL] = useState(null);
-            const [loading, setLoading] = useState(true);
-            
-            useEffect(() => {
-                let objectURL = null;
-                
-                const loadMedia = async () => {
-                    // Priority 1: Cloud URL (if available and online)
-                    if (item.photoURL) {
-                        setMediaURL(item.photoURL);
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    // Priority 2: IndexedDB (for offline or no cloud)
-                    if (item.hasLocalMedia) {
-                        const dbMedia = await getMediaFromDB(item.id);
-                        if (dbMedia) {
-                            objectURL = dbMedia.url;
-                            setMediaURL(dbMedia.url);
-                            setLoading(false);
-                            return;
-                        }
-                    }
-                    
-                    // Priority 3: Old base64 data (legacy support for existing photos)
-                    if (item.photo) {
-                        setMediaURL(item.photo);
-                        setLoading(false);
-                        return;
-                    }
-                    
-                    setLoading(false);
-                };
-                
-                loadMedia();
-                
-                // Cleanup: revoke object URL on unmount to prevent memory leaks
-                return () => {
-                    if (objectURL) {
-                        URL.revokeObjectURL(objectURL);
-                    }
-                };
-            }, [item.id, item.photoURL, item.hasLocalMedia, item.photo]);
-            
-            if (loading) {
-                return (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400"></div>
-                        <span>Loading...</span>
-                    </div>
-                );
-            }
-            
-            if (!mediaURL) return null;
-            
-            return (
-                <div className="mt-2 relative group w-24 h-24">
-                    {item.mediaType === 'video' ? (
-                        <video 
-                            src={mediaURL} 
-                            className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer" 
-                            onClick={() => {
-                                onTriggerModal({
-                                    title: "Media Viewer",
-                                    type: 'media',
-                                    mediaURL: mediaURL,
-                                    mediaType: item.mediaType
-                                });
-                            }}
-                        />
-                    ) : (
-                        <div className="relative w-full h-full">
-                            <img 
-                                src={mediaURL} 
-                                className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
-                                onClick={() => {
-                                    onTriggerModal({
-                                        title: "Media Viewer",
-                                        type: 'media',
-                                        mediaURL: mediaURL,
-                                        mediaType: item.mediaType || 'image'
-                                    });
-                                }}
-                                alt="Inspection media"
-                            />
-                            {item.photoURL && (
-                                <div className="absolute bottom-1 right-1 bg-blue-500 text-white text-[8px] px-1 rounded font-bold" title="Stored in cloud">☁</div>
-                            )}
-                            {item.hasLocalMedia && !item.photoURL && (
-                                <div className="absolute bottom-1 right-1 bg-green-500 text-white text-[8px] px-1 rounded font-bold" title="Stored locally">💾</div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
         const InspectionRow = ({ item, index, onUpdateMeta, onDelete, isDevice = false, isDeficiencyView = false, onTriggerModal, isDragging, dragHandlers, isEmergencyLight = false, onMoveUp, onMoveDown, isFirst = false, isLast = false }) => {
             const [localDraft, setLocalDraft] = useState(null);
             const [isEditingNote, setIsEditingNote] = useState(false);
@@ -701,7 +600,8 @@
             const draftTimerRef = useRef(null);
             const labelTextareaRef = useRef(null);
             
-            // Timer functions for emergency lights
+            // Image compression helper - compresses images to reduce storage size
+            const compressImage = (file, maxWidth = 1200, quality = 0.85) => {
                 return new Promise((resolve, reject) => {
                     // If it's a video, don't compress (return null to indicate no compression)
                     if (file.type.startsWith('video')) {
@@ -1096,46 +996,44 @@
                                                 
                                                 console.log('✅ Uploaded to Firebase Storage:', photoURL);
                                                 
-                                                // Store original file in IndexedDB for offline access
-                                                onUpdateMeta({ _uploadProgress: 85, _uploadStatus: 'Storing locally...' });
-                                                const blob = await fileToBlob(file);
-                                                await storeMediaInDB(item.id, blob, mediaType);
-                                                
                                                 onUpdateMeta({
-                                                    photo: null, // Don't store in localStorage anymore!
-                                                    photoURL: photoURL, // Cloud URL (text only, tiny!)
+                                                    photoURL: photoURL,
                                                     storagePath: `inspections/${item.id}/${fileName}`,
                                                     mediaType: mediaType,
-                                                    hasLocalMedia: true, // Flag to check IndexedDB
                                                     _uploading: false,
                                                     _uploadProgress: 100,
                                                     _uploadStatus: 'Complete!'
                                                 });
                                             } else {
-                                                // Fallback: Use IndexedDB only (no cloud)
-                                                console.warn('⚠️ Firebase Storage not available, using IndexedDB only');
+                                                // Fallback: Compress and store locally (no cloud)
+                                                console.warn('⚠️ Firebase Storage not available, storing locally');
+                                                
+                                                onUpdateMeta({ _uploadProgress: 50, _uploadStatus: 'Compressing...' });
                                                 
                                                 if (isVideo) {
-                                                    // Videos: Reject - too large without cloud storage
-                                                    alert('⚠️ Video uploads require cloud storage (Firebase).\n\nPlease ensure Firebase Storage is configured, or upload images instead.');
-                                                    onUpdateMeta({ _uploading: false, _uploadProgress: 0, _uploadStatus: '' });
-                                                    e.target.value = '';
-                                                    return;
-                                                } else {
-                                                    // Images: Store in IndexedDB only
-                                                    onUpdateMeta({ _uploadProgress: 50, _uploadStatus: 'Storing locally...' });
-                                                    const blob = await fileToBlob(file);
-                                                    await storeMediaInDB(item.id, blob, mediaType);
-                                                    
+                                                    // Videos: can't compress easily, store direct URL
+                                                    const videoURL = URL.createObjectURL(file);
                                                     onUpdateMeta({
-                                                        photo: null, // No localStorage!
-                                                        photoURL: null, // No cloud URL
-                                                        mediaType: mediaType,
-                                                        hasLocalMedia: true, // Check IndexedDB
+                                                        photoURL: videoURL,
+                                                        mediaType: 'video',
                                                         _uploading: false,
                                                         _uploadProgress: 100,
                                                         _uploadStatus: 'Complete!'
                                                     });
+                                                } else {
+                                                    // Images: compress and store as base64
+                                                    const compressed = await compressImage(file);
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => {
+                                                        onUpdateMeta({
+                                                            photo: reader.result,
+                                                            mediaType: 'image',
+                                                            _uploading: false,
+                                                            _uploadProgress: 100,
+                                                            _uploadStatus: 'Complete!'
+                                                        });
+                                                    };
+                                                    reader.readAsDataURL(compressed || file);
                                                 }
                                             }
                                         } catch (error) {
@@ -1175,10 +1073,44 @@
                                     placeholder="Add notes..."
                                 />
                             )}
-                            {/* Use MediaDisplay component to show images from IndexedDB or cloud */}
-                            {(item.photoURL || item.hasLocalMedia || item.photo) && (
+                            {/* Show uploaded media */}
+                            {(item.photoURL || item.photo) && (
                                 <>
-                                    <MediaDisplay item={item} onTriggerModal={onTriggerModal} />
+                                    <div className="mt-2 relative group w-24 h-24">
+                                        {item.mediaType === 'video' ? (
+                                            <video 
+                                                src={item.photoURL || item.photo} 
+                                                className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer" 
+                                                onClick={() => {
+                                                    onTriggerModal({
+                                                        title: "Media Viewer",
+                                                        type: 'media',
+                                                        mediaURL: item.photoURL || item.photo,
+                                                        mediaType: item.mediaType
+                                                    });
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="relative w-full h-full">
+                                                <img 
+                                                    src={item.photoURL || item.photo} 
+                                                    className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" 
+                                                    onClick={() => {
+                                                        onTriggerModal({
+                                                            title: "Media Viewer",
+                                                            type: 'media',
+                                                            mediaURL: item.photoURL || item.photo,
+                                                            mediaType: item.mediaType || 'image'
+                                                        });
+                                                    }}
+                                                    alt="Inspection media"
+                                                />
+                                                {item.photoURL && (
+                                                    <div className="absolute bottom-1 right-1 bg-blue-500 text-white text-[8px] px-1 rounded font-bold" title="Stored in cloud">☁</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="mt-2 relative inline-block">
                                         <button onClick={async () => {
                                             // Delete from Firebase Storage if storage path exists
@@ -1193,13 +1125,8 @@
                                                 }
                                             }
                                             
-                                            // Delete from IndexedDB if exists
-                                            if (item.hasLocalMedia) {
-                                                await deleteMediaFromDB(item.id);
-                                            }
-                                            
                                             // Clear from item data
-                                            onUpdateMeta({ photo: null, photoURL: null, storagePath: null, mediaType: null, hasLocalMedia: false });
+                                            onUpdateMeta({ photo: null, photoURL: null, storagePath: null, mediaType: null });
                                         }} className="bg-red-500 text-white rounded-full px-3 py-1 text-[10px] font-bold hover:bg-red-600 transition-colors">Delete Media</button>
                                     </div>
                                 </>
@@ -2351,7 +2278,10 @@
                             const cleanedData = {};
                             Object.keys(building.data).forEach(sectionKey => {
                                 cleanedData[sectionKey] = building.data[sectionKey].map(item => {
-                                            const { _uploading, _uploadProgress, _uploadStatus, ...cleanItem } = item; // Remove upload state fields
+                                    const { _uploading, _uploadProgress, _uploadStatus, ...cleanItem } = item; // Remove upload state fields
+                                    return cleanItem;
+                                });
+                            });
                             
                             const buildingWithSync = {
                                 ...building,
