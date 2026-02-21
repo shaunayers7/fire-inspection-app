@@ -3087,6 +3087,41 @@
             };
 
             // Export PDF, save to cloud, and exit
+            // Export PDF only (no cloud sync)
+            const exportPDFOnly = async () => {
+                if (!activeBuilding) return;
+                
+                try {
+                    console.log('📄 Exporting PDF report...');
+                    await handleExport();
+                    console.log('✅ PDF export complete!');
+                } catch (error) {
+                    console.error('❌ PDF export error:', error);
+                    alert('Failed to export PDF. Please try again.');
+                }
+            };
+            
+            // Save to cloud only (no PDF export)
+            const saveToCloudOnly = async () => {
+                if (!activeBuilding) return;
+                try {
+                    console.log('☁️ Saving to cloud...');
+                    setSyncStatus('syncing');
+                    await syncToCloud();
+                    setSyncStatus('success');
+                    setHasUnsavedCloudChanges(false); // Clear unsaved changes flag
+                    setTimeout(() => setSyncStatus('idle'), 2000);
+                    console.log('✅ Cloud save complete!');
+                } catch (error) {
+                    console.error('❌ Cloud save error:', error);
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                    // Data is still saved locally
+                    console.warn('⚠️ Cloud sync failed - changes saved locally');
+                }
+            };
+            
+            // Combined export & save (for backward compatibility)
             const exportAndSave = async () => {
                 if (!activeBuilding) return;
                 
@@ -6157,13 +6192,30 @@
                             );
                         })()}
 
-                        {/* Export & Save Button */}
-                        <div className="pt-4 pb-6">
-                            <button onClick={exportAndSave} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" title="Save all changes including photos to cloud and generate PDF">
-                                📄 Export & Save
+                        {/* Action Buttons */}
+                        <div className="pt-4 pb-6 space-y-3">
+                            {/* Export PDF Button */}
+                            <button 
+                                onClick={exportPDFOnly} 
+                                className="w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
+                                title="Generate and download PDF report"
+                            >
+                                📄 Export PDF
                             </button>
-                            <div className="text-center text-[10px] text-gray-400 mt-2">
-                                Saves all data & photos to cloud + generates PDF
+                            <div className="text-center text-[10px] text-gray-400 -mt-2">
+                                Download inspection report as PDF
+                            </div>
+                            
+                            {/* Save to Cloud Button */}
+                            <button 
+                                onClick={saveToCloudOnly} 
+                                className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
+                                title="Save all changes and photos to cloud"
+                            >
+                                ☁️ Save & Exit
+                            </button>
+                            <div className="text-center text-[10px] text-gray-400 -mt-2">
+                                Sync all data & photos to cloud, then return to building list
                             </div>
                         </div>
                     </div>
