@@ -1458,6 +1458,131 @@
             );
         };
 
+        // Standalone component so hooks are not called inside .map()
+        const ConflictResolutionBody = ({ syncConflicts, setSyncConflicts, resolveConflicts }) => {
+            const [resolutions, setResolutions] = React.useState(() => {
+                const init = {};
+                syncConflicts.forEach((_, i) => { init[i] = 'local'; });
+                return init;
+            });
+
+            const setChoice = (index, choice) => {
+                setResolutions(prev => ({ ...prev, [index]: choice }));
+            };
+
+            return (
+                <React.Fragment>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {syncConflicts.map((conflict, index) => {
+                            const selected = resolutions[index] || 'local';
+                            return (
+                                <div key={index} className="bg-gray-50 rounded-2xl p-4 border-2 border-orange-200">
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div>
+                                            <h3 className="font-bold text-gray-800">{conflict.buildingName}</h3>
+                                            <p className="text-xs text-gray-500">Field: {conflict.fieldPath}</p>
+                                        </div>
+                                        <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-bold">
+                                            Conflict #{index + 1}
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {/* Local Version */}
+                                        <button
+                                            onClick={() => setChoice(index, 'local')}
+                                            className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                selected === 'local'
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-gray-200 bg-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                    selected === 'local' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                                                }`}>
+                                                    {selected === 'local' && (
+                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                                    )}
+                                                </div>
+                                                <span className="font-bold text-sm text-gray-800">Your Changes</span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mb-1"><strong>By:</strong> {conflict.localUser}</p>
+                                            <p className="text-xs text-gray-600 mb-2"><strong>When:</strong> {new Date(conflict.localTime).toLocaleString()}</p>
+                                            <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
+                                                {JSON.stringify(conflict.localValue, null, 2)}
+                                            </div>
+                                        </button>
+
+                                        {/* Cloud Version */}
+                                        <button
+                                            onClick={() => setChoice(index, 'cloud')}
+                                            className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                selected === 'cloud'
+                                                    ? 'border-purple-500 bg-purple-50'
+                                                    : 'border-gray-200 bg-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                    selected === 'cloud' ? 'border-purple-500 bg-purple-500' : 'border-gray-300'
+                                                }`}>
+                                                    {selected === 'cloud' && (
+                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                                    )}
+                                                </div>
+                                                <span className="font-bold text-sm text-gray-800">Other User's Changes</span>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mb-1"><strong>By:</strong> {conflict.cloudUser}</p>
+                                            <p className="text-xs text-gray-600 mb-2"><strong>When:</strong> {new Date(conflict.cloudTime).toLocaleString()}</p>
+                                            <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
+                                                {JSON.stringify(conflict.cloudValue, null, 2)}
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="p-6 border-t bg-gray-50 flex gap-3">
+                        <button
+                            onClick={() => setSyncConflicts(null)}
+                            className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm uppercase tracking-wider"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => {
+                                const all = {};
+                                syncConflicts.forEach((_, i) => { all[i] = 'local'; });
+                                resolveConflicts(all);
+                            }}
+                            className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
+                        >
+                            Keep My Changes
+                        </button>
+                        <button
+                            onClick={() => resolveConflicts(resolutions)}
+                            className="flex-1 py-3 px-4 bg-purple-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
+                        >
+                            Apply Selections
+                        </button>
+                        <button
+                            onClick={() => {
+                                const all = {};
+                                syncConflicts.forEach((_, i) => { all[i] = 'cloud'; });
+                                resolveConflicts(all);
+                            }}
+                            className="flex-1 py-3 px-4 bg-purple-800 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
+                        >
+                            Use Their Changes
+                        </button>
+                    </div>
+                </React.Fragment>
+            );
+        };
+
         const App = () => {
             const [view, setView] = useState('login'); // Start with login
             const [selectedYear, setSelectedYear] = useState(2026);
@@ -6274,128 +6399,11 @@
                                     </p>
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                                    {syncConflicts.map((conflict, index) => {
-                                        const [selectedResolution, setSelectedResolution] = React.useState('local');
-                                        
-                                        return (
-                                            <div key={index} className="bg-gray-50 rounded-2xl p-4 border-2 border-orange-200">
-                                                <div className="flex items-start justify-between mb-3">
-                                                    <div>
-                                                        <h3 className="font-bold text-gray-800">{conflict.buildingName}</h3>
-                                                        <p className="text-xs text-gray-500">Field: {conflict.fieldPath}</p>
-                                                    </div>
-                                                    <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-bold">
-                                                        Conflict #{index + 1}
-                                                    </span>
-                                                </div>
-                                                
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    {/* Local Version */}
-                                                    <button
-                                                        onClick={() => {
-                                                            const resolutions = {};
-                                                            resolutions[index] = 'local';
-                                                            setSelectedResolution('local');
-                                                        }}
-                                                        className={`p-3 rounded-xl border-2 transition-all text-left ${
-                                                            selectedResolution === 'local'
-                                                                ? 'border-blue-500 bg-blue-50'
-                                                                : 'border-gray-200 bg-white'
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                                                                selectedResolution === 'local' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                                                            }`}>
-                                                                {selectedResolution === 'local' && (
-                                                                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                                                                )}
-                                                            </div>
-                                                            <span className="font-bold text-sm text-gray-800">Your Changes</span>
-                                                        </div>
-                                                        <p className="text-xs text-gray-600 mb-1">
-                                                            <strong>By:</strong> {conflict.localUser}
-                                                        </p>
-                                                        <p className="text-xs text-gray-600 mb-2">
-                                                            <strong>When:</strong> {new Date(conflict.localTime).toLocaleString()}
-                                                        </p>
-                                                        <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
-                                                            {JSON.stringify(conflict.localValue, null, 2)}
-                                                        </div>
-                                                    </button>
-                                                    
-                                                    {/* Cloud Version */}
-                                                    <button
-                                                        onClick={() => {
-                                                            const resolutions = {};
-                                                            resolutions[index] = 'cloud';
-                                                            setSelectedResolution('cloud');
-                                                        }}
-                                                        className={`p-3 rounded-xl border-2 transition-all text-left ${
-                                                            selectedResolution === 'cloud'
-                                                                ? 'border-purple-500 bg-purple-50'
-                                                                : 'border-gray-200 bg-white'
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                                                                selectedResolution === 'cloud' ? 'border-purple-500 bg-purple-500' : 'border-gray-300'
-                                                            }`}>
-                                                                {selectedResolution === 'cloud' && (
-                                                                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                                                                )}
-                                                            </div>
-                                                            <span className="font-bold text-sm text-gray-800">Other User's Changes</span>
-                                                        </div>
-                                                        <p className="text-xs text-gray-600 mb-1">
-                                                            <strong>By:</strong> {conflict.cloudUser}
-                                                        </p>
-                                                        <p className="text-xs text-gray-600 mb-2">
-                                                            <strong>When:</strong> {new Date(conflict.cloudTime).toLocaleString()}
-                                                        </p>
-                                                        <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
-                                                            {JSON.stringify(conflict.cloudValue, null, 2)}
-                                                        </div>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                
-                                <div className="p-6 border-t bg-gray-50 flex gap-3">
-                                    <button
-                                        onClick={() => setSyncConflicts(null)}
-                                        className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm uppercase tracking-wider"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const resolutions = {};
-                                            syncConflicts.forEach((_, index) => {
-                                                resolutions[index] = 'local'; // Default to local
-                                            });
-                                            resolveConflicts(resolutions);
-                                        }}
-                                        className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
-                                    >
-                                        Keep My Changes
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const resolutions = {};
-                                            syncConflicts.forEach((_, index) => {
-                                                resolutions[index] = 'cloud'; // Use cloud version
-                                            });
-                                            resolveConflicts(resolutions);
-                                        }}
-                                        className="flex-1 py-3 px-4 bg-purple-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
-                                    >
-                                        Use Their Changes
-                                    </button>
-                                </div>
+                                <ConflictResolutionBody
+                                    syncConflicts={syncConflicts}
+                                    setSyncConflicts={setSyncConflicts}
+                                    resolveConflicts={resolveConflicts}
+                                />
                             </div>
                         </div>
                     )}
