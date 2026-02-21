@@ -1124,42 +1124,10 @@
                                                 await savePendingUpload(item.id, fileToUpload, thumbnail);
                                             }
                                             
-                                            // CRITICAL iOS FIX: Save to localStorage IMMEDIATELY (synchronously)
-                                            // This ensures photos persist even if app is killed immediately after adding
-                                            try {
-                                                const currentData = localStorage.getItem('fire_inspection_v4_data');
-                                                if (currentData) {
-                                                    const parsedData = JSON.parse(currentData);
-                                                    const yearBuildings = parsedData[selectedYear] || [];
-                                                    const buildingIndex = yearBuildings.findIndex(b => b.id === selectedBuildingId);
-                                                    
-                                                    if (buildingIndex !== -1) {
-                                                        const building = yearBuildings[buildingIndex];
-                                                        // Find the section and item
-                                                        for (const sectionKey in building.data) {
-                                                            const sectionItems = building.data[sectionKey];
-                                                            const itemIndex = sectionItems.findIndex(i => i.id === item.id);
-                                                            if (itemIndex !== -1) {
-                                                                // Update photos array directly
-                                                                const currentPhotos = sectionItems[itemIndex].photos || [];
-                                                                sectionItems[itemIndex].photos = [...currentPhotos, newPhoto];
-                                                                sectionItems[itemIndex]._uploading = false;
-                                                                sectionItems[itemIndex]._uploadProgress = 100;
-                                                                sectionItems[itemIndex]._uploadStatus = '✅ Saved! Click "Export & Save" to upload to cloud';
-                                                                
-                                                                // Save back to localStorage IMMEDIATELY
-                                                                localStorage.setItem('fire_inspection_v4_data', JSON.stringify(parsedData));
-                                                                console.log('💾 IMMEDIATE save to localStorage (iOS safety)');
-                                                                break;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            } catch (error) {
-                                                console.error('❌ Immediate save failed:', error);
-                                            }
-                                            
-                                            // Also update React state (normal flow)
+                                            // CRITICAL iOS FIX: Update via onUpdateMeta which calls updateItem()
+                                            // updateItem() uses immediatelySaveToLocalStorage() for reliable persistence
+                                            // This is the ONLY save path - simpler and more reliable than manual localStorage
+                                            console.log('💾 Saving photo via updateItem (immediate save pattern)');
                                             onUpdateMeta({
                                                 photos: [...photos, newPhoto],
                                                 _uploading: false,
@@ -1340,32 +1308,9 @@
                                                                 // Remove from photos array
                                                                 const updatedPhotos = photos.filter(p => p.id !== photo.id);
                                                                 
-                                                                // CRITICAL iOS FIX: Save to localStorage IMMEDIATELY
-                                                                try {
-                                                                    const currentData = localStorage.getItem('fire_inspection_v4_data');
-                                                                    if (currentData) {
-                                                                        const parsedData = JSON.parse(currentData);
-                                                                        const yearBuildings = parsedData[selectedYear] || [];
-                                                                        const buildingIndex = yearBuildings.findIndex(b => b.id === selectedBuildingId);
-                                                                        
-                                                                        if (buildingIndex !== -1) {
-                                                                            const building = yearBuildings[buildingIndex];
-                                                                            for (const sectionKey in building.data) {
-                                                                                const sectionItems = building.data[sectionKey];
-                                                                                const itemIndex = sectionItems.findIndex(i => i.id === item.id);
-                                                                                if (itemIndex !== -1) {
-                                                                                    sectionItems[itemIndex].photos = updatedPhotos;
-                                                                                    localStorage.setItem('fire_inspection_v4_data', JSON.stringify(parsedData));
-                                                                                    console.log('💾 IMMEDIATE save after photo deletion (iOS safety)');
-                                                                                    break;
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                } catch (error) {
-                                                                    console.error('❌ Immediate save failed:', error);
-                                                                }
-                                                                
+                                                                // CRITICAL iOS FIX: Update via onUpdateMeta which calls updateItem()
+                                                                // updateItem() uses immediatelySaveToLocalStorage() for reliable persistence
+                                                                console.log('💾 Deleting photo via updateItem (immediate save pattern)');
                                                                 onUpdateMeta({ photos: updatedPhotos });
                                                             }}
                                                             className="absolute bottom-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
@@ -3208,6 +3153,17 @@
                         sanitizedChanges.photo = '[PHOTO_DATA]'; // Don't log massive base64 strings
                     }
                     
+                    // Enhanced logging for photo operations
+                    if (meta.photos) {
+                        const photoCount = meta.photos.length;
+                        const previousCount = item.photos?.length || 0;
+                        if (photoCount > previousCount) {
+                            console.log(`📸 Photo added (${previousCount} → ${photoCount}) - saving immediately...`);
+                        } else if (photoCount < previousCount) {
+                            console.log(`🗑️ Photo deleted (${previousCount} → ${photoCount}) - saving immediately...`);
+                        }
+                    }
+                    
                     logChange('update_item', { 
                         section: sect, 
                         itemLabel: item.label,
@@ -3231,7 +3187,12 @@
                 };
                 
                 // CRITICAL: Save immediately to localStorage (iOS best practice)
-                immediatelySaveToLocalStorage(updatedData);
+                const saveSuccess = immediatelySaveToLocalStorage(updatedData);
+                
+                // Enhanced logging for photo save verification
+                if (meta.photos && saveSuccess) {
+                    console.log(`✅ Photo metadata saved to localStorage - safe from app kill`);
+                }
                 
                 // Then update React state (triggers useEffect but data already saved)
                 setYearData(updatedData);
