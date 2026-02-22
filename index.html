@@ -6206,6 +6206,20 @@
                                                 }
                                                 return null;
                                             })()}
+                                            {(() => {
+                                                const photoCount = (activeBuilding?.data[s.id] || []).reduce(
+                                                    (sum, item) => sum + (item.photos?.length || ((item.photoURL || item.photo || item.thumbnail) && !item.photos ? 1 : 0)),
+                                                    0
+                                                );
+                                                if (photoCount > 0) {
+                                                    return (
+                                                        <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                                            📷 {photoCount}
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                             {s.id === 'lights' && getTimerCount() > 0 && (
                                                 <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
                                                     ⏱️ {getTimerCount()}
