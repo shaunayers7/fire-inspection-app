@@ -1,8 +1,8 @@
 // Fire Inspection App - Service Worker
-// Version 1.0.2
+// Version 1.0.3
 // Provides offline support and caching for PWA functionality
 
-const CACHE_NAME = 'fire-inspection-v3';
+const CACHE_NAME = 'fire-inspection-v4';
 const STATIC_CACHE = [
     '/',
     '/index.html',
