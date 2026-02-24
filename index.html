@@ -676,6 +676,7 @@
             const [isTimerCollapsed, setIsTimerCollapsed] = useState(false);
             const fileInputRef = useRef(null);
             const draftTimerRef = useRef(null);
+            const autoSaveTimerRef = useRef(null);
             const labelTextareaRef = useRef(null);
             
             // Image compression helper - compresses images to reduce storage size
@@ -872,73 +873,61 @@
                 }
             }, []);
 
-            // Auto-save draft to localStorage (debounced)
+            // Auto-save draft to localStorage AND auto-commit to yearData (debounced)
             useEffect(() => {
                 if (localDraft) {
-                    // Clear existing timer
-                    if (draftTimerRef.current) {
-                        clearTimeout(draftTimerRef.current);
-                    }
+                    // Clear existing timers
+                    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+                    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
 
-                    // Save draft after 500ms of inactivity
+                    // Save draft to localStorage after 500ms
                     draftTimerRef.current = setTimeout(() => {
                         try {
                             const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
                             drafts[item.id] = localDraft;
                             localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
-                            console.log('💾 Auto-saved draft for:', item.label);
                         } catch (e) {
                             console.error('Error saving draft:', e);
                         }
                     }, 500);
-                }
 
-                return () => {
-                    if (draftTimerRef.current) {
-                        clearTimeout(draftTimerRef.current);
-                    }
-                };
-            }, [localDraft]);
-
-            const startEdit = () => {
-                // Only create a new draft if one doesn't exist
-                // This prevents resetting the input when clicking back into it
-                if (!localDraft) {
-                    setLocalDraft({ ...item });
-                }
-            };
-            
-            const saveEdit = () => { 
-                onUpdateMeta(localDraft); 
-                setLocalDraft(null);
-                // Clear draft from localStorage
-                try {
-                    const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
-                    delete drafts[item.id];
-                    localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
-                    console.log('🗑️ Cleared draft for:', item.label);
-                } catch (e) {
-                    console.error('Error clearing draft:', e);
-                }
-            };
-            
-            const cancelEdit = () => { 
-                onTriggerModal({
-                    title: "Discard Changes?",
-                    type: 'confirm',
-                    onConfirm: () => { 
+                    // Auto-commit to yearData after 800ms of no typing
+                    autoSaveTimerRef.current = setTimeout(() => {
+                        onUpdateMeta(localDraft);
                         setLocalDraft(null);
-                        // Clear draft from localStorage
                         try {
                             const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
                             delete drafts[item.id];
                             localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
-                            console.log('🗑️ Cleared draft for:', item.label);
-                        } catch (e) {
-                            console.error('Error clearing draft:', e);
-                        }
-                    }
-                });
+                        } catch (e) {}
+                    }, 800);
+                }
+
+                return () => {
+                    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+                    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+                };
+            }, [localDraft]);
+
+            const startEdit = () => {
+                if (!localDraft) {
+                    setLocalDraft({ ...item });
+                }
+            };
+
+            // Immediately commit draft on blur (tap away)
+            const commitDraftNow = () => {
+                if (localDraft) {
+                    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+                    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+                    onUpdateMeta(localDraft);
+                    setLocalDraft(null);
+                    try {
+                        const drafts = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+                        delete drafts[item.id];
+                        localStorage.setItem(DRAFT_KEY, JSON.stringify(drafts));
+                    } catch (e) {}
+                }
             };
             const activeItem = localDraft || item;
 
@@ -981,8 +970,9 @@
                                         value={activeItem.label} 
                                         onFocus={startEdit}
                                         onChange={(e) => setLocalDraft({...activeItem, label: e.target.value})}
+                                        onBlur={commitDraftNow}
                                         rows="1"
-                                        className={`w-full text-sm font-bold bg-transparent border-b transition-colors resize-none overflow-hidden ${localDraft ? 'border-blue-400 bg-blue-50' : 'border-transparent'} ${item.fixed && isDeficiencyView ? 'line-through text-gray-400' : 'text-gray-800'}`}
+                                        className={`w-full text-sm font-bold bg-transparent border-b transition-colors resize-none overflow-hidden ${localDraft ? 'border-blue-300' : 'border-transparent'} ${item.fixed && isDeficiencyView ? 'line-through text-gray-400' : 'text-gray-800'}`}
                                         style={{minHeight: '1.5em', lineHeight: '1.5'}}
                                         onInput={(e) => {
                                             e.target.style.height = 'auto';
@@ -991,8 +981,8 @@
                                     />
                                     {isDevice && (
                                         <div className="flex gap-2">
-                                            <input value={activeItem.deviceNo} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, deviceNo: e.target.value})} className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
-                                            <select value={activeItem.type} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, type: e.target.value})} className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded">
+                                            <input value={activeItem.deviceNo} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, deviceNo: e.target.value})} onBlur={commitDraftNow} className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
+                                            <select value={activeItem.type} onFocus={startEdit} onChange={(e) => { const updated = {...activeItem, type: e.target.value}; onUpdateMeta(updated); setLocalDraft(null); }} className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded">
                                                 {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                             </select>
                                         </div>
@@ -1000,14 +990,7 @@
                                 </div>
                             </div>
                             
-                            {localDraft ? (
-                                <div className="flex gap-2 pl-6 items-center">
-                                    <button onClick={saveEdit} className="text-[10px] bg-blue-600 text-white px-3 py-1 rounded font-bold uppercase shadow-sm">Save</button>
-                                    <button onClick={cancelEdit} className="text-[10px] bg-gray-100 text-gray-400 px-3 py-1 rounded font-bold uppercase">Cancel</button>
-                                    <span className="text-[9px] text-gray-400 italic" title="Changes are auto-saved">💾 Draft saved</span>
-                                </div>
-                            ) : (
-                                <div className="flex flex-wrap gap-4 pl-6 text-[10px] font-bold text-gray-400 uppercase">
+                            <div className="flex flex-wrap gap-4 pl-6 text-[10px] font-bold text-gray-400 uppercase">
                                     <button onClick={() => setIsEditingNote(!isEditingNote)} className="hover:text-blue-500">Note</button>
                                     <button onClick={async () => {
                                         // iOS Safari permission check and guidance
