@@ -3263,13 +3263,17 @@
             // DO NOT add setView() or navigation here - this was an explicit user request.
             const saveToCloudOnly = async () => {
                 if (!activeBuilding) return;
+                if (!db || !user) {
+                    setSyncStatus('error');
+                    setTimeout(() => setSyncStatus('idle'), 3000);
+                    console.warn('⚠️ Cannot save: not logged in or Firebase not ready');
+                    return;
+                }
                 try {
                     console.log('☁️ Saving to cloud...');
                     setSyncStatus('syncing');
                     await syncToCloud();
-                    setSyncStatus('success');
-                    setHasUnsavedCloudChanges(false);
-                    setTimeout(() => setSyncStatus('idle'), 3000);
+                    // syncToCloud sets its own success status — only set if it didn't throw
                     console.log('✅ Cloud save complete!');
                 } catch (error) {
                     console.error('❌ Cloud save error:', error);
@@ -6474,11 +6478,20 @@
                                 📄 Export PDF
                             </button>
                             <button 
-                                onClick={saveToCloudOnly} 
-                                className="flex-1 bg-green-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-transform" 
+                                onClick={saveToCloudOnly}
+                                disabled={syncStatus === 'syncing'}
+                                className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all ${
+                                    syncStatus === 'syncing'
+                                        ? 'bg-gray-400 text-white cursor-not-allowed opacity-70'
+                                        : syncStatus === 'success'
+                                            ? 'bg-emerald-500 text-white'
+                                            : syncStatus === 'error'
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-green-500 text-white'
+                                }`}
                                 title="Save all changes and photos to cloud"
                             >
-                                ☁️ Save
+                                {syncStatus === 'syncing' ? '⏳ Saving...' : syncStatus === 'success' ? '✓ Saved!' : syncStatus === 'error' ? '✕ Failed' : '☁️ Save'}
                             </button>
                         </div>
                     </div>
