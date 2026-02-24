@@ -321,7 +321,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.5.2'; // Updated: Feb 24, 2026 - Cache bust: removed blue save button, timer fixes
+        const APP_VERSION = '2.5.3'; // Updated: Feb 24, 2026 - Sort by last opened date
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -5691,7 +5691,7 @@
                                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
                                 >
-                                    📅 Sort by Date {sortBy === 'date' && (dateSortOrder === 'newest' ? '↓' : '↑')}
+                                    📅 Last Opened {sortBy === 'date' && (dateSortOrder === 'newest' ? '↓ Newest' : '↑ Oldest')}
                                 </button>
                             </div>
                         </div>
@@ -5749,9 +5749,9 @@
                             );
                         } else if (sortBy === 'date') {
                             filteredBuildings = [...filteredBuildings].sort((a, b) => {
-                                // Use inspection date, then lastServiceDate, then createdAt as fallbacks
-                                const dateA = a.inspectionDetails?.date || a.details?.lastServiceDate || a.createdAt || '';
-                                const dateB = b.inspectionDetails?.date || b.details?.lastServiceDate || b.createdAt || '';
+                                // Sort by last opened, then last synced, then created
+                                const dateA = a.lastOpenedAt || a.lastSynced || a.createdAt || '';
+                                const dateB = b.lastOpenedAt || b.lastSynced || b.createdAt || '';
                                 
                                 // If both dates are empty, maintain original order
                                 if (!dateA && !dateB) return 0;
@@ -5780,7 +5780,14 @@
                         const status = getBuildingStatus(b);
                         const isSynced = b.lastSynced && b.lastSynced !== null;
                         return (
-                            <div key={b.id} onClick={() => { setSelectedBuildingId(b.id); setView('form'); viewRef.current = 'form'; }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
+                            <div key={b.id} onClick={() => {
+                                // Track last opened time for date sort
+                                const now = new Date().toISOString();
+                                const updated = { ...yearData, [selectedYear]: yearData[selectedYear].map(building => building.id === b.id ? { ...building, lastOpenedAt: now } : building) };
+                                localStorage.setItem('fire_inspection_v4_data', JSON.stringify(updated));
+                                setYearData(updated);
+                                setSelectedBuildingId(b.id); setView('form'); viewRef.current = 'form';
+                            }} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
