@@ -321,7 +321,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.5.5'; // Updated: Feb 24, 2026 - Stage 2 timer pulse + acknowledge tap
+        const APP_VERSION = '2.5.6'; // Updated: Feb 24, 2026 - Force collapse to bubble on stage 2 start
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -853,10 +853,11 @@
                 onUpdateMeta({ timer: null });
             };
 
-            // Reset acknowledged state whenever stage transitions to 2 (new alert)
+            // Reset acknowledged state and force-collapse to bubble when stage 2 starts
             useEffect(() => {
                 if (item.timer?.stage === 2) {
                     setIsStage2Acknowledged(false);
+                    setIsTimerCollapsed(true); // Force bubble mode so old 00:00 is hidden
                 }
             }, [item.timer?.stage]);
 
