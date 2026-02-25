@@ -456,7 +456,7 @@
                     { id: `c15-${Date.now()}`, label: 'Panel condition and keys', status: initialStatus, note: '', photo: null, fixed: false },
                     { id: `c16-${Date.now()}`, label: 'Signal check with salt lake', status: initialStatus, note: '', photo: null, fixed: false }
                 ],
-                devices: Array(1).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i+1).toString(), label: `Device ${i+1}`, type: 'Smoke Detector', status: initialStatus, note: '', photo: null, fixed: false })),
+                devices: Array(1).fill(0).map((_, i) => ({ id: `d${i}-${Date.now()}`, deviceNo: (i+1).toString(), label: `Device ${i+1}`, type: 'Heat Detector', status: initialStatus, note: '', photo: null, fixed: false })),
                 battery: [
                     { id: `b0-${Date.now()}`, label: 'Battery AC on', status: initialStatus, note: '', photo: null, fixed: false },
                     { id: `b1-${Date.now()}`, label: 'Battery AC off', status: initialStatus, note: '', photo: null, fixed: false },
@@ -1004,7 +1004,31 @@
                                     {isDevice && (
                                         <div className="flex gap-2">
                                             <input value={activeItem.deviceNo} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, deviceNo: e.target.value})} onBlur={commitDraftNow} className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
-                                            <select value={activeItem.type} onFocus={startEdit} onChange={(e) => { const updated = {...activeItem, type: e.target.value}; onUpdateMeta(updated); setLocalDraft(null); }} className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded">
+                                            <select
+                                                value={activeItem.type}
+                                                onFocus={startEdit}
+                                                onChange={(e) => setLocalDraft({...activeItem, type: e.target.value})}
+                                                onBlur={(e) => {
+                                                    const updated = {...activeItem, type: e.target.value};
+                                                    onUpdateMeta(updated);
+                                                    setLocalDraft(null);
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === 'Tab') {
+                                                        const updated = {...activeItem, type: e.target.value};
+                                                        onUpdateMeta(updated);
+                                                        setLocalDraft(null);
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+                                                            const all = [...document.querySelectorAll(focusable)].filter(el => !el.disabled && el.offsetParent !== null);
+                                                            const idx = all.indexOf(e.target);
+                                                            if (idx > -1 && all[idx + 1]) all[idx + 1].focus();
+                                                        }
+                                                    }
+                                                }}
+                                                className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded"
+                                            >
                                                 {DEVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                             </select>
                                         </div>
@@ -6389,7 +6413,7 @@
                                             ))}
                                             <button onClick={() => {
                                                 const newItem = s.isDev 
-                                                    ? { id: Date.now(), deviceNo: (activeBuilding.data[s.id].length + 1).toString(), label: `Device ${activeBuilding.data[s.id].length + 1}`, type: 'Smoke Detector', status: "pending", note: "", photo: null, fixed: false }
+                                                    ? { id: Date.now(), deviceNo: (activeBuilding.data[s.id].length + 1).toString(), label: `Device ${activeBuilding.data[s.id].length + 1}`, type: 'Heat Detector', status: "pending", note: "", photo: null, fixed: false }
                                                     : { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false };
                                                 setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...(b.data[s.id] || []), newItem] } } : b) }));
                                             }} className="w-full p-3 text-[10px] font-black text-gray-300 uppercase tracking-widest">+ Add Item</button>
