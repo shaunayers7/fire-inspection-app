@@ -1081,6 +1081,27 @@
                                         
                                         fileInputRef.current.click();
                                     }} className="hover:text-blue-500">📷 Media</button>
+                                    {isEmergencyLight && (
+                                        <button
+                                            onClick={() => {
+                                                if (!item.timer) {
+                                                    updateTimerMode('down');
+                                                } else if (item.timer.stage === 'finished') {
+                                                    removeTimer();
+                                                }
+                                            }}
+                                            title={!item.timer ? 'Add timer' : item.timer.stage === 'finished' ? 'Timer done — tap to remove' : 'Timer active'}
+                                            className={`ml-2 text-sm leading-none ${
+                                                !item.timer
+                                                    ? 'text-gray-300 hover:text-yellow-500'
+                                                    : item.timer.stage === 'finished'
+                                                        ? 'text-green-500 hover:text-green-700'
+                                                        : 'text-yellow-500'
+                                            }`}
+                                        >
+                                            {item.timer?.stage === 'finished' ? '✅' : '⏱️'}
+                                        </button>
+                                    )}
                                     {isDeficiencyView && (
                                         <div className="flex items-center gap-1 ml-2">
                                             <input 
@@ -1373,20 +1394,9 @@
                                 );
                             })()}
                             
-                            {/* Timer controls for emergency lights */}
-                            {isEmergencyLight && (
+                            {/* Timer controls for emergency lights — only shown when timer is active */}
+                            {isEmergencyLight && item.timer && item.timer.stage !== 'finished' && (
                                 <div className="mt-3">
-                                    {!item.timer ? (
-                                        <div className="p-3 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg border border-yellow-200">
-                                            <button
-                                                onClick={() => updateTimerMode('down')}
-                                                className="w-full text-xs font-bold text-yellow-700 hover:text-yellow-900 uppercase tracking-wide"
-                                            >
-                                                ⏱️ Add Timer
-                                            </button>
-                                        </div>
-                                    ) : item.timer ? (
-                                        // FULL CONTROLS - When timer is paused/setup or running but expanded
                                         <div className={`p-3 rounded-lg border space-y-2 ${
                                             item.timer.stage === 'finished'
                                                 ? 'bg-gradient-to-r from-gray-100 to-gray-200 border-gray-300'
@@ -1521,7 +1531,6 @@
                                                 )}
                                             </div>
                                         </div>
-                                    ) : null}
                                 </div>
                             )}
                         </div>
