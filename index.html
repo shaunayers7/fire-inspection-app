@@ -1678,6 +1678,8 @@
             const [copyTargetYear, setCopyTargetYear] = useState("");
             const [buildingToCopy, setBuildingToCopy] = useState(null);
             const [copyCustomSections, setCopyCustomSections] = useState(new Set());
+            const [transferTargetYear, setTransferTargetYear] = useState("");
+            const [buildingToTransfer, setBuildingToTransfer] = useState(null);
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
@@ -3525,19 +3527,42 @@
                 };
 
                 // Ensure target year exists in yearData
-                setYearData(prev => {
-                    const updatedData = { ...prev };
-                    if (!updatedData[targetYear]) {
-                        updatedData[targetYear] = [];
-                    }
-                    updatedData[targetYear] = [...updatedData[targetYear], copiedBuilding];
-                    return updatedData;
-                });
+                const updatedCopyData = { ...yearData };
+                if (!updatedCopyData[targetYear]) {
+                    updatedCopyData[targetYear] = [];
+                }
+                updatedCopyData[targetYear] = [...updatedCopyData[targetYear], copiedBuilding];
+                immediatelySaveToLocalStorage(updatedCopyData);
+                setYearData(updatedCopyData);
 
                 console.log(`✅ Copied "${building.name}" from ${selectedYear} to ${targetYear}`);
                 
                 // Log the change
                 logChange('copy_building', {
+                    buildingName: building.name,
+                    fromYear: selectedYear,
+                    toYear: targetYear
+                });
+            };
+
+            // Transfer a building with ALL its data preserved (no reset) — for correcting wrong-year entries
+            const transferBuildingToYear = (building, targetYear) => {
+                const transferredBuilding = {
+                    ...structuredClone(building), // deep clone to preserve all data
+                    id: `b-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                    lastSynced: null
+                };
+
+                const updatedTransferData = { ...yearData };
+                if (!updatedTransferData[targetYear]) {
+                    updatedTransferData[targetYear] = [];
+                }
+                updatedTransferData[targetYear] = [...updatedTransferData[targetYear], transferredBuilding];
+                immediatelySaveToLocalStorage(updatedTransferData);
+                setYearData(updatedTransferData);
+
+                console.log(`✅ Transferred "${building.name}" from ${selectedYear} to ${targetYear} (full data preserved)`);
+                logChange('transfer_building', {
                     buildingName: building.name,
                     fromYear: selectedYear,
                     toYear: targetYear
@@ -5900,8 +5925,18 @@
                                             setActiveModal({ type: 'copy-building', title: `Copy "${b.name}" to Year` }); 
                                         }} 
                                         className="text-blue-400 p-2 text-lg hover:text-blue-600 transition-colors"
-                                        title="Copy to another year"
+                                        title="Copy to another year (resets inspection data)"
                                     >📋</button>
+                                    <button 
+                                        onClick={(e) => { 
+                                            e.stopPropagation(); 
+                                            setBuildingToTransfer(b);
+                                            setTransferTargetYear('');
+                                            setActiveModal({ type: 'transfer-building', title: `Transfer "${b.name}" to Year` }); 
+                                        }} 
+                                        className="text-green-500 p-2 text-lg hover:text-green-700 transition-colors"
+                                        title="Transfer to another year (preserves all inspection data)"
+                                    >🔀</button>
                                     <button onClick={(e) => { 
                                     e.stopPropagation(); 
                                     const buildingIdToDelete = b.id;
@@ -6080,6 +6115,61 @@
                             </div>
                         </Modal>
                     )}
+                    {activeModal?.type === 'transfer-building' && (() => {
+                        const targetYearNum = parseInt(transferTargetYear);
+                        const isDuplicate = transferTargetYear &&
+                            (yearData[targetYearNum] || []).some(b =>
+                                b.name.trim().toLowerCase() === buildingToTransfer?.name.trim().toLowerCase()
+                            );
+                        return (
+                            <Modal 
+                                title={activeModal.title} 
+                                onCancel={() => { 
+                                    setActiveModal(null); 
+                                    setBuildingToTransfer(null); 
+                                    setTransferTargetYear('');
+                                }} 
+                                onConfirm={() => {
+                                    if (transferTargetYear && buildingToTransfer) {
+                                        transferBuildingToYear(buildingToTransfer, targetYearNum);
+                                        setActiveModal(null);
+                                        setBuildingToTransfer(null);
+                                        setTransferTargetYear('');
+                                    }
+                                }}
+                                confirmText="Transfer Building"
+                            >
+                                <div className="space-y-3">
+                                    <div className="pt-1">
+                                        <label className="block text-xs font-semibold text-gray-700 mb-2">Transfer "{buildingToTransfer?.name}" to year:</label>
+                                        <input 
+                                            type="number" 
+                                            autoFocus 
+                                            value={transferTargetYear} 
+                                            onChange={(e) => setTransferTargetYear(e.target.value)} 
+                                            placeholder={`e.g. ${parseInt(selectedYear) + 1}`}
+                                            className="w-full p-3 bg-gray-50 border border-gray-300 rounded-xl text-center text-lg font-bold focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        />
+                                    </div>
+                                    {isDuplicate && (
+                                        <div className="bg-yellow-50 border border-yellow-400 rounded-lg p-3">
+                                            <p className="text-[11px] text-yellow-800 font-bold">⚠️ Warning: A building named "{buildingToTransfer?.name}" already exists in {transferTargetYear}. Transferring will create a duplicate.</p>
+                                        </div>
+                                    )}
+                                    <details className="bg-green-50 border border-green-200 rounded-lg p-3" open>
+                                        <summary className="text-[10px] text-green-800 font-semibold cursor-pointer">✓ What gets preserved</summary>
+                                        <ul className="text-[10px] text-green-700 space-y-0.5 ml-4 list-disc mt-2">
+                                            <li>All inspection results and statuses</li>
+                                            <li>Notes and deficiencies</li>
+                                            <li>Building name, address and details</li>
+                                            <li>Custom sections and device inventory</li>
+                                        </ul>
+                                    </details>
+                                    <p className="text-[10px] text-gray-500">The original building in year {selectedYear} is not affected.</p>
+                                </div>
+                            </Modal>
+                        );
+                    })()}
                     </div>
                 </>
             );
