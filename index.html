@@ -427,7 +427,8 @@
                 { id: 'devices', title: 'Device inventory', color: 'bg-[#1C252E]', isDev: true },
                 { id: 'battery', title: 'Battery health', color: 'bg-blue-500', isDev: false },
                 { id: 'lights', title: 'Emergency lights', color: 'bg-[#EAB308]', isDev: false },
-                { id: 'exitSigns', title: 'Emergency Exit Signs', color: 'bg-green-600', isDev: false }
+                { id: 'exitSigns', title: 'Emergency Exit Signs', color: 'bg-green-600', isDev: false },
+                { id: 'signalingDevices', title: 'Signaling Devices', color: 'bg-indigo-500', isDev: false }
             ],
             data: {
                 checklist: [
@@ -466,6 +467,7 @@
                 ],
                 lights: Array(3).fill(0).map((_, i) => ({ id: `e${i}-${Date.now()}`, label: `EM-${i+1}`, status: initialStatus, note: '', photo: null, fixed: false, timer: null })),
                 exitSigns: Array(2).fill(0).map((_, i) => ({ id: `es${i}-${Date.now()}`, label: `Exit Sign ${i+1}`, status: initialStatus, note: '', photo: null, fixed: false, timer: null })),
+                signalingDevices: Array(2).fill(0).map((_, i) => ({ id: `sgd${i}-${Date.now()}`, label: `SD-${i+1}`, status: initialStatus, note: '', photo: null, fixed: false })),
                 customDeficiencies: []
             }
         });
@@ -1548,118 +1550,172 @@
                 syncConflicts.forEach((_, i) => { init[i] = 'local'; });
                 return init;
             });
+            const [isResolving, setIsResolving] = React.useState(false);
 
             const setChoice = (index, choice) => {
                 setResolutions(prev => ({ ...prev, [index]: choice }));
             };
 
+            const setAll = (choice) => {
+                const all = {};
+                syncConflicts.forEach((_, i) => { all[i] = choice; });
+                setResolutions(all);
+            };
+
+            const handleResolve = async (overrideResolutions) => {
+                setIsResolving(true);
+                try {
+                    await resolveConflicts(overrideResolutions || resolutions);
+                } finally {
+                    setIsResolving(false);
+                }
+            };
+
+            // Format a raw fieldPath like "data.Exit Lights.item_abc" into a readable label
+            const formatFieldPath = (fieldPath) => {
+                const parts = fieldPath.split('.');
+                if (parts[0] === 'data' && parts.length >= 2) {
+                    return `Section: ${parts[1]}`;
+                } else if (parts[0] === 'details') {
+                    const label = parts[1] ? parts[1].replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()) : parts[1];
+                    return `Details → ${label}`;
+                } else if (parts[0] === 'name') {
+                    return 'Building Name';
+                }
+                return fieldPath;
+            };
+
+            // Render a conflict value in a human-readable way
+            const renderValue = (value) => {
+                if (value === null || value === undefined) return <em className="text-gray-400">empty</em>;
+                if (typeof value === 'object') {
+                    // For inspection item changes, show status + note if present
+                    const parts = [];
+                    if (value.status !== undefined) parts.push(`Status: ${value.status || 'pending'}`);
+                    if (value.note !== undefined) parts.push(`Note: ${value.note || '(none)'}`);
+                    if (parts.length > 0) return <span>{parts.join(' · ')}</span>;
+                    return <span className="font-mono text-xs">{JSON.stringify(value)}</span>;
+                }
+                return <span>{String(value)}</span>;
+            };
+
+            // Group conflicts by building for a cleaner layout
+            const byBuilding = syncConflicts.reduce((acc, conflict, index) => {
+                if (!acc[conflict.buildingId]) {
+                    acc[conflict.buildingId] = { name: conflict.buildingName, items: [] };
+                }
+                acc[conflict.buildingId].items.push({ ...conflict, index });
+                return acc;
+            }, {});
+
             return (
                 <React.Fragment>
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                        {syncConflicts.map((conflict, index) => {
-                            const selected = resolutions[index] || 'local';
-                            return (
-                                <div key={index} className="bg-gray-50 rounded-2xl p-4 border-2 border-orange-200">
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div>
-                                            <h3 className="font-bold text-gray-800">{conflict.buildingName}</h3>
-                                            <p className="text-xs text-gray-500">Field: {conflict.fieldPath}</p>
-                                        </div>
-                                        <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full font-bold">
-                                            Conflict #{index + 1}
-                                        </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {/* Local Version */}
-                                        <button
-                                            onClick={() => setChoice(index, 'local')}
-                                            className={`p-3 rounded-xl border-2 transition-all text-left ${
-                                                selected === 'local'
-                                                    ? 'border-blue-500 bg-blue-50'
-                                                    : 'border-gray-200 bg-white'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                                                    selected === 'local' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                                                }`}>
-                                                    {selected === 'local' && (
-                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                                    )}
-                                                </div>
-                                                <span className="font-bold text-sm text-gray-800">Your Changes</span>
-                                            </div>
-                                            <p className="text-xs text-gray-600 mb-1"><strong>By:</strong> {conflict.localUser}</p>
-                                            <p className="text-xs text-gray-600 mb-2"><strong>When:</strong> {new Date(conflict.localTime).toLocaleString()}</p>
-                                            <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
-                                                {JSON.stringify(conflict.localValue, null, 2)}
-                                            </div>
-                                        </button>
-
-                                        {/* Cloud Version */}
-                                        <button
-                                            onClick={() => setChoice(index, 'cloud')}
-                                            className={`p-3 rounded-xl border-2 transition-all text-left ${
-                                                selected === 'cloud'
-                                                    ? 'border-purple-500 bg-purple-50'
-                                                    : 'border-gray-200 bg-white'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                                                    selected === 'cloud' ? 'border-purple-500 bg-purple-500' : 'border-gray-300'
-                                                }`}>
-                                                    {selected === 'cloud' && (
-                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                                                    )}
-                                                </div>
-                                                <span className="font-bold text-sm text-gray-800">Other User's Changes</span>
-                                            </div>
-                                            <p className="text-xs text-gray-600 mb-1"><strong>By:</strong> {conflict.cloudUser}</p>
-                                            <p className="text-xs text-gray-600 mb-2"><strong>When:</strong> {new Date(conflict.cloudTime).toLocaleString()}</p>
-                                            <div className="bg-white p-2 rounded border text-xs font-mono text-gray-800">
-                                                {JSON.stringify(conflict.cloudValue, null, 2)}
-                                            </div>
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                    {/* Bulk actions bar */}
+                    <div className="px-6 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-3 flex-wrap">
+                        <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide flex-1">
+                            {syncConflicts.length} conflict{syncConflicts.length !== 1 ? 's' : ''} — select a version for each, or:
+                        </span>
+                        <button
+                            onClick={() => setAll('local')}
+                            disabled={isResolving}
+                            className="text-xs px-3 py-1.5 bg-blue-100 text-blue-700 font-bold rounded-lg border border-blue-300 hover:bg-blue-200 transition-colors"
+                        >
+                            ✓ Select All Mine
+                        </button>
+                        <button
+                            onClick={() => setAll('cloud')}
+                            disabled={isResolving}
+                            className="text-xs px-3 py-1.5 bg-purple-100 text-purple-700 font-bold rounded-lg border border-purple-300 hover:bg-purple-200 transition-colors"
+                        >
+                            ✓ Select All Theirs
+                        </button>
                     </div>
 
-                    <div className="p-6 border-t bg-gray-50 flex gap-3">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {Object.values(byBuilding).map(({ name, items }) => (
+                            <div key={name} className="rounded-2xl border border-gray-200 overflow-hidden">
+                                <div className="bg-gray-100 px-4 py-2">
+                                    <h3 className="font-bold text-gray-800 text-sm">🏢 {name}</h3>
+                                </div>
+                                <div className="divide-y divide-gray-100">
+                                    {items.map(({ index, fieldPath, localValue, cloudValue, localUser, cloudUser, localTime, cloudTime }) => {
+                                        const selected = resolutions[index] || 'local';
+                                        return (
+                                            <div key={index} className="p-4">
+                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                                                    {formatFieldPath(fieldPath)}
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {/* Mine */}
+                                                    <button
+                                                        onClick={() => setChoice(index, 'local')}
+                                                        disabled={isResolving}
+                                                        className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                            selected === 'local'
+                                                                ? 'border-blue-500 bg-blue-50 shadow-sm'
+                                                                : 'border-gray-200 bg-white hover:border-blue-200'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                                                                selected === 'local' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                                                            }`}>
+                                                                {selected === 'local' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                                            </div>
+                                                            <span className="font-bold text-xs text-blue-700 uppercase tracking-wide">My Version</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 mb-1">{localUser} · {new Date(localTime).toLocaleString()}</p>
+                                                        <div className="mt-1 text-sm text-gray-800">{renderValue(localValue)}</div>
+                                                    </button>
+
+                                                    {/* Theirs */}
+                                                    <button
+                                                        onClick={() => setChoice(index, 'cloud')}
+                                                        disabled={isResolving}
+                                                        className={`p-3 rounded-xl border-2 transition-all text-left ${
+                                                            selected === 'cloud'
+                                                                ? 'border-purple-500 bg-purple-50 shadow-sm'
+                                                                : 'border-gray-200 bg-white hover:border-purple-200'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                                                                selected === 'cloud' ? 'border-purple-500 bg-purple-500' : 'border-gray-300'
+                                                            }`}>
+                                                                {selected === 'cloud' && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                                            </div>
+                                                            <span className="font-bold text-xs text-purple-700 uppercase tracking-wide">Their Version</span>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 mb-1">{cloudUser} · {new Date(cloudTime).toLocaleString()}</p>
+                                                        <div className="mt-1 text-sm text-gray-800">{renderValue(cloudValue)}</div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="p-4 border-t bg-gray-50 flex gap-3">
                         <button
                             onClick={() => setSyncConflicts(null)}
-                            className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm uppercase tracking-wider"
+                            disabled={isResolving}
+                            className="py-3 px-4 bg-gray-200 text-gray-700 font-bold rounded-xl text-sm"
                         >
                             Cancel
                         </button>
                         <button
-                            onClick={() => {
-                                const all = {};
-                                syncConflicts.forEach((_, i) => { all[i] = 'local'; });
-                                resolveConflicts(all);
-                            }}
-                            className="flex-1 py-3 px-4 bg-blue-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
+                            onClick={() => handleResolve()}
+                            disabled={isResolving}
+                            className="flex-1 py-3 px-4 bg-indigo-600 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2"
                         >
-                            Keep My Changes
-                        </button>
-                        <button
-                            onClick={() => resolveConflicts(resolutions)}
-                            className="flex-1 py-3 px-4 bg-purple-600 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
-                        >
-                            Apply Selections
-                        </button>
-                        <button
-                            onClick={() => {
-                                const all = {};
-                                syncConflicts.forEach((_, i) => { all[i] = 'cloud'; });
-                                resolveConflicts(all);
-                            }}
-                            className="flex-1 py-3 px-4 bg-purple-800 text-white font-bold rounded-xl text-sm uppercase tracking-wider"
-                        >
-                            Use Their Changes
+                            {isResolving ? (
+                                <><span className="animate-spin">⏳</span> Applying &amp; Syncing...</>
+                            ) : (
+                                <>✓ Apply Selections &amp; Sync</>
+                            )}
                         </button>
                     </div>
                 </React.Fragment>
@@ -2756,7 +2812,8 @@
             };
             
             // Manual sync: Push local changes to cloud with conflict detection
-            const syncToCloud = async () => {
+            // overrideYearData: optionally pass pre-resolved data to avoid stale-closure after resolveConflicts
+            const syncToCloud = async (overrideYearData = null) => {
                 if (!db || !user) {
                     console.log('Firebase not ready for sync');
                     return;
@@ -2780,7 +2837,7 @@
                     
                     // STEP 2: Detect conflicts at field level
                     const conflicts = [];
-                    const updatedYearData = { ...yearData };
+                    const updatedYearData = { ...(overrideYearData || yearData) };
                     
                     for (const year in updatedYearData) {
                         const localBuildings = updatedYearData[year] || [];
@@ -2802,9 +2859,14 @@
                                 const localMod = localMods[fieldPath];
                                 const cloudMod = cloudMods[fieldPath];
                                 
-                                // Conflict: Both local and cloud modified same field
-                                if (cloudMod && cloudMod.timestamp > localBuilding.lastSynced) {
-                                    // Different values = conflict
+                                // True conflict: BOTH local AND cloud changed the SAME field AFTER last sync.
+                                // Without the localMod.timestamp check, old pre-sync modifications in the
+                                // accumulated fieldModifications object cause infinite false conflicts.
+                                if (cloudMod
+                                    && cloudMod.timestamp > localBuilding.lastSynced   // cloud changed after our last sync
+                                    && localMod.timestamp > localBuilding.lastSynced   // we also changed after last sync
+                                ) {
+                                    // Different values = real conflict
                                     const localValue = JSON.stringify(localMod.value || localMod.changes);
                                     const cloudValue = JSON.stringify(cloudMod.value || cloudMod.changes);
                                     
@@ -2885,6 +2947,7 @@
                             const buildingWithSync = {
                                 ...building,
                                 data: cleanedData, // Use cleaned data
+                                fieldModifications: {}, // Clear after sync — these track uncommitted changes only
                                 lastSynced: syncTime,
                                 lastSyncedBy: user?.email || user?.displayName || 'Unknown',
                                 lastSyncedById: user?.uid,
@@ -3018,39 +3081,70 @@
 
             // --- CONFLICT RESOLUTION ---
             const resolveConflicts = async (resolutions) => {
-                // resolutions is an object: { conflictIndex: 'local' | 'cloud' }
                 console.log('🔀 Resolving conflicts with user choices...');
                 
-                // Apply conflict resolutions by merging chosen values into yearData
-                const updatedYearData = { ...yearData };
+                // Deep-clone yearData so we can mutate without touching React state yet.
+                // IMPORTANT: We must pass this resolved data directly into syncToCloud()
+                // rather than calling setYearData first, because setYearData is async in
+                // React — syncToCloud would read the old yearData from the closure and
+                // detect the same conflicts again (infinite hang).
+                let updatedYearData = JSON.parse(JSON.stringify(yearData));
                 
                 syncConflicts.forEach((conflict, index) => {
-                    const choice = resolutions[index]; // 'local' or 'cloud'
-                    const building = Object.values(updatedYearData).flat().find(b => b.id === conflict.buildingId);
+                    const choice = resolutions[index] || 'local';
+                    const chosenValue = choice === 'cloud' ? conflict.cloudValue : conflict.localValue;
                     
-                    if (building && choice) {
-                        const chosenValue = choice === 'local' ? conflict.localValue : conflict.cloudValue;
-                        
-                        // Apply the chosen value to the building
-                        // Parse field path (e.g., "details.city" or "data.Exit Lights.item123")
-                        const parts = conflict.fieldPath.split('.');
-                        if (parts[0] === 'details') {
-                            building.details[parts[1]] = chosenValue;
-                        } else if (parts[0] === 'name') {
-                            building.name = chosenValue;
-                        }
-                        // For data fields, it's more complex - would need to parse the path
+                    for (const year in updatedYearData) {
+                        updatedYearData[year] = updatedYearData[year].map(building => {
+                            if (building.id !== conflict.buildingId) return building;
+                            
+                            // Remove this conflict's entry from fieldModifications so it
+                            // won't trigger the same conflict on the next sync pass.
+                            const fieldMods = { ...(building.fieldModifications || {}) };
+                            delete fieldMods[conflict.fieldPath];
+                            let updated = { ...building, fieldModifications: fieldMods };
+                            
+                            // Apply the chosen value to the actual building data
+                            const parts = conflict.fieldPath.split('.');
+                            if (parts[0] === 'details' && parts[1]) {
+                                updated = { ...updated, details: { ...updated.details, [parts[1]]: chosenValue } };
+                            } else if (parts[0] === 'name') {
+                                updated = { ...updated, name: chosenValue };
+                            } else if (parts[0] === 'data' && parts.length >= 3) {
+                                // fieldPath format: "data.SectionId.itemId"
+                                const sectionId = parts[1];
+                                const itemId = parts[2];
+                                const section = updated.data[sectionId] || [];
+                                updated = {
+                                    ...updated,
+                                    data: {
+                                        ...updated.data,
+                                        [sectionId]: section.map(item =>
+                                            item.id === itemId
+                                                ? { ...item, ...(chosenValue && typeof chosenValue === 'object' ? chosenValue : {}) }
+                                                : item
+                                        )
+                                    }
+                                };
+                            }
+                            
+                            return updated;
+                        });
                     }
                 });
                 
-                // Clear conflicts
+                // Close conflict UI
                 setSyncConflicts(null);
                 
-                // Update local state
+                // Save resolved state to localStorage immediately (iOS safety)
+                immediatelySaveToLocalStorage(updatedYearData);
+                
+                // Update React state (async, but we pass data directly to sync below)
+                isUpdatingFromSync.current = true;
                 setYearData(updatedYearData);
                 
-                // Retry sync (will push resolved changes)
-                await syncToCloud();
+                // Push resolved data directly — avoids stale-closure by bypassing yearData ref
+                await syncToCloud(updatedYearData);
             };
 
             // --- REORDER LOGIC ---
@@ -6455,7 +6549,11 @@
                                             <button onClick={() => {
                                                 const newItem = s.isDev 
                                                     ? { id: Date.now(), deviceNo: (activeBuilding.data[s.id].length + 1).toString(), label: `Device ${activeBuilding.data[s.id].length + 1}`, type: 'Heat Detector', status: "pending", note: "", photo: null, fixed: false }
-                                                    : { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false };
+                                                    : s.id === 'lights'
+                                                        ? { id: Date.now(), label: `EM-${activeBuilding.data[s.id].length + 1}`, status: "pending", note: "", photo: null, fixed: false, timer: null }
+                                                        : s.id === 'exitSigns'
+                                                            ? { id: Date.now(), label: `Exit Sign ${activeBuilding.data[s.id].length + 1}`, status: "pending", note: "", photo: null, fixed: false, timer: null }
+                                                            : { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false };
                                                 setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...(b.data[s.id] || []), newItem] } } : b) }));
                                             }} className="w-full p-3 text-[10px] font-black text-gray-300 uppercase tracking-widest">+ Add Item</button>
                                         </div>
