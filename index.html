@@ -326,7 +326,7 @@
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
         
-        const DEVICE_TYPES = ["Manual Pull", "Heat Detector", "Smoke Detector", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
+        const DEVICE_TYPES = ["Heat Detector", "Smoke Detector", "Manual Pull", "Horn/Strobe", "Bell", "Flow Switch", "Tamper"];
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
 
         // IndexedDB helper for offline photo storage
@@ -1048,17 +1048,19 @@
                                                     setLocalDraft(null);
                                                 }}
                                                 onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' || e.key === 'Tab') {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault(); // Prevent dropdown from opening
                                                         const updated = {...activeItem, type: e.target.value};
                                                         onUpdateMeta(updated);
                                                         setLocalDraft(null);
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-                                                            const all = [...document.querySelectorAll(focusable)].filter(el => !el.disabled && el.offsetParent !== null);
-                                                            const idx = all.indexOf(e.target);
-                                                            if (idx > -1 && all[idx + 1]) all[idx + 1].focus();
-                                                        }
+                                                        const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+                                                        const all = [...document.querySelectorAll(focusable)].filter(el => !el.disabled && el.offsetParent !== null);
+                                                        const idx = all.indexOf(e.target);
+                                                        if (idx > -1 && all[idx + 1]) all[idx + 1].focus();
+                                                    } else if (e.key === 'Tab') {
+                                                        const updated = {...activeItem, type: e.target.value};
+                                                        onUpdateMeta(updated);
+                                                        setLocalDraft(null);
                                                     }
                                                 }}
                                                 className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded"
