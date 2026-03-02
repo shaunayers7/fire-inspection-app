@@ -117,6 +117,8 @@
     <!-- PDF Generation Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <!-- Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
@@ -2757,6 +2759,56 @@
                 setBuildingsToShow(20);
                 setSearchQuery(''); // Clear search when switching years
             }, [selectedYear]);
+
+            // --- COMPLETION CELEBRATION ---
+            const prevPendingRef = useRef(null);
+
+            const playCompletionSound = () => {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    // Play a rising triumphant 4-note chime
+                    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5 E5 G5 C6
+                    notes.forEach((freq, i) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+                        const start = ctx.currentTime + i * 0.18;
+                        const end = start + 0.5;
+                        gain.gain.setValueAtTime(0, start);
+                        gain.gain.linearRampToValueAtTime(0.35, start + 0.05);
+                        gain.gain.exponentialRampToValueAtTime(0.001, end);
+                        osc.start(start);
+                        osc.stop(end);
+                    });
+                } catch (e) { /* Audio not supported */ }
+            };
+
+            const fireCompletionCelebration = () => {
+                playCompletionSound();
+                if (typeof confetti !== 'undefined') {
+                    const fire = (opts) => confetti({ particleCount: 80, spread: 70, origin: { y: 0.55 }, ...opts });
+                    fire({ colors: ['#22c55e', '#16a34a', '#4ade80'] });
+                    setTimeout(() => fire({ angle: 60, origin: { x: 0, y: 0.6 }, colors: ['#f59e0b', '#fbbf24', '#fde68a'] }), 200);
+                    setTimeout(() => fire({ angle: 120, origin: { x: 1, y: 0.6 }, colors: ['#ef4444', '#f97316', '#fb923c'] }), 400);
+                    setTimeout(() => fire({ colors: ['#3b82f6', '#60a5fa', '#93c5fd'] }), 600);
+                }
+            };
+
+            // Fire celebration only when inspection transitions In Progress → Complete
+            useEffect(() => {
+                if (!activeBuilding) { prevPendingRef.current = null; return; }
+                let pending = 0;
+                Object.values(activeBuilding.data).forEach(arr => {
+                    if (Array.isArray(arr)) arr.forEach(i => { if (i.status === 'pending') pending++; });
+                });
+                if (prevPendingRef.current !== null && prevPendingRef.current > 0 && pending === 0) {
+                    fireCompletionCelebration();
+                }
+                prevPendingRef.current = pending;
+            }, [yearData, selectedYear, selectedBuildingId]);
 
             // Auto-expand Emergency Lights / Exit Signs sections whenever timers are running
             useEffect(() => {
