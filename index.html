@@ -681,6 +681,8 @@
             const draftTimerRef = useRef(null);
             const autoSaveTimerRef = useRef(null);
             const labelTextareaRef = useRef(null);
+            const deviceNoRef = useRef(null);
+            const typeSelectRef = useRef(null);
             
             // Image compression helper - compresses images to reduce storage size
             const compressImage = (file, maxWidth = 2400, quality = 0.92) => {
@@ -1023,10 +1025,18 @@
                                 <div className="flex-1 space-y-1">
                                     <textarea 
                                         ref={labelTextareaRef}
+                                        data-device-label="true"
                                         value={activeItem.label} 
                                         onFocus={startEdit}
                                         onChange={(e) => setLocalDraft({...activeItem, label: e.target.value})}
                                         onBlur={commitDraftNow}
+                                        onKeyDown={(e) => {
+                                            if (isDevice && e.key === 'Tab') {
+                                                e.preventDefault();
+                                                commitDraftNow();
+                                                if (deviceNoRef.current) deviceNoRef.current.focus();
+                                            }
+                                        }}
                                         rows="1"
                                         className={`w-full text-sm font-bold bg-transparent border-b transition-colors resize-none overflow-hidden ${localDraft ? 'border-blue-300' : 'border-transparent'} ${item.fixed && isDeficiencyView ? 'line-through text-gray-400' : 'text-gray-800'}`}
                                         style={{minHeight: '1.5em', lineHeight: '1.5'}}
@@ -1037,8 +1047,22 @@
                                     />
                                     {isDevice && (
                                         <div className="flex gap-2">
-                                            <input value={activeItem.deviceNo} onFocus={startEdit} onChange={(e) => setLocalDraft({...activeItem, deviceNo: e.target.value})} onBlur={commitDraftNow} className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
+                                            <input
+                                            ref={deviceNoRef}
+                                            value={activeItem.deviceNo}
+                                            onFocus={startEdit}
+                                            onChange={(e) => setLocalDraft({...activeItem, deviceNo: e.target.value})}
+                                            onBlur={commitDraftNow}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === 'Tab') {
+                                                    e.preventDefault();
+                                                    commitDraftNow();
+                                                    if (typeSelectRef.current) typeSelectRef.current.focus();
+                                                }
+                                            }}
+                                            className="w-12 bg-gray-100 rounded px-1 text-[10px] font-black" />
                                             <select
+                                                ref={typeSelectRef}
                                                 value={activeItem.type}
                                                 onFocus={startEdit}
                                                 onChange={(e) => setLocalDraft({...activeItem, type: e.target.value})}
@@ -1048,19 +1072,17 @@
                                                     setLocalDraft(null);
                                                 }}
                                                 onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault(); // Prevent dropdown from opening
+                                                    if (e.key === 'Enter' || e.key === 'Tab') {
+                                                        e.preventDefault();
                                                         const updated = {...activeItem, type: e.target.value};
                                                         onUpdateMeta(updated);
                                                         setLocalDraft(null);
-                                                        const focusable = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-                                                        const all = [...document.querySelectorAll(focusable)].filter(el => !el.disabled && el.offsetParent !== null);
-                                                        const idx = all.indexOf(e.target);
-                                                        if (idx > -1 && all[idx + 1]) all[idx + 1].focus();
-                                                    } else if (e.key === 'Tab') {
-                                                        const updated = {...activeItem, type: e.target.value};
-                                                        onUpdateMeta(updated);
-                                                        setLocalDraft(null);
+                                                        // Jump to the next device row's label textarea
+                                                        const allLabels = [...document.querySelectorAll('[data-device-label]')].filter(el => el.offsetParent !== null);
+                                                        const idx = allLabels.indexOf(labelTextareaRef.current);
+                                                        if (idx > -1 && allLabels[idx + 1]) {
+                                                            allLabels[idx + 1].focus();
+                                                        }
                                                     }
                                                 }}
                                                 className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 px-1 rounded"
