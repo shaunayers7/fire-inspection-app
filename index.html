@@ -319,16 +319,29 @@
         <div id="pre-react-loader" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#F2F2F7;font-family:sans-serif;">
             <div style="font-size:2.5rem;margin-bottom:1rem;">🔥</div>
             <div style="width:2.5rem;height:2.5rem;border:3px solid #e5e7eb;border-top-color:#dc2626;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem;"></div>
-            <p style="color:#6b7280;font-size:0.875rem;">Loading...</p>
+            <p id="pre-react-msg" style="color:#6b7280;font-size:0.875rem;">Loading...</p>
+            <button id="pre-react-reload" onclick="window.location.reload(true)" style="display:none;margin-top:1.25rem;padding:0.75rem 1.75rem;background:#dc2626;color:white;border:none;border-radius:0.875rem;font-size:1rem;font-weight:700;cursor:pointer;-webkit-appearance:none;">Tap to Reload</button>
         </div>
         <style>#pre-react-loader{position:fixed;inset:0;z-index:9999;}@keyframes spin{to{transform:rotate(360deg);}}</style>
+        <script>
+            // If Babel/React hasn't loaded within 20s, show a reload button so the user isn't stuck
+            setTimeout(function() {
+                var loader = document.getElementById('pre-react-loader');
+                if (loader && loader.parentNode) {
+                    var msg = document.getElementById('pre-react-msg');
+                    var btn = document.getElementById('pre-react-reload');
+                    if (msg) msg.textContent = 'Taking too long — tap below to retry';
+                    if (btn) btn.style.display = 'block';
+                }
+            }, 20000);
+        </script>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.5.9'; // Updated: Mar 7, 2026 - Defer head scripts + lazy-load jsPDF/confetti for faster startup
+        const APP_VERSION = '2.6.0'; // Updated: Mar 7, 2026 - Fix stuck loading spinner: reload button + isLoadingData failsafe + SW cache bump
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -2465,6 +2478,21 @@
                     });
                 }, 12000);
                 return () => clearTimeout(fallback);
+            }, []);
+
+            // FAILSAFE 2: If isLoadingData stays true beyond 30s (e.g. loadFromCloud hangs),
+            // force it false so the app isn't permanently stuck on the "Loading data..." spinner.
+            useEffect(() => {
+                const dataFallback = setTimeout(() => {
+                    setIsLoadingData(prev => {
+                        if (prev) {
+                            console.warn('⏱️ Data load timeout — showing app with local data');
+                            return false;
+                        }
+                        return prev;
+                    });
+                }, 30000);
+                return () => clearTimeout(dataFallback);
             }, []);
 
             // Remove pre-react loading screen after App's first render

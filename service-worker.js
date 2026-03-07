@@ -2,7 +2,7 @@
 // Version 1.1.0
 // Provides offline support and caching for PWA functionality
 
-const CACHE_NAME = 'fire-inspection-v5';
+const CACHE_NAME = 'fire-inspection-v6';
 const STATIC_CACHE = [
     '/',
     '/index.html',
