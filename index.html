@@ -6103,7 +6103,7 @@
                                         <h3 className="font-bold text-gray-800">{b.name || 'Unnamed Building'}</h3>
                                         {isSynced ? (
                                             <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded-full flex items-center gap-1" title={`Synced: ${new Date(b.lastSynced).toLocaleString()}`}>
-                                                ☁️ Saved
+                                                ☁️ Saved{b.lastSyncedBy ? ` · ${b.lastSyncedBy.split('@')[0]}` : ''}
                                             </span>
                                         ) : (
                                             <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full flex items-center gap-1" title="Not synced to cloud - click Export & Save to backup">
