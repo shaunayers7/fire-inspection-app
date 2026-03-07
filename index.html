@@ -3047,8 +3047,12 @@
                     // STEP 5: Push to cloud
                     const syncTime = new Date().toISOString();
                     const syncPromises = [];
+                    // syncedYearData mirrors updatedYearData but with lastSynced stamped on each
+                    // building — this is what we store locally so cards flip to "☁️ Saved" immediately.
+                    const syncedYearData = {};
                     
                     for (const [year, buildings] of Object.entries(updatedYearData)) {
+                        syncedYearData[year] = [];
                         for (const building of buildings) {
                             // Clean building data: remove temporary internal states
                             const cleanedData = {};
@@ -3070,21 +3074,27 @@
                             };
                             const docRef = doc(db, `apps/${APP_ID}/buildings/${building.id}`);
                             syncPromises.push(setDoc(docRef, buildingWithSync));
+                            // Store the synced version so local state reflects lastSynced correctly
+                            syncedYearData[year].push(buildingWithSync);
                         }
                     }
                     
-                    await Promise.all(syncPromises);
+                    // Race against a 30-second timeout so "Saving..." never sticks indefinitely
+                    const syncTimeout = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('Sync timed out after 30s — check your connection')), 30000)
+                    );
+                    await Promise.race([Promise.all(syncPromises), syncTimeout]);
                     
                     await logChange('sync', { 
                         message: 'Synced changes to cloud', 
-                        buildingCount: Object.values(updatedYearData).reduce((sum, buildings) => sum + buildings.length, 0)
+                        buildingCount: Object.values(syncedYearData).reduce((sum, buildings) => sum + buildings.length, 0)
                     });
                     
                     setLastSyncTime(syncTime);
                     
-                    // Update local state
+                    // Update local state with synced buildings (lastSynced now set — cards show ☁️ Saved)
                     isUpdatingFromSync.current = true;
-                    setYearData(updatedYearData);
+                    setYearData(syncedYearData);
                     
                     setSyncStatus('success');
                     setHasUnsavedCloudChanges(false); // Clear unsaved changes flag
@@ -6346,9 +6356,9 @@
                                 syncStatus === 'success' ? 'bg-green-50 text-green-600' :
                                 'bg-red-50 text-red-600'
                             }`}>
-                                {syncStatus === 'syncing' ? '☁ Syncing to cloud...' :
-                                 syncStatus === 'success' ? `✓ Synced ${lastSyncTime ? new Date(lastSyncTime).toLocaleString('en-US', { timeZone: 'America/Denver', hour: 'numeric', minute: '2-digit', hour12: true }) + ' MST' : 'successfully'}` :
-                                 '✕ Sync failed - will retry'}
+                                {syncStatus === 'syncing' ? '⏳ Saving to cloud...' :
+                                 syncStatus === 'success' ? `✓ Saved to cloud ${lastSyncTime ? new Date(lastSyncTime).toLocaleString('en-US', { timeZone: 'America/Denver', hour: 'numeric', minute: '2-digit', hour12: true }) + ' MST' : 'successfully'}` :
+                                 '✕ Save failed — tap ☁️ Save to retry'}
                             </div>
                         )}
                     </div>
@@ -6796,7 +6806,7 @@
                                 }`}
                                 title="Save all changes and photos to cloud"
                             >
-                                {syncStatus === 'syncing' ? '⏳ Saving...' : syncStatus === 'success' ? '✓ Saved!' : syncStatus === 'error' ? '✕ Failed' : '☁️ Save'}
+                                {syncStatus === 'syncing' ? '⏳ Saving...' : syncStatus === 'success' ? '✓ Saved!' : syncStatus === 'error' ? '✕ Failed — retry?' : '☁️ Save'}
                             </button>
                         </div>
                     </div>
