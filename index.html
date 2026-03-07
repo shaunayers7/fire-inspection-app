@@ -341,7 +341,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.6.2'; // Updated: Mar 7, 2026 - Add PDF import support for inspection reports
+        const APP_VERSION = '2.6.3'; // Updated: Mar 7, 2026 - Re-import app's own exported PDFs to restore lost inspection data
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -5465,8 +5465,196 @@
                 setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 7000);
             };
 
-            // Extract plain text from a PDF file using PDF.js (lazy-loaded)
-            const extractTextFromPDF = async (file) => {
+            // Parser for PDFs exported FROM this app (Fire Inspection Report format)
+            // Distinct from parseInspectionReportText which handles 3rd-party fire alarm company .txt files
+            const parseAppOwnExportText = (text) => {
+                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                const fullUpper = lines.join(' ').toUpperCase();
+
+                const result = {
+                    isAppExport: fullUpper.includes('FIRE INSPECTION REPORT'),
+                    inspectionDate: '', inspectionTime: '', inspector: '',
+                    details: {},
+                    sections: []   // [{ title, items: [{label, deviceNo, status, note}] }]
+                };
+                if (!result.isAppExport) return result;
+
+                // Known inspection-detail field prefixes → result keys
+                const INSP_FIELDS = {
+                    'INSPECTION DATE': 'inspectionDate',
+                    'INSPECTION TIME': 'inspectionTime',
+                    'INSPECTOR NAME': 'inspector'
+                };
+                // Building detail field prefixes → details keys
+                const BLD_FIELDS = {
+                    'BUILDING NAME': 'buildingName',
+                    'ADDRESS': 'address',
+                    'CITY': 'city',
+                    'PANEL LOCATION': 'panelLocation',
+                    'MANUFACTURER': 'manufacturer',
+                    'PANEL MODEL': 'panelModel',
+                    'SERIAL NUMBER': 'serialNumber',
+                    'SOFTWARE VERSION': 'softwareVersion',
+                    'DATE MANUFACTURED': 'dateManufactured',
+                    'LAST SERVICE DATE': 'lastServiceDate'
+                };
+
+                let inInspDetails = false;
+                let inBldDetails  = false;
+                let inDeficiencies = false;
+                let currentTitle   = '';
+                let currentItems   = [];
+
+                const flushSection = () => {
+                    if (currentTitle && !inInspDetails && !inBldDetails && !inDeficiencies) {
+                        result.sections.push({ title: currentTitle, items: [...currentItems] });
+                    }
+                    currentItems = [];
+                };
+
+                for (const line of lines) {
+                    const upper = line.toUpperCase();
+
+                    // Numbered section headers: "0. INSPECTION DETAILS", "2. DEVICES", etc.
+                    const secMatch = line.match(/^(\d+)\.\s+(.+)$/);
+                    if (secMatch) {
+                        flushSection();
+                        currentTitle    = secMatch[2].trim();
+                        inInspDetails   = /^0\b/.test(secMatch[1]) || /INSPECTION DETAILS/i.test(currentTitle);
+                        inBldDetails    = /^1\b/.test(secMatch[1]) || /BUILDING DETAILS/i.test(currentTitle);
+                        inDeficiencies  = /DEFICIEN/i.test(currentTitle);
+                        if (!inInspDetails && !inBldDetails && !inDeficiencies) currentItems = [];
+                        continue;
+                    }
+
+                    // Skip table header rows
+                    if (/^#\s+DEV|^FIELD\s+INFORMATION|^#\s+SECTION/i.test(upper)) continue;
+                    // Skip page-level metadata lines
+                    if (/^(FIRE INSPECTION REPORT|YEAR:|BUILDING:)/i.test(upper)) continue;
+
+                    if (inInspDetails) {
+                        for (const [prefix, key] of Object.entries(INSP_FIELDS)) {
+                            if (upper.startsWith(prefix)) {
+                                const val = line.slice(prefix.length).trim();
+                                if (val && val !== 'N/A') result[key] = val;
+                                break;
+                            }
+                        }
+                    } else if (inBldDetails) {
+                        for (const [prefix, key] of Object.entries(BLD_FIELDS)) {
+                            if (upper.startsWith(prefix)) {
+                                const val = line.slice(prefix.length).trim();
+                                if (val && val !== 'N/A') result.details[key] = val;
+                                break;
+                            }
+                        }
+                    } else if (!inDeficiencies && currentTitle) {
+                        // Item rows: "# DEV# LABEL STATUS NOTES"
+                        // Use greedy label capture so the LAST occurrence of status keyword is used
+                        const m = line.match(/^(\d+)\s+(\S+)\s+(.*)\s+(PASSED|FAILED|PENDING)\s+(.*)$/i);
+                        if (m) {
+                            const devNo = m[2] === '-' ? undefined : m[2];
+                            const note  = (m[5] || '').trim();
+                            currentItems.push({
+                                label:    m[3].trim(),
+                                deviceNo: devNo,
+                                status:   m[4].toLowerCase(),
+                                note:     note === '-' ? '' : note
+                            });
+                        }
+                    }
+                }
+
+                flushSection();
+                return result;
+            };
+
+            // Apply data parsed from the app's own exported PDF back into the current building
+            const applyAppExportToBuilding = (parsed) => {
+                if (!activeBuilding) return;
+
+                const updated = {
+                    ...activeBuilding,
+                    data: { ...activeBuilding.data },
+                    details: { ...activeBuilding.details },
+                    inspectionDetails: { ...(activeBuilding.inspectionDetails || {}) },
+                    locallyModifiedAt: new Date().toISOString()
+                };
+
+                // Restore inspection meta
+                if (parsed.inspectionDate) updated.inspectionDetails.date      = parsed.inspectionDate;
+                if (parsed.inspectionTime) updated.inspectionDetails.time      = parsed.inspectionTime;
+                if (parsed.inspector)      updated.inspectionDetails.inspector = parsed.inspector;
+
+                // Restore building details
+                for (const [k, v] of Object.entries(parsed.details)) {
+                    if (v) updated.details[k] = v;
+                }
+
+                let totalApplied = 0;
+
+                // Match each PDF section to a building section by title, then upsert items
+                for (const pdfSec of parsed.sections) {
+                    // Case-insensitive title match against the building's section list
+                    const match = activeBuilding.sections.find(s =>
+                        s.title.toLowerCase() === pdfSec.title.toLowerCase() ||
+                        s.title.toLowerCase().replace(/\s+/g,'').includes(pdfSec.title.toLowerCase().replace(/\s+/g,'').slice(0, 6)) ||
+                        pdfSec.title.toLowerCase().replace(/\s+/g,'').includes(s.title.toLowerCase().replace(/\s+/g,'').slice(0, 6))
+                    );
+                    if (!match) {
+                        console.warn(`⚠️ PDF section "${pdfSec.title}" not matched to any building section`);
+                        continue;
+                    }
+                    const sectionKey = match.id;
+                    const existing = [...(updated.data[sectionKey] || [])];
+
+                    for (const pd of pdfSec.items) {
+                        if (!pd.label || pd.label === 'No items added yet') continue;
+
+                        // Match by deviceNo first, then by label prefix
+                        let idx = pd.deviceNo !== undefined
+                            ? existing.findIndex(d => String(d.deviceNo) === String(pd.deviceNo))
+                            : -1;
+                        if (idx < 0 && pd.label.length >= 3) {
+                            const needle = pd.label.toLowerCase().slice(0, 8);
+                            idx = existing.findIndex(d => d.label && d.label.toLowerCase().includes(needle));
+                        }
+
+                        if (idx >= 0) {
+                            existing[idx] = {
+                                ...existing[idx],
+                                status: pd.status,
+                                ...(pd.note ? { note: pd.note } : {})
+                            };
+                        } else {
+                            // Item not currently in the building — add it
+                            existing.push({
+                                id: `import-app-${sectionKey}-${Date.now()}-${existing.length}`,
+                                label:    pd.label,
+                                ...(pd.deviceNo !== undefined ? { deviceNo: pd.deviceNo } : {}),
+                                status:   pd.status,
+                                note:     pd.note || '',
+                                photo: null, photos: [], fixed: false,
+                                ...(sectionKey === 'lights' || sectionKey === 'exitSigns' ? { timer: null } : {})
+                            });
+                        }
+                        totalApplied++;
+                    }
+                    updated.data[sectionKey] = existing;
+                }
+
+                const updatedYearData = {
+                    ...yearData,
+                    [selectedYear]: yearData[selectedYear].map(b => b.id === selectedBuildingId ? updated : b)
+                };
+                immediatelySaveToLocalStorage(updatedYearData);
+                setYearData(updatedYearData);
+                setHasUnsavedCloudChanges(true);
+
+                setReportImportStatus('success');
+                setReportImportMessage(`✅ Restored ${totalApplied} item(s) across ${parsed.sections.length} section(s) — tap ☁️ Save to sync`);
+                setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 7000);
+            };
                 if (!window.pdfjsLib) {
                     await new Promise((resolve, reject) => {
                         const s = document.createElement('script');
@@ -5530,6 +5718,31 @@
                         });
                     }
 
+                    // Detect app's own export format first
+                    const appParsed = parseAppOwnExportText(text);
+                    if (appParsed.isAppExport) {
+                        const itemCount = appParsed.sections.reduce((sum, s) => sum + s.items.length, 0);
+                        const parts = [
+                            appParsed.inspectionDate ? `Date: ${appParsed.inspectionDate}` : '',
+                            appParsed.inspector      ? `Inspector: ${appParsed.inspector}` : '',
+                            appParsed.sections.length ? `${appParsed.sections.length} section(s)` : '',
+                            itemCount > 0             ? `${itemCount} item(s)` : ''
+                        ].filter(Boolean);
+
+                        setReportImportStatus('idle');
+                        setReportImportMessage('');
+                        setActiveModal({
+                            type: 'report-import-confirm',
+                            title: 'Restore Inspection Data?',
+                            description: `Re-populate "${activeBuilding?.name}" with all item statuses, notes, and inspection details from the exported report.`,
+                            detail: parts.length > 0 ? parts.join('  ·  ') : 'Fire Inspection App export detected.',
+                            confirmText: 'Restore Data',
+                            onConfirm: () => { applyAppExportToBuilding(appParsed); setActiveModal(null); }
+                        });
+                        return;
+                    }
+
+                    // Fall back to 3rd-party fire alarm company report format
                     const parsed = parseInspectionReportText(text);
                     const parts = [
                         parsed.manufacturer ? `Panel: ${parsed.manufacturer}${parsed.panelModel ? ' ' + parsed.panelModel : ''}` : '',
