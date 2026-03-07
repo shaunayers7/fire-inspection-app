@@ -341,7 +341,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.6.1'; // Updated: Mar 7, 2026 - CRITICAL: Remove stray brace in exportAndSave that caused Babel SyntaxError (app never loaded)
+        const APP_VERSION = '2.6.2'; // Updated: Mar 7, 2026 - Add PDF import support for inspection reports
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -5465,50 +5465,100 @@
                 setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 7000);
             };
 
-            const handleImportReportFile = (file) => {
+            // Extract plain text from a PDF file using PDF.js (lazy-loaded)
+            const extractTextFromPDF = async (file) => {
+                if (!window.pdfjsLib) {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+                        s.onload = resolve; s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+                        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                }
+
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                let fullText = '';
+
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+
+                    // Group text items into visual lines by Y coordinate (within 3pt tolerance)
+                    const items = textContent.items.filter(item => item.str && item.str.trim());
+                    const lines = [];
+                    for (const item of items) {
+                        const y = Math.round(item.transform[5]);
+                        const existing = lines.find(l => Math.abs(l.y - y) <= 3);
+                        if (existing) {
+                            existing.items.push(item);
+                        } else {
+                            lines.push({ y, items: [item] });
+                        }
+                    }
+                    // Sort lines top-to-bottom, items left-to-right within each line
+                    lines.sort((a, b) => b.y - a.y);
+                    for (const line of lines) {
+                        line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+                        fullText += line.items.map(i => i.str).join(' ') + '\n';
+                    }
+                    fullText += '\n';
+                }
+                return fullText;
+            };
+
+            const handleImportReportFile = async (file) => {
                 if (!file) return;
                 setReportImportStatus('parsing');
-                setReportImportMessage('📖 Reading report...');
 
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const parsed = parseInspectionReportText(e.target.result);
-                        const parts = [
-                            parsed.manufacturer ? `Panel: ${parsed.manufacturer}${parsed.panelModel ? ' ' + parsed.panelModel : ''}` : '',
-                            parsed.inspectionDate ? `Date: ${parsed.inspectionDate}` : '',
-                            parsed.devices.length ? `${parsed.devices.length} device(s)` : '',
-                            parsed.signalingDevices.length ? `${parsed.signalingDevices.length} signaling device(s)` : '',
-                            parsed.emergencyLights.length ? `${parsed.emergencyLights.length} EM light(s)` : '',
-                            parsed.hasControlData ? 'Control ✓' : '',
-                            parsed.hasBatteryData ? 'Battery ✓' : '',
-                            parsed.hasChecklist  ? 'Checklist ✓' : ''
-                        ].filter(Boolean);
+                const isPDF = file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf';
 
-                        setReportImportStatus('idle');
-                        setReportImportMessage('');
-
-                        setActiveModal({
-                            type: 'report-import-confirm',
-                            title: 'Apply Report?',
-                            description: `Update "${activeBuilding?.name}" with data from the uploaded report. Matched items will be marked passed; new items from the report will be added.`,
-                            detail: parts.length > 0 ? parts.join('  ·  ') : 'Fire inspection report detected — will mark all sections as passed.',
-                            confirmText: 'Apply Import',
-                            onConfirm: () => { applyReportToBuilding(parsed); setActiveModal(null); }
+                try {
+                    let text;
+                    if (isPDF) {
+                        setReportImportMessage('📖 Extracting text from PDF...');
+                        text = await extractTextFromPDF(file);
+                    } else {
+                        setReportImportMessage('📖 Reading report...');
+                        text = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = e => resolve(e.target.result);
+                            reader.onerror = reject;
+                            reader.readAsText(file);
                         });
-                    } catch (err) {
-                        console.error('Report parse error:', err);
-                        setReportImportStatus('error');
-                        setReportImportMessage('❌ Could not parse report file');
-                        setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 4000);
                     }
-                };
-                reader.onerror = () => {
+
+                    const parsed = parseInspectionReportText(text);
+                    const parts = [
+                        parsed.manufacturer ? `Panel: ${parsed.manufacturer}${parsed.panelModel ? ' ' + parsed.panelModel : ''}` : '',
+                        parsed.inspectionDate ? `Date: ${parsed.inspectionDate}` : '',
+                        parsed.devices.length ? `${parsed.devices.length} device(s)` : '',
+                        parsed.signalingDevices.length ? `${parsed.signalingDevices.length} signaling device(s)` : '',
+                        parsed.emergencyLights.length ? `${parsed.emergencyLights.length} EM light(s)` : '',
+                        parsed.hasControlData ? 'Control ✓' : '',
+                        parsed.hasBatteryData ? 'Battery ✓' : '',
+                        parsed.hasChecklist  ? 'Checklist ✓' : ''
+                    ].filter(Boolean);
+
+                    setReportImportStatus('idle');
+                    setReportImportMessage('');
+
+                    setActiveModal({
+                        type: 'report-import-confirm',
+                        title: 'Apply Report?',
+                        description: `Update "${activeBuilding?.name}" with data from the uploaded report. Matched items will be marked passed; new items from the report will be added.`,
+                        detail: parts.length > 0 ? parts.join('  ·  ') : 'Fire inspection report detected — will mark all sections as passed.',
+                        confirmText: 'Apply Import',
+                        onConfirm: () => { applyReportToBuilding(parsed); setActiveModal(null); }
+                    });
+                } catch (err) {
+                    console.error('Report parse error:', err);
                     setReportImportStatus('error');
-                    setReportImportMessage('❌ File read failed');
-                    setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 4000);
-                };
-                reader.readAsText(file);
+                    setReportImportMessage(isPDF ? '❌ Could not read PDF — try exporting as .txt from the source software' : '❌ Could not parse report file');
+                    setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 5000);
+                }
             };
 
             // --- TIMER FUNCTIONS ---
@@ -7275,7 +7325,7 @@
                         <input
                             ref={importReportFileRef}
                             type="file"
-                            accept=".txt"
+                            accept=".txt,.pdf"
                             className="hidden"
                             onChange={(e) => { if (e.target.files?.[0]) handleImportReportFile(e.target.files[0]); e.target.value = ''; }}
                         />
