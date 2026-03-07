@@ -57,10 +57,11 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- defer allows HTML/body to parse immediately (pre-loader shows right away) while scripts download in parallel -->
+    <script defer src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script defer src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script defer src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script defer src="https://cdn.tailwindcss.com"></script>
     
     <!-- Firebase SDKs -->
     <script type="module">
@@ -114,11 +115,7 @@
         // window.__app_id = 'my-custom-app-id';
     </script>
 
-    <!-- PDF Generation Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-    <!-- Confetti -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+    <!-- PDF and Confetti are lazy-loaded on demand (not at startup) to keep initial load fast -->
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
@@ -331,7 +328,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.5.8'; // Updated: Mar 7, 2026 - Fix white screen: pre-loader removal timing + Firebase SDK wait + auth fallback timeout
+        const APP_VERSION = '2.5.9'; // Updated: Mar 7, 2026 - Defer head scripts + lazy-load jsPDF/confetti for faster startup
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -2880,12 +2877,21 @@
 
             const fireCompletionCelebration = () => {
                 playCompletionSound();
-                if (typeof confetti !== 'undefined') {
-                    const fire = (opts) => confetti({ particleCount: 80, spread: 70, origin: { y: 0.55 }, ...opts });
+                // Lazy-load confetti if not yet available
+                const runConfetti = (confettiFn) => {
+                    const fire = (opts) => confettiFn({ particleCount: 80, spread: 70, origin: { y: 0.55 }, ...opts });
                     fire({ colors: ['#22c55e', '#16a34a', '#4ade80'] });
                     setTimeout(() => fire({ angle: 60, origin: { x: 0, y: 0.6 }, colors: ['#f59e0b', '#fbbf24', '#fde68a'] }), 200);
                     setTimeout(() => fire({ angle: 120, origin: { x: 1, y: 0.6 }, colors: ['#ef4444', '#f97316', '#fb923c'] }), 400);
                     setTimeout(() => fire({ colors: ['#3b82f6', '#60a5fa', '#93c5fd'] }), 600);
+                };
+                if (typeof confetti !== 'undefined') {
+                    runConfetti(confetti);
+                } else {
+                    const s = document.createElement('script');
+                    s.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js';
+                    s.onload = () => runConfetti(confetti);
+                    document.head.appendChild(s);
                 }
             };
 
@@ -3571,6 +3577,23 @@
 
             const handleExport = async () => {
                 if (!activeBuilding) return;
+
+                // Lazy-load jsPDF only when the user actually exports (saves ~330KB from initial load)
+                if (!window.jspdf) {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                        s.onload = resolve; s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js';
+                        s.onload = resolve; s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
+                }
+
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
                 const statusInfo = getBuildingStatus(activeBuilding);
