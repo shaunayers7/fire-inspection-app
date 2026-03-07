@@ -1795,7 +1795,7 @@
             
             // Search and sort state for building list
             const [searchQuery, setSearchQuery] = useState('');
-            const [sortBy, setSortBy] = useState('name'); // 'name' or 'date'
+            const [sortBy, setSortBy] = useState('date'); // 'name' or 'date' — default 'date' for 2026+
             const [dateSortOrder, setDateSortOrder] = useState('newest'); // 'newest' or 'oldest'
             
             // Share app state
@@ -2758,6 +2758,13 @@
             useEffect(() => {
                 setBuildingsToShow(20);
                 setSearchQuery(''); // Clear search when switching years
+                // Default sort: date/newest for 2026+, name for earlier years
+                if (selectedYear >= 2026) {
+                    setSortBy('date');
+                    setDateSortOrder('newest');
+                } else {
+                    setSortBy('name');
+                }
             }, [selectedYear]);
 
             // --- COMPLETION CELEBRATION ---
