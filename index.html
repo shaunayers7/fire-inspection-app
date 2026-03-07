@@ -317,7 +317,15 @@
             }
         });
     </script>
-    <div id="root"></div>
+    <div id="root">
+        <!-- Visible immediately before React/Babel finishes loading -->
+        <div id="pre-react-loader" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#F2F2F7;font-family:sans-serif;">
+            <div style="font-size:2.5rem;margin-bottom:1rem;">🔥</div>
+            <div style="width:2.5rem;height:2.5rem;border:3px solid #e5e7eb;border-top-color:#dc2626;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem;"></div>
+            <p style="color:#6b7280;font-size:0.875rem;">Loading...</p>
+        </div>
+        <style>#pre-react-loader{position:fixed;inset:0;z-index:9999;}@keyframes spin{to{transform:rotate(360deg);}}</style>
+    </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
@@ -7376,6 +7384,10 @@
             }
         }
 
+        // Remove the pre-React loading screen as soon as React takes over
+        const preLoader = document.getElementById('pre-react-loader');
+        if (preLoader) preLoader.remove();
+
         ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
 
@@ -7393,18 +7405,16 @@
                             registration.update();
                         }, 60000); // Check every minute
                         
-                        // Listen for updates
+                        // When a new SW is found, activate it immediately but DO NOT auto-reload.
+                        // Auto-reload caused an infinite loop on iOS (controllerchange fires on every activation).
+                        // Users get the new version on their next manual app open.
                         registration.addEventListener('updatefound', () => {
                             const newWorker = registration.installing;
                             newWorker.addEventListener('statechange', () => {
                                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    // New service worker available
-                                    console.log('🔄 New version available! Reload to update.');
-                                    // Auto-reload after 3 seconds
-                                    setTimeout(() => {
-                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
-                                        window.location.reload();
-                                    }, 3000);
+                                    console.log('🔄 New version cached. Will be active on next app open.');
+                                    // Skip waiting so the new SW activates, but don't force-reload
+                                    newWorker.postMessage({ type: 'SKIP_WAITING' });
                                 }
                             });
                         });
@@ -7412,11 +7422,6 @@
                     .catch(error => {
                         console.warn('⚠️ Service Worker registration failed:', error);
                     });
-                
-                // Reload page when new service worker takes control
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    window.location.reload();
-                });
             });
         }
     </script>

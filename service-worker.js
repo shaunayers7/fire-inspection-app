@@ -1,8 +1,8 @@
 // Fire Inspection App - Service Worker
-// Version 1.0.3
+// Version 1.1.0
 // Provides offline support and caching for PWA functionality
 
-const CACHE_NAME = 'fire-inspection-v4';
+const CACHE_NAME = 'fire-inspection-v5';
 const STATIC_CACHE = [
     '/',
     '/index.html',
@@ -56,52 +56,51 @@ self.addEventListener('fetch', (event) => {
         return;
     }
     
+    // CRITICAL: HTML navigation requests must ALWAYS be network-first.
+    // Stale-while-revalidate on HTML causes iOS devices to show old/broken cached versions.
+    const isHTMLRequest = request.mode === 'navigate' ||
+        request.destination === 'document' ||
+        request.url.endsWith('/') ||
+        request.url.endsWith('/index.html');
+
+    if (isHTMLRequest) {
+        // Network-first for HTML: always try network, fall back to cache only if offline
+        event.respondWith(
+            fetch(request)
+                .then(networkResponse => {
+                    if (networkResponse && networkResponse.status === 200) {
+                        const responseToCache = networkResponse.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, responseToCache));
+                    }
+                    return networkResponse;
+                })
+                .catch(() => caches.match(request))
+        );
+        return;
+    }
+
+    // For non-HTML assets (CDN scripts, images etc): stale-while-revalidate
     event.respondWith(
         caches.match(request)
             .then(cachedResponse => {
+                // Kick off background refresh
+                const fetchPromise = fetch(request).then(networkResponse => {
+                    if (networkResponse && networkResponse.status === 200) {
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, networkResponse.clone()));
+                    }
+                    return networkResponse;
+                }).catch(() => null);
+
                 if (cachedResponse) {
-                    // Return cached version and update cache in background
-                    fetch(request).then(networkResponse => {
-                        if (networkResponse && networkResponse.status === 200) {
-                            caches.open(CACHE_NAME).then(cache => {
-                                cache.put(request, networkResponse);
-                            });
-                        }
-                    }).catch(() => {
-                        // Network failed, cached version is already being returned
-                    });
                     return cachedResponse;
                 }
-                
-                // Not in cache - fetch from network and cache it
-                return fetch(request).then(networkResponse => {
-                    // Only cache successful responses
-                    if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {
-                        return networkResponse;
-                    }
-                    
-                    // Cache CDN resources (CSS, JS libraries)
-                    if (request.url.includes('cdn.') || 
-                        request.url.includes('unpkg.com') ||
-                        request.url.includes('jsdelivr')) {
-                        const responseToCache = networkResponse.clone();
-                        caches.open(CACHE_NAME).then(cache => {
-                            cache.put(request, responseToCache);
-                        });
-                    }
-                    
-                    return networkResponse;
-                }).catch(() => {
-                    // Network request failed and not in cache
-                    // Return a basic offline page if available
-                    return new Response('Offline - Please check your connection', {
-                        status: 503,
-                        statusText: 'Service Unavailable',
-                        headers: new Headers({
-                            'Content-Type': 'text/plain'
-                        })
-                    });
-                });
+
+                // Not in cache — wait for network
+                return fetchPromise.then(response => response || new Response('Offline', {
+                    status: 503,
+                    statusText: 'Service Unavailable',
+                    headers: new Headers({ 'Content-Type': 'text/plain' })
+                }));
             })
     );
 });
