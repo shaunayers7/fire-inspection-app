@@ -341,7 +341,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.6.0'; // Updated: Mar 7, 2026 - Fix stuck loading spinner: reload button + isLoadingData failsafe + SW cache bump
+        const APP_VERSION = '2.6.1'; // Updated: Mar 7, 2026 - CRITICAL: Remove stray brace in exportAndSave that caused Babel SyntaxError (app never loaded)
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -2343,6 +2343,8 @@
                         if (config.apiKey === "YOUR_API_KEY" || !config.apiKey || config.apiKey.length < 10) {
                             console.warn('⚠️ Firebase config contains placeholder values. Please update with your actual Firebase project credentials.');
                             console.log('ℹ️ Get your config from: Firebase Console > Project Settings > Your apps > Web app');
+                            setAuthInitialized(true);
+                            setIsLoadingData(false);
                             return;
                         }
                         
@@ -2468,14 +2470,17 @@
             // This prevents a permanent white/spinning screen if Firebase is unreachable
             useEffect(() => {
                 const fallback = setTimeout(() => {
-                    setAuthInitialized(prev => {
-                        if (!prev) {
+                    // NOTE: Do NOT call setIsLoadingData inside setAuthInitialized's updater —
+                    // React 18 concurrent mode can invoke updater functions multiple times.
+                    // Use separate setState calls instead.
+                    setAuthInitialized(current => {
+                        if (!current) {
                             console.warn('⏱️ Auth init timeout — showing app in local-only mode');
-                            setIsLoadingData(false);
                             return true;
                         }
-                        return prev;
+                        return current;
                     });
+                    setIsLoadingData(false);
                 }, 12000);
                 return () => clearTimeout(fallback);
             }, []);
@@ -3813,7 +3818,6 @@
                     
                     // Stay on the form so user knows the cloud save failed — data is saved locally
                     console.warn('⚠️ Cloud sync failed - changes saved locally. Use ← back when ready.');
-                }
                 }
             };
 
