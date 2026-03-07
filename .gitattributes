@@ -1,0 +1,5 @@
+# HTML files — use standard html diff driver
+*.html diff=html
+
+# Large single-file app — union merge avoids full re-diff on conflict
+index.html merge=union
