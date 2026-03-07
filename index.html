@@ -3027,11 +3027,15 @@
                                 // Building exists in cloud - use local version (we checked for conflicts)
                                 mergedBuildings.push(localBuilding);
                                 delete cloudBuildings[localBuilding.id];
-                            } else if (!localBuilding.lastSynced) {
-                                // New local building - keep it
+                            } else {
+                                // Building not found in cloud — keep it regardless of lastSynced.
+                                // A missing cloud doc could mean: never synced, or a failed write.
+                                // We NEVER silently drop local data. The user must explicitly delete.
+                                if (localBuilding.lastSynced) {
+                                    console.warn(`⚠️ ${localBuilding.name} has lastSynced but is missing from cloud — keeping local copy`);
+                                }
                                 mergedBuildings.push(localBuilding);
                             }
-                            // else: was deleted from cloud - don't add
                         }
                         
                         updatedYearData[year] = mergedBuildings;
@@ -3149,17 +3153,49 @@
                         console.log(`  Year ${year}: ${buildings.map(b => `${b.name} (${b.id})`).join(', ')}`);
                     });
                     
-                    // ☁️ CLOUD IS SOURCE OF TRUTH
-                    // Manual sync only - conflicts detected before pushing, not when pulling
+                    // ☁️ CLOUD IS SOURCE OF TRUTH for buildings that exist in both places.
+                    // However, local-only buildings (never synced, or whose last write failed)
+                    // must be PRESERVED — not wiped — so users never lose entered data.
                     isUpdatingFromSync.current = true;
                     setYearData(prev => {
-                        console.log('☁️ Syncing from cloud (cloud is source of truth)...');
+                        console.log('☁️ Merging cloud data with local data...');
                         console.log(`☁️ Cloud has ${Object.values(cloudBuildings).flat().length} building(s)`);
                         
-                        // Ensure all years exist in structure
-                        const result = { 2025: [], 2026: [], ...cloudBuildings };
+                        // Build a lookup of all cloud buildings by id for fast access
+                        const cloudById = {};
+                        Object.values(cloudBuildings).flat().forEach(b => { cloudById[b.id] = b; });
                         
-                        console.log(`✅ Cloud sync complete.`);
+                        // Collect all years present in either local or cloud
+                        const allYears = new Set([
+                            ...Object.keys(prev || {}),
+                            ...Object.keys(cloudBuildings)
+                        ]);
+                        
+                        const result = {};
+                        for (const year of allYears) {
+                            const localBuildings = (prev || {})[year] || [];
+                            const cloudYearBuildings = cloudBuildings[year] || [];
+                            
+                            // Start with all cloud buildings for this year (cloud wins)
+                            const merged = [...cloudYearBuildings];
+                            const mergedIds = new Set(cloudYearBuildings.map(b => b.id));
+                            
+                            // Preserve any local buildings not in cloud (unsynced / write-failed)
+                            for (const localB of localBuildings) {
+                                if (!mergedIds.has(localB.id)) {
+                                    console.log(`⚠️ Keeping local-only building: ${localB.name} (not found in cloud)`);
+                                    merged.push(localB);
+                                }
+                            }
+                            
+                            result[year] = merged;
+                        }
+                        
+                        // Always ensure 2025 and 2026 keys exist
+                        if (!result[2025]) result[2025] = [];
+                        if (!result[2026]) result[2026] = [];
+                        
+                        console.log(`✅ Merge complete. ${Object.values(result).flat().length} total building(s).`);
                         return result;
                     });
                     
