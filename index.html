@@ -337,6 +337,18 @@
             'b-2026-bellevue', 'b-2026-pincher-creek', 'b-2026-hillspring', 'b-2026-seminary-cardston'
         ]);
 
+        // Device type codes found in annual inspection report .txt files → DEVICE_TYPES value
+        const REPORT_DEVICE_TYPE_MAP = {
+            'H': 'Manual Pull', 'HT': 'Heat Detector', 'RHT': 'Heat Detector',
+            'SS': 'Smoke Detector', 'S': 'Smoke Detector', 'DS': 'Smoke Detector',
+            'FS': 'Flow Switch', 'TS': 'Tamper', 'SA': 'Smoke Detector',
+            'SP': 'Horn/Strobe', 'HSP': 'Horn/Strobe', 'V': 'Horn/Strobe',
+            'ET': 'Heat Detector', 'AD': 'Heat Detector'
+        };
+        // Codes for devices that belong in the Signaling Devices section (not Device Inventory)
+        const REPORT_SIGNALING_CODES = new Set(['B', 'K', 'C', 'V', 'SP', 'HSP']);
+        const REPORT_SIGNALING_TYPE_MAP = { 'B': 'Bell', 'K': 'Horn', 'C': 'Bell', 'V': 'Strobe/Horn', 'SP': 'Horn', 'HSP': 'Horn' };
+
         // IndexedDB helper for offline photo storage
         const PHOTO_DB_NAME = 'fire-inspection-photos';
         const PHOTO_DB_VERSION = 1;
@@ -1837,6 +1849,10 @@
             // Import 2025 inspection data state
             const [importStatus, setImportStatus] = useState('idle'); // idle, importing, success, error
             const [importMessage, setImportMessage] = useState('');
+            // Import completed report .txt file state
+            const [reportImportStatus, setReportImportStatus] = useState('idle'); // idle | parsing | success | error
+            const [reportImportMessage, setReportImportMessage] = useState('');
+            const importReportFileRef = useRef(null);
             
             const [yearData, setYearData] = useState(() => {
                 // Version check: Detect if user has old cached code
@@ -5125,6 +5141,287 @@
                 }
             };
 
+            // --- IMPORT COMPLETED REPORT FROM .TXT FILE ---
+            const parseInspectionReportText = (text) => {
+                const ALL_TYPE_CODES = new Set([
+                    ...Object.keys(REPORT_DEVICE_TYPE_MAP), ...REPORT_SIGNALING_CODES
+                ]);
+                const HEADER_WORDS = new Set([
+                    'Location','Device','Correctly','Installed','Missing','Requires','Service',
+                    'Alarm','Operation','Confirmed','ZONE','Zone','YES','NO','N/A','Tested','Correctly'
+                ]);
+
+                const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                const result = {
+                    manufacturer: null, panelModel: null, inspectionDate: null,
+                    devices: [], signalingDevices: [], emergencyLights: [],
+                    hasControlData: false, hasBatteryData: false, hasChecklist: false
+                };
+
+                const fullLower = lines.join('\n').toLowerCase();
+                result.hasControlData = fullLower.includes('control panel test') || fullLower.includes('control equipment');
+                result.hasBatteryData = fullLower.includes('battery') && (fullLower.includes('voltage') || fullLower.includes('battery test'));
+                result.hasChecklist  = fullLower.includes('pre-test') || fullLower.includes('checklist') || fullLower.includes('occupants informed');
+
+                // Extract inspection date from first 30 lines
+                for (let i = 0; i < Math.min(30, lines.length); i++) {
+                    const m = lines[i].match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+                    if (m) {
+                        const y = m[3].length === 2 ? '20' + m[3] : m[3];
+                        result.inspectionDate = `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+                        break;
+                    }
+                }
+
+                // Extract panel manufacturer/model (line after "Manufacturer:" + "Model #:")
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].toLowerCase().includes('manufacturer') && lines[i].toLowerCase().includes('model')) {
+                        for (let j = i+1; j < Math.min(i+5, lines.length); j++) {
+                            const c = lines[j];
+                            if (/^(YES|NO|N\/A|Tested Correctly)$/i.test(c)) continue;
+                            if (c.length >= 3 && !/^(Fire Alarm|Control|Panel|Test|Client|Building|Date|CONTROL)$/i.test(c)) {
+                                const parts = c.split(/\s+/);
+                                result.manufacturer = parts[0];
+                                result.panelModel = parts.length > 1 ? parts.slice(1).join(' ') : '';
+                                break;
+                            }
+                        }
+                        if (result.manufacturer) break;
+                    }
+                }
+
+                // --- Parse device table (after "ANNUAL TEST AND INSPECTION RECORD") ---
+                const annualIdx = lines.findIndex(l => l.toLowerCase().includes('annual test and inspection record'));
+                if (annualIdx >= 0) {
+                    let i = annualIdx + 1;
+                    // skip column header lines
+                    while (i < lines.length && HEADER_WORDS.has(lines[i])) i++;
+
+                    let devNum = 1;
+                    while (i < lines.length) {
+                        const line = lines[i];
+                        if (/annual emergency lights/i.test(line) || /deficien/i.test(line)) break;
+                        const upper = line.toUpperCase();
+
+                        // Skip pure type codes, numbers, header words
+                        if (ALL_TYPE_CODES.has(upper) || /^\d+$/.test(line) || HEADER_WORDS.has(line)) { i++; continue; }
+                        if (line.length < 3 || line.length > 60) { i++; continue; }
+
+                        // This looks like a location line — find the nearest type code in next 3 lines
+                        let typeCode = null, typeIdx = -1, zone = null;
+                        for (let j = i+1; j < Math.min(i+4, lines.length); j++) {
+                            const up = lines[j].trim().toUpperCase();
+                            if (ALL_TYPE_CODES.has(up)) {
+                                typeCode = up;
+                                typeIdx = j;
+                                // Zone may follow on the very next line (pure number or "Lcl Only")
+                                if (j+1 < lines.length) {
+                                    const nextL = lines[j+1].trim();
+                                    if (/^\d+$/.test(nextL) || /lcl/i.test(nextL)) { zone = nextL; }
+                                }
+                                break;
+                            }
+                            // Stop if next line looks like another location (longer + not a pure code)
+                            if (lines[j].length > 6 && !HEADER_WORDS.has(lines[j]) && !ALL_TYPE_CODES.has(lines[j].toUpperCase()) && !/^\d+$/.test(lines[j])) break;
+                        }
+
+                        if (typeCode) {
+                            const numMatch = line.match(/\((\d+)\)/);
+                            const deviceNo  = numMatch ? numMatch[1] : String(devNum);
+                            const cleanLabel = line.replace(/\s*\(\d+\)\s*/, '').trim();
+                            i = zone ? typeIdx + 2 : typeIdx + 1;
+
+                            if (REPORT_SIGNALING_CODES.has(typeCode)) {
+                                result.signalingDevices.push({
+                                    label: cleanLabel,
+                                    deviceNo,
+                                    type: REPORT_SIGNALING_TYPE_MAP[typeCode] || 'Bell'
+                                });
+                            } else {
+                                result.devices.push({
+                                    label: cleanLabel,
+                                    deviceNo,
+                                    type: REPORT_DEVICE_TYPE_MAP[typeCode] || 'Heat Detector',
+                                    zone: zone || ''
+                                });
+                                devNum++;
+                            }
+                        } else {
+                            i++;
+                        }
+                    }
+                }
+
+                // --- Parse emergency lights (after "Annual Emergency Lights Test") ---
+                const emIdx = lines.findIndex(l => /annual emergency lights test/i.test(l));
+                if (emIdx >= 0) {
+                    let i = emIdx + 1;
+                    // skip column headers
+                    while (i < lines.length && /^(Lamp|Test|Pass|CCT|Pack|Location|Yes|No|Maintenance|Mainteance|Required|Annual)$/i.test(lines[i])) i++;
+
+                    while (i < lines.length) {
+                        const line = lines[i];
+                        if (/deficien/i.test(line)) break;
+                        if (/^(Maintenance|Mainteance|Required)$/i.test(line)) { i++; continue; }
+
+                        const emMatch = line.match(/^Em[-\s]?(\d+)/i);
+                        if (emMatch) {
+                            const label = `EM-${emMatch[1]}`;
+                            let circuit = '', location = '';
+                            // next line: circuit number (single letter-hyphen-digits) then optional location
+                            for (let j = i+1; j < Math.min(i+4, lines.length); j++) {
+                                const next = lines[j].trim();
+                                if (/^Em[-\s]?\d+/i.test(next)) break;
+                                // Circuit pattern: A-22, B-46, D-13 etc.
+                                if (/^[A-Z]-\d+$/i.test(next) && !circuit) { circuit = next; continue; }
+                                if (next.length > 2 && !/^(Yes|No|Pass|Maintenance|Mainteance|Location|Pack|CCT|Lamp|Test)$/i.test(next) && !/^\d+$/.test(next)) {
+                                    if (!location) { location = next; }
+                                }
+                            }
+                            result.emergencyLights.push({ label, circuit, location });
+                        }
+                        i++;
+                    }
+                }
+
+                return result;
+            };
+
+            const applyReportToBuilding = (parsed) => {
+                if (!activeBuilding) return;
+
+                const updated = {
+                    ...activeBuilding,
+                    data: { ...activeBuilding.data },
+                    details: { ...activeBuilding.details },
+                    inspectionDetails: { ...(activeBuilding.inspectionDetails || {}) },
+                    locallyModifiedAt: new Date().toISOString()
+                };
+
+                if (parsed.manufacturer)   updated.details.manufacturer = parsed.manufacturer;
+                if (parsed.panelModel)     updated.details.panelModel    = parsed.panelModel;
+                if (parsed.inspectionDate) updated.inspectionDetails.date = parsed.inspectionDate;
+
+                const markAllPassed = (key) => {
+                    if (updated.data[key]) updated.data[key] = updated.data[key].map(item => ({ ...item, status: 'passed' }));
+                };
+                if (parsed.hasChecklist)   markAllPassed('checklist');
+                if (parsed.hasControlData) markAllPassed('control');
+                if (parsed.hasBatteryData) markAllPassed('battery');
+
+                // Helper: update a section with parsed items, matching by deviceNo then label
+                const upsertSection = (sectionKey, parsedItems, extraFieldsFn) => {
+                    const existing = [...(updated.data[sectionKey] || [])];
+                    for (const pd of parsedItems) {
+                        let idx = existing.findIndex(d => d.deviceNo !== undefined && d.deviceNo === pd.deviceNo);
+                        if (idx < 0 && pd.label.length >= 3) {
+                            const shortLabel = pd.label.toLowerCase().slice(0, 7);
+                            idx = existing.findIndex(d => d.label && d.label.toLowerCase().includes(shortLabel));
+                        }
+                        const extraFields = extraFieldsFn ? extraFieldsFn(pd, idx >= 0 ? existing[idx] : null) : {};
+                        if (idx >= 0) {
+                            existing[idx] = { ...existing[idx], status: 'passed', ...extraFields };
+                        } else {
+                            existing.push({
+                                id: `import-${sectionKey}-${Date.now()}-${existing.length}`,
+                                label: pd.label,
+                                ...(pd.deviceNo !== undefined ? { deviceNo: pd.deviceNo } : {}),
+                                ...(pd.type ? { type: pd.type } : {}),
+                                status: 'passed', note: '', photo: null, fixed: false,
+                                ...(sectionKey === 'lights' || sectionKey === 'exitSigns' ? { timer: null } : {}),
+                                ...extraFields
+                            });
+                        }
+                    }
+                    updated.data[sectionKey] = existing;
+                };
+
+                upsertSection('devices', parsed.devices, (pd) => ({
+                    ...(pd.type ? { type: pd.type } : {}),
+                    ...(pd.zone ? { note: `Zone ${pd.zone}` } : {})
+                }));
+
+                upsertSection('signalingDevices', parsed.signalingDevices, (pd) => ({
+                    ...(pd.type ? { type: pd.type } : {})
+                }));
+
+                // For EM lights, match by label "EM-1" / "Em-1"
+                const emItems = parsed.emergencyLights.map(pl => ({
+                    label: pl.label,
+                    type: null,
+                    _circuit: pl.circuit,
+                    _location: pl.location
+                }));
+                upsertSection('lights', emItems, (pd, existing) => {
+                    const note = [pd._circuit ? `CCT: ${pd._circuit}` : '', pd._location || ''].filter(Boolean).join(' · ');
+                    return { note: note || (existing?.note || '') };
+                });
+
+                const updatedYearData = {
+                    ...yearData,
+                    [selectedYear]: yearData[selectedYear].map(b => b.id === selectedBuildingId ? updated : b)
+                };
+                immediatelySaveToLocalStorage(updatedYearData);
+                setYearData(updatedYearData);
+                setHasUnsavedCloudChanges(true);
+
+                const summary = [
+                    parsed.devices.length ? `${parsed.devices.length} device(s)` : '',
+                    parsed.signalingDevices.length ? `${parsed.signalingDevices.length} signaling` : '',
+                    parsed.emergencyLights.length ? `${parsed.emergencyLights.length} EM light(s)` : ''
+                ].filter(Boolean);
+
+                setReportImportStatus('success');
+                setReportImportMessage(`✅ Applied${summary.length ? ': ' + summary.join(', ') : ''} — tap ☁️ Save to sync`);
+                setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 7000);
+            };
+
+            const handleImportReportFile = (file) => {
+                if (!file) return;
+                setReportImportStatus('parsing');
+                setReportImportMessage('📖 Reading report...');
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const parsed = parseInspectionReportText(e.target.result);
+                        const parts = [
+                            parsed.manufacturer ? `Panel: ${parsed.manufacturer}${parsed.panelModel ? ' ' + parsed.panelModel : ''}` : '',
+                            parsed.inspectionDate ? `Date: ${parsed.inspectionDate}` : '',
+                            parsed.devices.length ? `${parsed.devices.length} device(s)` : '',
+                            parsed.signalingDevices.length ? `${parsed.signalingDevices.length} signaling device(s)` : '',
+                            parsed.emergencyLights.length ? `${parsed.emergencyLights.length} EM light(s)` : '',
+                            parsed.hasControlData ? 'Control ✓' : '',
+                            parsed.hasBatteryData ? 'Battery ✓' : '',
+                            parsed.hasChecklist  ? 'Checklist ✓' : ''
+                        ].filter(Boolean);
+
+                        setReportImportStatus('idle');
+                        setReportImportMessage('');
+
+                        setActiveModal({
+                            type: 'report-import-confirm',
+                            title: 'Apply Report?',
+                            description: `Update "${activeBuilding?.name}" with data from the uploaded report. Matched items will be marked passed; new items from the report will be added.`,
+                            detail: parts.length > 0 ? parts.join('  ·  ') : 'Fire inspection report detected — will mark all sections as passed.',
+                            confirmText: 'Apply Import',
+                            onConfirm: () => { applyReportToBuilding(parsed); setActiveModal(null); }
+                        });
+                    } catch (err) {
+                        console.error('Report parse error:', err);
+                        setReportImportStatus('error');
+                        setReportImportMessage('❌ Could not parse report file');
+                        setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 4000);
+                    }
+                };
+                reader.onerror = () => {
+                    setReportImportStatus('error');
+                    setReportImportMessage('❌ File read failed');
+                    setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 4000);
+                };
+                reader.readAsText(file);
+            };
+
             // --- TIMER FUNCTIONS ---
             // Create AudioContext once (reusable)
             const audioContextRef = useRef(null);
@@ -6885,6 +7182,34 @@
                             );
                         })()}
 
+                        {/* Import Completed Report */}
+                        <input
+                            ref={importReportFileRef}
+                            type="file"
+                            accept=".txt"
+                            className="hidden"
+                            onChange={(e) => { if (e.target.files?.[0]) handleImportReportFile(e.target.files[0]); e.target.value = ''; }}
+                        />
+                        {reportImportMessage && (
+                            <div className={`p-3 rounded-xl text-sm font-semibold text-center ${
+                                reportImportStatus === 'success' ? 'bg-green-100 text-green-700 border border-green-300' :
+                                reportImportStatus === 'error'   ? 'bg-red-100 text-red-700 border border-red-300' :
+                                'bg-blue-100 text-blue-700 border border-blue-300'
+                            }`}>{reportImportMessage}</div>
+                        )}
+                        <button
+                            onClick={() => importReportFileRef.current?.click()}
+                            disabled={reportImportStatus === 'parsing'}
+                            className={`w-full py-3 rounded-2xl font-bold uppercase tracking-widest text-sm transition-all active:scale-95 border-2 ${
+                                reportImportStatus === 'parsing' ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' :
+                                reportImportStatus === 'success' ? 'bg-green-50 text-green-700 border-green-400' :
+                                reportImportStatus === 'error'   ? 'bg-red-50 text-red-700 border-red-400' :
+                                'bg-white text-amber-700 border-amber-400 hover:bg-amber-50'
+                            }`}
+                        >
+                            {reportImportStatus === 'parsing' ? '📖 Reading...' : '📥 Import Completed Report'}
+                        </button>
+
                         {/* Action Buttons */}
                         <div className="pt-4 pb-8 flex gap-3">
                             <button 
@@ -6953,7 +7278,22 @@
                     )}
 
                     {/* Regular Modal - For confirmations */}
-                    {activeModal && activeModal.type !== 'media' && <Modal title={activeModal.title} isDanger={activeModal.isDanger} onCancel={() => setActiveModal(null)} onConfirm={activeModal.onConfirm} />}
+                    {activeModal && activeModal.type !== 'media' && (
+                        <Modal
+                            title={activeModal.title}
+                            isDanger={activeModal.isDanger}
+                            onCancel={() => setActiveModal(null)}
+                            onConfirm={activeModal.onConfirm}
+                            confirmText={activeModal.confirmText || 'Confirm'}
+                        >
+                            {(activeModal.description || activeModal.detail) && (
+                                <div className="space-y-2 pb-1">
+                                    {activeModal.description && <p className="text-sm text-gray-700">{activeModal.description}</p>}
+                                    {activeModal.detail && <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 leading-relaxed">{activeModal.detail}</div>}
+                                </div>
+                            )}
+                        </Modal>
+                    )}
                     
                     {/* Conflict Resolution Modal */}
                     {syncConflicts && syncConflicts.length > 0 && (
