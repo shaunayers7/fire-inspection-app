@@ -331,7 +331,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.5.7'; // Updated: Mar 7, 2026 - Error boundary + Firebase init fix for white screen
+        const APP_VERSION = '2.5.8'; // Updated: Mar 7, 2026 - Fix white screen: pre-loader removal timing + Firebase SDK wait + auth fallback timeout
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -1863,25 +1863,11 @@
             const importReportFileRef = useRef(null);
             
             const [yearData, setYearData] = useState(() => {
-                // Version check: Detect if user has old cached code
+                // Track version for debugging; no forced reload (service worker handles cache busting)
                 const storedVersion = localStorage.getItem(VERSION_CHECK_KEY);
-                
-                // CRITICAL iOS FIX: Force reload if version mismatch detected
                 if (storedVersion && storedVersion !== APP_VERSION) {
                     console.log(`🔄 App updated from v${storedVersion} to v${APP_VERSION}`);
-                    console.log('🔄 Forcing page reload to clear iOS cache...');
-                    localStorage.setItem(VERSION_CHECK_KEY, APP_VERSION);
-                    
-                    // Force hard reload on iOS
-                    setTimeout(() => {
-                        window.location.reload(true);
-                    }, 1000);
-                    
-                    // Return empty data during transition
-                    return { 2025: [], 2026: [] };
                 }
-                
-                // First time or same version - proceed normally
                 localStorage.setItem(VERSION_CHECK_KEY, APP_VERSION);
                 
                 const saved = localStorage.getItem('fire_inspection_v4_data');
@@ -2322,7 +2308,21 @@
                         // Check if Firebase config exists
                         if (typeof window.__firebase_config === 'undefined') {
                             console.warn('⚠️ Firebase not configured. Sync features will be disabled.');
-                            console.log('ℹ️ To enable sync, add your Firebase configuration in index.html');
+                            setAuthInitialized(true);
+                            setIsLoadingData(false);
+                            return;
+                        }
+
+                        // Wait for Firebase ES module to finish loading (handles timing race on slow connections)
+                        let sdkWait = 0;
+                        while (!window.FirebaseSDK && sdkWait < 40) {
+                            await new Promise(r => setTimeout(r, 150));
+                            sdkWait++;
+                        }
+                        if (!window.FirebaseSDK) {
+                            console.warn('⚠️ Firebase SDK not available after 6s — running in local-only mode');
+                            setAuthInitialized(true);
+                            setIsLoadingData(false);
                             return;
                         }
 
@@ -2453,7 +2453,30 @@
                 };
                 initFirebase();
             }, []);
-            
+
+            // FAILSAFE: If Firebase doesn't initialize within 12 seconds, unlock the app
+            // This prevents a permanent white/spinning screen if Firebase is unreachable
+            useEffect(() => {
+                const fallback = setTimeout(() => {
+                    setAuthInitialized(prev => {
+                        if (!prev) {
+                            console.warn('⏱️ Auth init timeout — showing app in local-only mode');
+                            setIsLoadingData(false);
+                            return true;
+                        }
+                        return prev;
+                    });
+                }, 12000);
+                return () => clearTimeout(fallback);
+            }, []);
+
+            // Remove pre-react loading screen after App's first render
+            // (doing this inside React ensures no white-flash between pre-loader removal and first paint)
+            useEffect(() => {
+                const preLoader = document.getElementById('pre-react-loader');
+                if (preLoader) preLoader.remove();
+            }, []);
+
             // REAL-TIME SYNC DISABLED - Manual sync only via "Export & Save" button
             // This prevents automatic background syncing and duplicate building issues
             useEffect(() => {
@@ -7384,10 +7407,8 @@
             }
         }
 
-        // Remove the pre-React loading screen as soon as React takes over
-        const preLoader = document.getElementById('pre-react-loader');
-        if (preLoader) preLoader.remove();
-
+        // Pre-loader is now removed from inside the App component's first useEffect
+        // (this ensures no white-flash gap between pre-loader removal and React's first paint)
         ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
 
