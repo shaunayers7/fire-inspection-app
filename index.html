@@ -331,6 +331,11 @@
         const DEVICE_TYPES = ["Heat Detector", "Smoke Detector", "Manual Pull", "Horn/Strobe", "Horn", "Strobe", "Bell", "Flow Switch", "Tamper"];
         const SIGNALING_DEVICE_TYPES = ["Bell", "Strobe/Horn", "Strobe", "Horn"];
         const APP_ID = typeof __app_id !== 'undefined' ? __app_id : 'fire-inspect-default';
+        // IDs of buildings injected as defaults on first load — used to filter ghost "Local Only" entries
+        // when cloud already has real data for an account.
+        const KNOWN_DEFAULT_2026_IDS = new Set([
+            'b-2026-bellevue', 'b-2026-pincher-creek', 'b-2026-hillspring', 'b-2026-seminary-cardston'
+        ]);
 
         // IndexedDB helper for offline photo storage
         const PHOTO_DB_NAME = 'fire-inspection-photos';
@@ -1783,6 +1788,7 @@
             const [syncStatus, setSyncStatus] = useState('idle'); // idle, syncing, success, error
             const [lastSyncTime, setLastSyncTime] = useState(null);
             const isUpdatingFromSync = useRef(false); // Track if update is from sync to prevent loop
+            const lastLoadedUidRef = useRef(null); // Prevent loadFromCloud re-firing on token refresh (same user)
             const [syncConflicts, setSyncConflicts] = useState(null); // Tracks conflicts during sync for resolution UI
             const [authInitialized, setAuthInitialized] = useState(false);
             const [loginEmail, setLoginEmail] = useState('');
@@ -2368,23 +2374,33 @@
                                         console.log(userIsAdmin ? '👑 You are an admin' : '👤 You are a regular user');
                                     }
                                     
-                                    // Load cloud data when user is ready
-                                    await loadFromCloud(firestore);
+                                    // Only run cloud load & view change when the user actually changes (new login).
+                                    // Firebase's onAuthStateChanged fires again on token refresh (~every hour)
+                                    // for the SAME user — we must NOT reload cloud data then or we'll blow away
+                                    // any in-progress work the user hasn't saved yet.
+                                    if (currentUser.uid !== lastLoadedUidRef.current) {
+                                        lastLoadedUidRef.current = currentUser.uid;
+                                        // Load cloud data when user is ready
+                                        await loadFromCloud(firestore);
                                     
-                                    // Data is now loaded
-                                    setIsLoadingData(false);
+                                        // Data is now loaded
+                                        setIsLoadingData(false);
                                     
-                                    // Force view change after successful login (fixes iPad white screen)
-                                    console.log('✅ Login successful, switching to year-select view');
-                                    setView('year-select');
-                                    viewRef.current = 'year-select';
+                                        // Force view change after successful login (fixes iPad white screen)
+                                        console.log('✅ Login successful, switching to year-select view');
+                                        setView('year-select');
+                                        viewRef.current = 'year-select';
                                     
-                                    // Force re-render on iPad by triggering a state update
-                                    setTimeout(() => {
-                                        if (viewRef.current === 'year-select') {
-                                            console.log('📱 Confirming view is year-select');
-                                        }
-                                    }, 100);
+                                        // Force re-render on iPad by triggering a state update
+                                        setTimeout(() => {
+                                            if (viewRef.current === 'year-select') {
+                                                console.log('📱 Confirming view is year-select');
+                                            }
+                                        }, 100);
+                                    } else {
+                                        console.log('🔄 Token refreshed (same user) — skipping cloud reload to protect in-progress work');
+                                        setIsLoadingData(false);
+                                    }
                                 } catch (error) {
                                     console.error('Error during post-login setup:', error);
                                     // Still show the app even if there's an error
@@ -2395,6 +2411,7 @@
                                 }
                             } else {
                                 // User signed out or anonymous, go back to login
+                                lastLoadedUidRef.current = null; // Reset so next login triggers fresh cloud load
                                 if (authInitialized && viewRef.current !== 'login') {
                                     setView('login');
                                     viewRef.current = 'login';
@@ -3012,10 +3029,14 @@
                         return; // Don't proceed with sync until conflicts resolved
                     }
                     
-                    // STEP 4: No conflicts - merge and push
+                    // STEP 4: No conflicts — merge (cloud wins for unmodified buildings, local wins for changed)
                     console.log('✅ No conflicts detected - proceeding with sync');
                     
-                    // Merge: Keep deletions from cloud, add new from local
+                    // Track which building IDs have local changes that need to be pushed to cloud.
+                    // Buildings with no local changes will use the fresh cloud version — this prevents
+                    // stale local copies from overwriting other users' recently saved work.
+                    const localChangedIds = new Set();
+                    
                     for (const year in updatedYearData) {
                         const localBuildings = updatedYearData[year] || [];
                         const mergedBuildings = [];
@@ -3023,63 +3044,87 @@
                         for (const localBuilding of localBuildings) {
                             const cloudVersion = cloudBuildings[localBuilding.id];
                             
+                            // A building has local changes if:
+                            //   - fieldModifications is non-empty (field edits via updateItem/updateBuildingDetail)
+                            //   - locallyModifiedAt is newer than lastSynced (structural changes: add/delete/reorder)
+                            //   - it has never been synced (new building)
+                            const hasMods = Object.keys(localBuilding.fieldModifications || {}).length > 0;
+                            const hasStructuralMods = localBuilding.locallyModifiedAt && (
+                                !localBuilding.lastSynced || localBuilding.locallyModifiedAt > localBuilding.lastSynced
+                            );
+                            const hasLocalChanges = hasMods || hasStructuralMods || !localBuilding.lastSynced;
+                            
                             if (cloudVersion) {
-                                // Building exists in cloud - use local version (we checked for conflicts)
-                                mergedBuildings.push(localBuilding);
+                                if (hasLocalChanges) {
+                                    // Local changes — use local version (conflicts already resolved in STEP 2-3)
+                                    mergedBuildings.push(localBuilding);
+                                    localChangedIds.add(localBuilding.id);
+                                } else {
+                                    // No local changes — use fresh cloud version to avoid overwriting other users' work
+                                    mergedBuildings.push(cloudVersion);
+                                }
                                 delete cloudBuildings[localBuilding.id];
                             } else {
-                                // Building not found in cloud — keep it regardless of lastSynced.
-                                // A missing cloud doc could mean: never synced, or a failed write.
-                                // We NEVER silently drop local data. The user must explicitly delete.
+                                // Not in cloud — keep local. Could mean: never synced, or a failed write.
                                 if (localBuilding.lastSynced) {
                                     console.warn(`⚠️ ${localBuilding.name} has lastSynced but is missing from cloud — keeping local copy`);
                                 }
                                 mergedBuildings.push(localBuilding);
+                                localChangedIds.add(localBuilding.id); // Push since it's missing from cloud
                             }
                         }
                         
                         updatedYearData[year] = mergedBuildings;
                     }
                     
-                    // Add remaining cloud buildings
+                    // Add remaining cloud buildings (not in local at all)
                     for (const cloudBuilding of Object.values(cloudBuildings)) {
                         const year = cloudBuilding.year || 2026;
                         if (!updatedYearData[year]) updatedYearData[year] = [];
                         updatedYearData[year].push(cloudBuilding);
+                        // Cloud-only buildings are already current — no need to push back
                     }
                     
-                    // STEP 5: Push to cloud
+                    // STEP 5: Push only locally-changed buildings to cloud
                     const syncTime = new Date().toISOString();
                     const syncPromises = [];
-                    // syncedYearData mirrors updatedYearData but with lastSynced stamped on each
-                    // building — this is what we store locally so cards flip to "☁️ Saved" immediately.
+                    // syncedYearData mirrors updatedYearData but with lastSynced stamped on changed buildings
+                    // so local cards immediately flip to "☁️ Saved" after a successful push.
                     const syncedYearData = {};
+                    
+                    console.log(`📤 Pushing ${localChangedIds.size} changed building(s) to cloud`);
                     
                     for (const [year, buildings] of Object.entries(updatedYearData)) {
                         syncedYearData[year] = [];
                         for (const building of buildings) {
-                            // Clean building data: remove temporary internal states
-                            const cleanedData = {};
-                            Object.keys(building.data).forEach(sectionKey => {
-                                cleanedData[sectionKey] = building.data[sectionKey].map(item => {
-                                    const { _uploading, _uploadProgress, _uploadStatus, ...cleanItem } = item; // Remove upload state fields
-                                    return cleanItem;
+                            if (localChangedIds.has(building.id)) {
+                                // This building has local changes — clean and push to Firestore
+                                const cleanedData = {};
+                                Object.keys(building.data).forEach(sectionKey => {
+                                    cleanedData[sectionKey] = building.data[sectionKey].map(item => {
+                                        const { _uploading, _uploadProgress, _uploadStatus, ...cleanItem } = item; // Remove upload state fields
+                                        return cleanItem;
+                                    });
                                 });
-                            });
-                            
-                            const buildingWithSync = {
-                                ...building,
-                                data: cleanedData, // Use cleaned data
-                                fieldModifications: {}, // Clear after sync — these track uncommitted changes only
-                                lastSynced: syncTime,
-                                lastSyncedBy: user?.email || user?.displayName || 'Unknown',
-                                lastSyncedById: user?.uid,
-                                year: parseInt(year)
-                            };
-                            const docRef = doc(db, `apps/${APP_ID}/buildings/${building.id}`);
-                            syncPromises.push(setDoc(docRef, buildingWithSync));
-                            // Store the synced version so local state reflects lastSynced correctly
-                            syncedYearData[year].push(buildingWithSync);
+                                
+                                const buildingWithSync = {
+                                    ...building,
+                                    data: cleanedData,
+                                    fieldModifications: {}, // Clear after sync — these track uncommitted changes only
+                                    locallyModifiedAt: null, // Clear after sync
+                                    lastSynced: syncTime,
+                                    lastSyncedBy: user?.email || user?.displayName || 'Unknown',
+                                    lastSyncedById: user?.uid,
+                                    year: parseInt(year)
+                                };
+                                const docRef = doc(db, `apps/${APP_ID}/buildings/${building.id}`);
+                                syncPromises.push(setDoc(docRef, buildingWithSync));
+                                // Store the synced version so local state reflects lastSynced correctly
+                                syncedYearData[year].push(buildingWithSync);
+                            } else {
+                                // No local changes — already using the fresh cloud version, no push needed
+                                syncedYearData[year].push(building);
+                            }
                         }
                     }
                     
@@ -3180,11 +3225,30 @@
                             const merged = [...cloudYearBuildings];
                             const mergedIds = new Set(cloudYearBuildings.map(b => b.id));
                             
-                            // Preserve any local buildings not in cloud (unsynced / write-failed)
-                            for (const localB of localBuildings) {
-                                if (!mergedIds.has(localB.id)) {
-                                    console.log(`⚠️ Keeping local-only building: ${localB.name} (not found in cloud)`);
-                                    merged.push(localB);
+                        for (const localB of localBuildings) {
+                                if (mergedIds.has(localB.id)) {
+                                    // Building exists in cloud — cloud wins by default.
+                                    // EXCEPTION: if the user has unsaved local changes (fieldMods set, or
+                                    // structural edits via locallyModifiedAt), preserve the local version
+                                    // so we don't blow away in-progress work on app restart/re-login.
+                                    const hasMods = Object.keys(localB.fieldModifications || {}).length > 0;
+                                    const hasStructuralMods = localB.locallyModifiedAt && localB.lastSynced
+                                        && localB.locallyModifiedAt > localB.lastSynced;
+                                    if (hasMods || hasStructuralMods) {
+                                        const cloudIdx = merged.findIndex(b => b.id === localB.id);
+                                        if (cloudIdx >= 0) merged[cloudIdx] = localB;
+                                        console.log(`⚠️ Preserving unsaved local changes for: ${localB.name}`);
+                                    }
+                                } else {
+                                    // Local-only building: preserve unless it's an un-edited default seed
+                                    // and the account already has real cloud data (would be a ghost Local Only).
+                                    const isDefaultSeed = KNOWN_DEFAULT_2026_IDS.has(localB.id) && !localB.lastSynced;
+                                    if (isDefaultSeed && cloudYearBuildings.length > 0) {
+                                        console.log(`🧹 Skipping ghost default building: ${localB.name}`);
+                                    } else {
+                                        console.log(`⚠️ Keeping local-only building: ${localB.name} (not found in cloud)`);
+                                        merged.push(localB);
+                                    }
                                 }
                             }
                             
@@ -3319,7 +3383,7 @@
                     newSections.splice(toIndex, 0, removed);
                     
                     const updatedBuildings = [...currentYearBuildings];
-                    updatedBuildings[bIdx] = { ...building, sections: newSections };
+                    updatedBuildings[bIdx] = { ...building, sections: newSections, locallyModifiedAt: new Date().toISOString() };
                     return { ...prev, [selectedYear]: updatedBuildings };
                 });
             };
@@ -3342,7 +3406,8 @@
                         const updatedBuildings = [...currentYearBuildings];
                         updatedBuildings[bIdx] = { 
                             ...building, 
-                            data: { ...building.data, [sectionId]: items } 
+                            data: { ...building.data, [sectionId]: items },
+                            locallyModifiedAt: new Date().toISOString()
                         };
                         return { ...prev, [selectedYear]: updatedBuildings };
                     }
@@ -3365,7 +3430,8 @@
                         const updatedBuildings = [...currentYearBuildings];
                         updatedBuildings[bIdx] = { 
                             ...building, 
-                            data: { ...building.data, [sectionId]: items } 
+                            data: { ...building.data, [sectionId]: items },
+                            locallyModifiedAt: new Date().toISOString()
                         };
                         return { ...prev, [selectedYear]: updatedBuildings };
                     }
@@ -3644,10 +3710,9 @@
                     setSyncStatus('error');
                     setTimeout(() => setSyncStatus('idle'), 3000);
                     
-                    // Even if sync failed, still navigate back (data is saved locally)
-                    console.warn('⚠️ Cloud sync failed - changes saved locally');
-                    setView('building-select');
-                    viewRef.current = 'building-select';
+                    // Stay on the form so user knows the cloud save failed — data is saved locally
+                    console.warn('⚠️ Cloud sync failed - changes saved locally. Use ← back when ready.');
+                }
                 }
             };
 
@@ -6569,7 +6634,7 @@
                                                     onChange={e => setRenamingValue(e.target.value)}
                                                     onBlur={() => {
                                                         const trimmed = renamingValue.trim() || s.title;
-                                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, sections: b.sections.map(x => x.id === s.id ? { ...x, title: trimmed } : x) } : b) }));
+                                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, sections: b.sections.map(x => x.id === s.id ? { ...x, title: trimmed } : x), locallyModifiedAt: new Date().toISOString() } : b) }));
                                                         setRenamingSection(null);
                                                     }}
                                                     onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
@@ -6635,7 +6700,8 @@
                                                                 ...prev,
                                                                 [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? {
                                                                     ...b,
-                                                                    sections: b.sections.filter(x => x.id !== s.id)
+                                                                    sections: b.sections.filter(x => x.id !== s.id),
+                                                                    locallyModifiedAt: new Date().toISOString()
                                                                 } : b)
                                                             }));
                                                             setActiveModal(null);
@@ -6722,7 +6788,7 @@
                                                     isFirst={i === 0}
                                                     isLast={i === arr.length - 1}
                                                     onDelete={() => {
-                                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) } } : b) }));
+                                                        setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: b.data[s.id].filter(x => x.id !== item.id) }, locallyModifiedAt: new Date().toISOString() } : b) }));
                                                         setActiveModal(null);
                                                     }}
                                                 />
@@ -6737,7 +6803,7 @@
                                                             : s.id === 'signalingDevices'
                                                             ? { id: Date.now(), label: `SD-${activeBuilding.data[s.id].length + 1}`, type: 'Strobe/Horn', status: "pending", note: "", photo: null, fixed: false }
                                                             : { id: Date.now(), label: "New Item", status: "pending", note: "", photo: null, fixed: false };
-                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...(b.data[s.id] || []), newItem] } } : b) }));
+                                                setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, data: { ...b.data, [s.id]: [...(b.data[s.id] || []), newItem] }, locallyModifiedAt: new Date().toISOString() } : b) }));
                                             }} className="w-full p-3 text-[10px] font-black text-gray-300 uppercase tracking-widest">+ Add Item</button>
                                         </div>
                                     )}
@@ -6747,7 +6813,7 @@
 
                         <button onClick={() => {
                             const newId = `sect-${Date.now()}`;
-                            setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, sections: [...b.sections, { id: newId, title: 'Custom Section', color: 'bg-gray-500', isDev: false }], data: { ...b.data, [newId]: [] } } : b) }));
+                            setYearData(prev => ({ ...prev, [selectedYear]: prev[selectedYear].map(b => b.id === selectedBuildingId ? { ...b, sections: [...b.sections, { id: newId, title: 'Custom Section', color: 'bg-gray-500', isDev: false }], data: { ...b.data, [newId]: [] }, locallyModifiedAt: new Date().toISOString() } : b) }));
                         }} className="w-full p-3 border-2 border-dashed rounded-xl text-gray-400 font-bold uppercase text-[10px]">+ Add New Section</button>
 
                         {/* Deficiencies Section (Permanent Last Item) */}
