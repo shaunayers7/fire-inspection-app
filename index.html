@@ -340,7 +340,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
         
         // App version for cache busting - UPDATE THIS WHEN YOU MAKE CHANGES!
-        const APP_VERSION = '2.6.4'; // Updated: Mar 8, 2026 - Revert deferred script loading to fix white/loading screen on iOS
+        const APP_VERSION = '2.6.5'; // Updated: Mar 8, 2026 - Fix PDF import: restore missing extractTextFromPDF function declaration
         const VERSION_CHECK_KEY = 'fire_inspection_app_version';
         const THEME_KEY = 'fire_inspection_theme';
         const DRAFT_KEY = 'fire_inspection_drafts';
@@ -5654,6 +5654,8 @@
                 setReportImportMessage(`✅ Restored ${totalApplied} item(s) across ${parsed.sections.length} section(s) — tap ☁️ Save to sync`);
                 setTimeout(() => { setReportImportStatus('idle'); setReportImportMessage(''); }, 7000);
             };
+
+            const extractTextFromPDF = async (file) => {
                 if (!window.pdfjsLib) {
                     await new Promise((resolve, reject) => {
                         const s = document.createElement('script');
